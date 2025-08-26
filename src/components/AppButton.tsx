@@ -1,54 +1,31 @@
-import React from 'react';
-import { Pressable, Text, StyleSheet, ViewStyle } from 'react-native';
-import { theme } from '../theme';
+import React from "react";
+import { TouchableOpacity, Text, StyleSheet, ViewStyle } from "react-native";
+import { theme } from "../theme";
 
 type Props = {
   title: string;
-  onPress?: () => void;
-  disabled?: boolean;
+  onPress: () => void;
   style?: ViewStyle;
-  variant?: 'primary' | 'secondary';
 };
 
-export default function AppButton({ title, onPress, disabled, style, variant = 'primary' }: Props) {
-  const isPrimary = variant === 'primary';
-
+export default function AppButton({ title, onPress, style }: Props) {
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.base,
-        isPrimary ? styles.primary : styles.secondary,
-        pressed && { opacity: 0.85 },
-        disabled && { opacity: 0.5 },
-        style,
-      ]}
-    >
-      <Text style={[styles.label, isPrimary ? styles.primaryLabel : styles.secondaryLabel]}>
-        {title}
-      </Text>
-    </Pressable>
+    <TouchableOpacity style={[styles.btn, style]} onPress={onPress} activeOpacity={0.8}>
+      <Text style={styles.txt}>{title}</Text>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  base: {
-    width: '100%',
-    borderRadius: theme.radius,
+  btn: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 14,
     paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...theme.shadow.ios,
-    ...theme.shadow.android,
+    alignItems: "center"
   },
-  primary: { backgroundColor: theme.colors.primary },
-  secondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  label: { fontSize: 16, fontWeight: '700' },
-  primaryLabel: { color: theme.colors.primaryText },
-  secondaryLabel: { color: theme.colors.text },
+  txt: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16
+  }
 });

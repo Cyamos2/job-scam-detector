@@ -1,60 +1,25 @@
-import React from 'react';
-import { TextInput, StyleSheet, View, Text, ViewStyle, TextStyle } from 'react-native';
-import { theme } from '../theme';
+import React from "react";
+import { TextInput, StyleSheet, TextInputProps } from "react-native";
+import { theme } from "../theme";
 
-type Props = {
-  value?: string;
-  onChangeText?: (t: string) => void;
-  placeholder?: string;
-  label?: string;
-  style?: ViewStyle;
-  inputStyle?: TextStyle;
-  multiline?: boolean;
-  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-  autoCorrect?: boolean;
-};
-
-export default function AppTextInput({
-  value,
-  onChangeText,
-  placeholder,
-  label,
-  style,
-  inputStyle,
-  multiline,
-  autoCapitalize = 'none',
-  autoCorrect = false,
-}: Props) {
+export default function AppTextInput(props: TextInputProps) {
   return (
-    <View style={style}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
-      <View style={styles.wrap}>
-        <TextInput
-          value={value}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor={theme.colors.hint}
-          style={[styles.input, multiline && { minHeight: 120, textAlignVertical: 'top' }, inputStyle]}
-          multiline={multiline}
-          autoCapitalize={autoCapitalize}
-          autoCorrect={autoCorrect}
-        />
-      </View>
-    </View>
+    <TextInput
+      placeholderTextColor={theme.colors.hint}
+      {...props}
+      style={[styles.input, props.style]}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  label: { color: theme.colors.hint, fontSize: 12, marginBottom: 6 },
-  wrap: {
-    backgroundColor: theme.colors.input,
-    borderRadius: theme.radius,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
   input: {
-    padding: 12,
+    backgroundColor: theme.colors.card,
     color: theme.colors.text,
-    fontSize: 16,
-  },
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border
+  }
 });
