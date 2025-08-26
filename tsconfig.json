@@ -1,17 +1,18 @@
 {
-  "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "target": "esnext",
-    "jsx": "react-native",
-    "lib": ["esnext"],
-    "moduleResolution": "bundler",
+    "module": "esnext",
+    "jsx": "react-jsx",
     "strict": true,
+    "moduleResolution": "bundler",
+    "allowJs": false,
     "noEmit": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "allowJs": true,
-    "types": ["react", "react-native", "expo"],
+    "isolatedModules": true,
     "baseUrl": ".",
-    "paths": { "*": ["*", "src/*"] }
+    "paths": {
+      "*": ["./src/*", "*"]
+    }
   }
 }

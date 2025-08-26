@@ -1,13 +1,11 @@
-import React from 'react';
-import { StatusBar } from 'expo-status-bar';
-import RootNavigator from './src/navigation/RootNavigator';
-import { theme } from './src/theme';
+import * as React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import RootNavigator from './navigation/RootNavigator';
 
 export default function App() {
   return (
-    <>
-      <StatusBar style="light" backgroundColor={theme.colors.bg} />
+    <NavigationContainer>
       <RootNavigator />
-    </>
+    </NavigationContainer>
   );
 }
