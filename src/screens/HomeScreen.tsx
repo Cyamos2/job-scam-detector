@@ -1,23 +1,21 @@
 import React from "react";
-import { View, Text } from "react-native";
-import AppButton from "../components/AppButton";
-import { theme } from "../theme";
-import { useNavigation } from "@react-navigation/native";
+import { View, Text, StyleSheet } from "react-native";
 
 export default function HomeScreen() {
-  const nav = useNavigation<any>();
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.bg, padding: 20 }}>
-      <Text style={{ color: theme.colors.text, fontSize: 28, fontWeight: "800", marginBottom: 10 }}>
-        Scamicide
+    <View style={styles.container}>
+      <Text style={styles.title}>Job Scam Detector</Text>
+      <Text style={styles.subtitle}>Home</Text>
+      <Text style={styles.body}>
+        Welcome! Use the tabs below to open Database or Settings.
       </Text>
-      <Text style={{ color: theme.colors.hint, marginBottom: 24 }}>
-        Spray away job scams — stay safe, stay hired.
-      </Text>
-
-      <AppButton title="Verify Job Posting" onPress={() => nav.navigate("Verify")} />
-      <View style={{ height: 12 }} />
-      <AppButton title="Scan Screenshot" onPress={() => nav.navigate("Scan")} />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
+  title: { fontSize: 22, fontWeight: "700", marginBottom: 8 },
+  subtitle: { fontSize: 16, opacity: 0.7, marginBottom: 12 },
+  body: { fontSize: 14, textAlign: "center", opacity: 0.8 },
+});

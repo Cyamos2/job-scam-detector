@@ -1,21 +1,23 @@
 import React from "react";
-import { View, Text } from "react-native";
-import { theme } from "../theme";
-import AppButton from "../components/AppButton";
-import { useNavigation } from "@react-navigation/native";
+import { View, Text, StyleSheet } from "react-native";
 
 export default function DatabaseScreen() {
-  const nav = useNavigation<any>();
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.bg, padding: 20 }}>
-      <Text style={{ color: theme.colors.text, fontSize: 28, fontWeight: "800", marginBottom: 12 }}>
-        Saved Analyses
+    <View style={styles.container}>
+      <Text style={styles.title}>Database</Text>
+      <Text style={styles.body}>
+        No saved analyses yet. This screen is a clean placeholder.
       </Text>
-      <Text style={{ color: theme.colors.hint, marginBottom: 24 }}>
-        No saved items yet. Analyze a job on the Verify tab and tap <Text style={{ fontWeight: "700" }}>Save</Text>.
+      <Text style={styles.small}>
+        (We’ll wire the Saved Items store after Settings persistence.)
       </Text>
-
-      <AppButton title="Go to Settings" onPress={() => nav.navigate("Settings")} />
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
+  title: { fontSize: 20, fontWeight: "700", marginBottom: 10 },
+  body: { fontSize: 14, textAlign: "center", opacity: 0.85 },
+  small: { marginTop: 6, fontSize: 12, opacity: 0.6 },
+});
