@@ -13,12 +13,15 @@ import {
   ScrollView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { DatabaseStackParamList } from "../navigation/DatabaseStack";
 import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
 
 type VerdictFilter = "All" | "Low" | "Medium" | "High";
 type SortOrder = "Newest" | "Oldest";
+type Props = NativeStackScreenProps<DatabaseStackParamList, "DatabaseList">;
 
-export default function DatabaseScreen() {
+export default function DatabaseScreen({ navigation }: Props) {
   const { items, hydrated, remove, clearAll, add } = useSavedItems();
   const [filter, setFilter] = useState<VerdictFilter>("All");
   const [sort, setSort] = useState<SortOrder>("Newest");
@@ -43,8 +46,10 @@ export default function DatabaseScreen() {
   const pickScreenshot = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert("Permission needed", "Allow photo access to pick a screenshot.");
-      return;
+      return Alert.alert(
+        "Permission needed",
+        "Allow photo access to pick a screenshot."
+      );
     }
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -66,14 +71,15 @@ export default function DatabaseScreen() {
   const submitReport = async () => {
     const raw = input.trim();
     if (!company.trim() && !raw && !imageUri) {
-      Alert.alert("Add something first", "Enter text/link, company, or attach a screenshot.");
+      Alert.alert(
+        "Add something first",
+        "Enter text/link, company, or attach a screenshot."
+      );
       return;
     }
     try {
       setBusy(true);
-      // If a screenshot is provided, you could OCR here later.
       const analysis = analyzeTextLocal(raw);
-      // Append “notes” as a non-scoring field into flags when present (visible to user)
       const flags = notes.trim() ? [...analysis.flags, "note"] : analysis.flags;
 
       const entry: SavedAnalysis = {
@@ -162,7 +168,13 @@ export default function DatabaseScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <Pressable onLongPress={() => remove(item.id)} style={styles.card}>
+          <Pressable
+            onPress={() =>
+              navigation.navigate("ReportDetail", { id: item.id })
+            }
+            onLongPress={() => remove(item.id)}
+            style={styles.card}
+          >
             <View style={{ flex: 1 }}>
               <Text style={styles.cardTitle}>{item.title}</Text>
               <Text style={styles.cardSub}>
@@ -232,7 +244,10 @@ export default function DatabaseScreen() {
                 <View style={{ gap: 8 }}>
                   <Image source={{ uri: imageUri }} style={styles.formImage} />
                   <View style={styles.row}>
-                    <Pressable onPress={() => setImageUri(null)} style={styles.linkBtn}>
+                    <Pressable
+                      onPress={() => setImageUri(null)}
+                      style={styles.linkBtn}
+                    >
                       <Text style={styles.linkBtnText}>Remove screenshot</Text>
                     </Pressable>
                   </View>
@@ -243,15 +258,37 @@ export default function DatabaseScreen() {
                 </Pressable>
               )}
 
-              <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 10 }}>
-                <Pressable onPress={() => { setShowForm(false); resetForm(); }} style={styles.cancelBtn}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "flex-end",
+                  gap: 10,
+                }}
+              >
+                <Pressable
+                  onPress={() => {
+                    setShowForm(false);
+                    resetForm();
+                  }}
+                  style={styles.cancelBtn}
+                >
                   <Text style={styles.cancelText}>Cancel</Text>
                 </Pressable>
-                <Pressable onPress={submitReport} style={styles.submitBtn} disabled={busy}>
-                  {busy ? <ActivityIndicator /> : <Text style={styles.submitText}>Save</Text>}
+                <Pressable
+                  onPress={submitReport}
+                  style={styles.submitBtn}
+                  disabled={busy}
+                >
+                  {busy ? (
+                    <ActivityIndicator />
+                  ) : (
+                    <Text style={styles.submitText}>Save</Text>
+                  )}
                 </Pressable>
               </View>
-              <Text style={styles.muted}>Long-press an item in the list to delete it.</Text>
+              <Text style={styles.muted}>
+                Long-press an item in the list to delete it.
+              </Text>
             </ScrollView>
           </View>
         </View>
@@ -260,7 +297,7 @@ export default function DatabaseScreen() {
   );
 }
 
-/** Simple analyzer copied from AddContentScreen */
+/** Analyzer */
 function analyzeTextLocal(raw: string) {
   const text = (raw || "").toLowerCase();
   const patterns: Array<[RegExp, number, string]> = [
@@ -268,29 +305,50 @@ function analyzeTextLocal(raw: string) {
     [/gift\s*card|apple\s*card|steam\s*card/, 35, "gift card payment"],
     [/crypto|bitcoin|usdt|binance/, 20, "crypto payment"],
     [/wire\s*transfer|western\s*union|moneygram/, 15, "wire/transfer payment"],
-    [/pay.*upfront|training\s*fee|equipment\s*fee|deposit\s*for\s*(kit|equipment)/, 30, "upfront/training/equipment fee"],
-    [/\bearn\b.*\$\s?\d{3,}|\$\s?\d{3,}\s*per\s*(day|hour|90\s*minutes)/, 20, "unrealistic pay"],
-    [/(no|little)\s*experience\s*required|work\s*60\s*to\s*90\s*minutes/i, 10, "too-easy workload"],
+    [
+      /pay.*upfront|training\s*fee|equipment\s*fee|deposit\s*for\s*(kit|equipment)/,
+      30,
+      "upfront/training/equipment fee",
+    ],
+    [
+      /\bearn\b.*\$\s?\d{3,}|\$\s?\d{3,}\s*per\s*(day|hour|90\s*minutes)/,
+      20,
+      "unrealistic pay",
+    ],
+    [
+      /(no|little)\s*experience\s*required|work\s*60\s*to\s*90\s*minutes/i,
+      10,
+      "too-easy workload",
+    ],
     [/gmail\.com|outlook\.com|yahoo\.com\s*(hr|recruit)/, 10, "non-corporate email"],
     [/\binterview\b.*(whatsapp|telegram|sms)/, 20, "chat-app interview"],
     [/\bverify\b.*(code|otp) via (sms|whatsapp)/, 15, "OTP via chat"],
   ];
   let score = 0;
   const flags: string[] = [];
-  for (const [re, pts, label] of patterns) if (re.test(text)) { score += pts; flags.push(label); }
+  for (const [re, pts, label] of patterns) {
+    if (re.test(text)) {
+      score += pts;
+      flags.push(label);
+    }
+  }
   const urlMatch = text.match(/https?:\/\/[^\s)]+/g);
   if (urlMatch)
     for (const url of urlMatch) {
       try {
         const u = new URL(url);
-        if (/\.(top|xyz|live|shop|work|site)$/i.test(u.hostname) || /-career|careers?-?[0-9]{3,}/i.test(u.hostname)) {
+        if (
+          /\.(top|xyz|live|shop|work|site)$/i.test(u.hostname) ||
+          /-career|careers?-?[0-9]{3,}/i.test(u.hostname)
+        ) {
           score += 10;
           flags.push("suspicious domain");
         }
       } catch {}
     }
   score = Math.max(0, Math.min(100, score));
-  const verdict: SavedAnalysis["verdict"] = score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
+  const verdict: SavedAnalysis["verdict"] =
+    score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
   return { score, verdict, flags: Array.from(new Set(flags)) };
 }
 
@@ -302,7 +360,12 @@ function previewOf(text: string, n: number = 120): string {
 const styles = StyleSheet.create({
   controls: { paddingHorizontal: 12, paddingTop: 10, gap: 10 },
   row: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: "#eee" },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#eee",
+  },
   chipActive: { backgroundColor: "#1b72e8" },
   chipText: { fontWeight: "600" },
   chipTextActive: { color: "white" },
@@ -373,9 +436,24 @@ const styles = StyleSheet.create({
   },
   linkBtn: { alignSelf: "flex-start", padding: 6 },
   linkBtnText: { color: "#1b72e8", fontWeight: "700" },
-  formImage: { width: "100%", height: 220, borderRadius: 10, backgroundColor: "#ddd" },
-  cancelBtn: { paddingVertical: 10, paddingHorizontal: 14, backgroundColor: "#eee", borderRadius: 10 },
+  formImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: 10,
+    backgroundColor: "#ddd",
+  },
+  cancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#eee",
+    borderRadius: 10,
+  },
   cancelText: { fontWeight: "600" },
-  submitBtn: { paddingVertical: 10, paddingHorizontal: 16, backgroundColor: "#1b72e8", borderRadius: 10 },
+  submitBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: "#1b72e8",
+    borderRadius: 10,
+  },
   submitText: { color: "white", fontWeight: "700" },
 });
