@@ -9,9 +9,6 @@
     "noEmit": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "types": [
-      "jest"
-    ],
     "skipLibCheck": true
   },
   "include": [
