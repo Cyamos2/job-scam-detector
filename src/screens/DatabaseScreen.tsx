@@ -1,4 +1,3 @@
-// src/screens/DatabaseScreen.tsx
 import React, { useMemo, useState } from "react";
 import {
   View,
@@ -15,9 +14,9 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-
 import { DatabaseStackParamList } from "../navigation/DatabaseStack";
 import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
+import { analyzeText } from "../lib/analyzer";
 import { useColors } from "../theme/useColors";
 
 type VerdictFilter = "All" | "Low" | "Medium" | "High";
@@ -27,12 +26,9 @@ type Props = NativeStackScreenProps<DatabaseStackParamList, "DatabaseList">;
 export default function DatabaseScreen({ navigation }: Props) {
   const { items, hydrated, remove, clearAll, add } = useSavedItems();
   const { bg, card, text, muted, colors } = useColors();
-  // make a reusable border style from theme
-  const border = { borderColor: colors.border, borderWidth: 1 };
 
   const [filter, setFilter] = useState<VerdictFilter>("All");
   const [sort, setSort] = useState<SortOrder>("Newest");
-  const [q, setQ] = useState("");
 
   // Submit Report modal state
   const [showForm, setShowForm] = useState(false);
@@ -44,24 +40,10 @@ export default function DatabaseScreen({ navigation }: Props) {
 
   const list = useMemo(() => {
     let arr = items.slice();
-
     if (filter !== "All") arr = arr.filter((x) => x.verdict === filter);
-
-    if (q.trim()) {
-      const needle = q.trim().toLowerCase();
-      arr = arr.filter(
-        (x) =>
-          x.title.toLowerCase().includes(needle) ||
-          (x.inputPreview ?? "").toLowerCase().includes(needle) ||
-          x.flags.join(",").toLowerCase().includes(needle)
-      );
-    }
-
-    arr.sort((a, b) =>
-      sort === "Newest" ? b.createdAt - a.createdAt : a.createdAt - b.createdAt
-    );
+    arr.sort((a, b) => (sort === "Newest" ? b.createdAt - a.createdAt : a.createdAt - b.createdAt));
     return arr;
-  }, [items, filter, sort, q]);
+  }, [items, filter, sort]);
 
   const pickScreenshot = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -94,16 +76,12 @@ export default function DatabaseScreen({ navigation }: Props) {
     }
     try {
       setBusy(true);
-      const analysis = analyzeTextLocal(raw);
+      const analysis = analyzeText(raw);
       const flags = notes.trim() ? [...analysis.flags, "note"] : analysis.flags;
 
       const entry: SavedAnalysis = {
         id: String(Date.now()) + "-" + Math.floor(Math.random() * 1e6),
-        title: company.trim()
-          ? company.trim()
-          : imageUri
-          ? "Screenshot report"
-          : previewOf(raw) || "Text report",
+        title: company.trim() ? company.trim() : imageUri ? "Screenshot report" : previewOf(raw) || "Text report",
         source: imageUri ? "image" : "text",
         inputPreview: previewOf(raw),
         imageUri,
@@ -133,56 +111,17 @@ export default function DatabaseScreen({ navigation }: Props) {
     <View style={[{ flex: 1 }, bg]}>
       {/* Controls */}
       <View style={styles.controls}>
-        {/* Search */}
-        <TextInput
-          value={q}
-          onChangeText={setQ}
-          placeholder="Search title, flags, text…"
-          placeholderTextColor={muted.color as string}
-          style={[styles.search, card, border, text]}
-        />
-
-        {/* Verdict filter */}
         <View style={styles.row}>
           {(["All", "Low", "Medium", "High"] as VerdictFilter[]).map((v) => (
-            <Pressable
-              key={v}
-              onPress={() => setFilter(v)}
-              style={[
-                styles.chip,
-                card,
-                border,
-                filter === v && { backgroundColor: colors.primary, borderColor: colors.primary },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  filter === v ? { color: "white" } : text,
-                ]}
-              >
-                {v}
-              </Text>
+            <Pressable key={v} onPress={() => setFilter(v)} style={[styles.chip, card, filter === v && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+              <Text style={[styles.chipText, filter === v ? { color: "white" } : text]}>{v}</Text>
             </Pressable>
           ))}
         </View>
-
-        {/* Sort */}
         <View style={styles.row}>
           {(["Newest", "Oldest"] as SortOrder[]).map((s) => (
-            <Pressable
-              key={s}
-              onPress={() => setSort(s)}
-              style={[
-                styles.chip,
-                card,
-                border,
-                sort === s && { backgroundColor: colors.primary, borderColor: colors.primary },
-              ]}
-            >
-              <Text style={[styles.chipText, sort === s ? { color: "white" } : text]}>
-                {s}
-              </Text>
+            <Pressable key={s} onPress={() => setSort(s)} style={[styles.chip, card, sort === s && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+              <Text style={[styles.chipText, sort === s ? { color: "white" } : text]}>{s}</Text>
             </Pressable>
           ))}
         </View>
@@ -209,58 +148,44 @@ export default function DatabaseScreen({ navigation }: Props) {
           <Pressable
             onPress={() => navigation.navigate("ReportDetail", { id: item.id })}
             onLongPress={() => remove(item.id)}
-            style={[styles.card, card, border]}
+            style={[styles.card, card]}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, text]} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={[styles.cardSub, muted]}>
-                {new Date(item.createdAt).toLocaleString()}
-              </Text>
+              <Text style={[styles.cardTitle, text]}>{item.title}</Text>
+              <Text style={[styles.cardSub, muted]}>{new Date(item.createdAt).toLocaleString()}</Text>
               <Text style={[styles.cardInfo, text]}>
                 Score {item.score} — {item.verdict} risk
               </Text>
               <Text style={[styles.cardFlags, muted]} numberOfLines={1}>
                 Flags: {item.flags.length ? item.flags.join(", ") : "none"}
               </Text>
-              {item.inputPreview ? (
-                <Text style={[styles.preview, muted]} numberOfLines={2}>
-                  {item.inputPreview}
-                </Text>
-              ) : null}
+              {item.inputPreview ? <Text style={[styles.preview, muted]} numberOfLines={2}>{item.inputPreview}</Text> : null}
             </View>
-            {item.imageUri ? (
-              <Image source={{ uri: item.imageUri }} style={styles.thumb} />
-            ) : null}
+            {item.imageUri ? <Image source={{ uri: item.imageUri }} style={styles.thumb} /> : null}
           </Pressable>
         )}
       />
 
       {/* Floating Add button */}
-      <Pressable
-        accessibilityLabel="Add to Database"
-        onPress={() => setShowForm(true)}
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-      >
+      <Pressable accessibilityLabel="Add to Database" onPress={() => setShowForm(true)} style={[styles.fab, { backgroundColor: colors.primary }]}>
         <Text style={styles.fabText}>＋</Text>
       </Pressable>
 
       {/* Submit Report modal */}
       <Modal visible={showForm} animationType="slide" transparent onRequestClose={() => setShowForm(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCard, card, border]}>
+          <View style={[styles.modalCard, card]}>
             <Text style={[styles.modalTitle, text]}>Submit Report</Text>
             <ScrollView contentContainerStyle={{ gap: 10 }}>
               <TextInput
-                style={[styles.input, card, border, text]}
+                style={[styles.input, card, text]}
                 placeholder="Company or title (optional)"
                 placeholderTextColor={muted.color as string}
                 value={company}
                 onChangeText={setCompany}
               />
               <TextInput
-                style={[styles.input, card, border, text, { height: 120, textAlignVertical: "top" }]}
+                style={[styles.input, card, text, { height: 120, textAlignVertical: "top" }]}
                 placeholder="Paste job text or a link (https://…)"
                 placeholderTextColor={muted.color as string}
                 value={input}
@@ -268,7 +193,7 @@ export default function DatabaseScreen({ navigation }: Props) {
                 multiline
               />
               <TextInput
-                style={[styles.input, card, border, text, { height: 80, textAlignVertical: "top" }]}
+                style={[styles.input, card, text, { height: 80, textAlignVertical: "top" }]}
                 placeholder="Notes (optional, not used for scoring)"
                 placeholderTextColor={muted.color as string}
                 value={notes}
@@ -297,7 +222,7 @@ export default function DatabaseScreen({ navigation }: Props) {
                     setShowForm(false);
                     resetForm();
                   }}
-                  style={[styles.cancelBtn, card, border]}
+                  style={[styles.cancelBtn, card]}
                 >
                   <Text style={[styles.cancelText, text]}>Cancel</Text>
                 </Pressable>
@@ -314,55 +239,16 @@ export default function DatabaseScreen({ navigation }: Props) {
   );
 }
 
-/* ---------- helpers ---------- */
-
-function analyzeTextLocal(raw: string) {
-  const text = (raw || "").toLowerCase();
-  const patterns: Array<[RegExp, number, string]> = [
-    [/whats\s*app|telegram|signal/, 25, "whatsapp/telegram/signal contact"],
-    [/gift\s*card|apple\s*card|steam\s*card/, 35, "gift card payment"],
-    [/crypto|bitcoin|usdt|binance/, 20, "crypto payment"],
-    [/wire\s*transfer|western\s*union|moneygram/, 15, "wire/transfer payment"],
-    [/pay.*upfront|training\s*fee|equipment\s*fee|deposit\s*for\s*(kit|equipment)/, 30, "upfront/training/equipment fee"],
-    [/\bearn\b.*\$\s?\d{3,}|\$\s?\d{3,}\s*per\s*(day|hour|90\s*minutes)/, 20, "unrealistic pay"],
-    [/(no|little)\s*experience\s*required|work\s*60\s*to\s*90\s*minutes/i, 10, "too-easy workload"],
-    [/gmail\.com|outlook\.com|yahoo\.com\s*(hr|recruit)/, 10, "non-corporate email"],
-    [/\binterview\b.*(whatsapp|telegram|sms)/, 20, "chat-app interview"],
-    [/\bverify\b.*(code|otp) via (sms|whatsapp)/, 15, "OTP via chat"],
-  ];
-  let score = 0;
-  const flags: string[] = [];
-  for (const [re, pts, label] of patterns) if (re.test(text)) { score += pts; flags.push(label); }
-  const urlMatch = text.match(/https?:\/\/[^\s)]+/g);
-  if (urlMatch)
-    for (const url of urlMatch) {
-      try {
-        const u = new URL(url);
-        if (/\.(top|xyz|live|shop|work|site)$/i.test(u.hostname) || /-career|careers?-?[0-9]{3,}/i.test(u.hostname)) {
-          score += 10;
-          flags.push("suspicious domain");
-        }
-      } catch {}
-    }
-  score = Math.max(0, Math.min(100, score));
-  const verdict: SavedAnalysis["verdict"] = score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
-  return { score, verdict, flags: Array.from(new Set(flags)) };
-}
-
 function previewOf(text: string, n: number = 120): string {
   const t = (text || "").trim().replace(/\s+/g, " ");
   return t.length > n ? t.slice(0, n) + "…" : t;
 }
 
-/* ---------- styles ---------- */
-
 const styles = StyleSheet.create({
   controls: { paddingHorizontal: 12, paddingTop: 10, gap: 10 },
-  search: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10 },
-  row: { flexDirection: "row", gap: 8, flexWrap: "wrap", alignItems: "center" },
-
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 },
-  chipText: { fontWeight: "700" },
+  row: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
+  chipText: { fontWeight: "600" },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
   title: { fontSize: 20, fontWeight: "700", marginBottom: 6 },
@@ -370,15 +256,9 @@ const styles = StyleSheet.create({
 
   clearAll: { alignSelf: "flex-end", padding: 10 },
 
-  card: {
-    flexDirection: "row",
-    gap: 12,
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 10,
-  },
-  cardTitle: { fontWeight: "800", fontSize: 18, marginBottom: 2 },
-  cardSub: { fontSize: 12, opacity: 0.6, marginBottom: 6 },
+  card: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 10 },
+  cardTitle: { fontWeight: "700", fontSize: 16 },
+  cardSub: { fontSize: 12, opacity: 0.6, marginBottom: 4 },
   cardInfo: { fontWeight: "600" },
   cardFlags: { fontSize: 12, opacity: 0.8 },
   preview: { fontSize: 12, opacity: 0.7, marginTop: 6 },
@@ -403,27 +283,14 @@ const styles = StyleSheet.create({
   fabText: { color: "white", fontSize: 28, fontWeight: "700", lineHeight: 30 },
 
   // Modal form
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-end",
-  },
-  modalCard: {
-    padding: 16,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    gap: 12,
-    maxHeight: "85%",
-  },
-  modalTitle: { fontSize: 18, fontWeight: "800", marginBottom: 4 },
-  input: {
-    borderRadius: 10,
-    padding: 10,
-  },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
+  modalCard: { padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16, gap: 12, borderWidth: 1, maxHeight: "85%" },
+  modalTitle: { fontSize: 18, fontWeight: "700", marginBottom: 4 },
+  input: { borderWidth: 1, borderRadius: 10, padding: 10, backgroundColor: "transparent" },
   linkBtn: { alignSelf: "flex-start", padding: 6 },
   linkBtnText: { fontWeight: "700" },
   formImage: { width: "100%", height: 220, borderRadius: 10, backgroundColor: "#ddd" },
-  cancelBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10 },
+  cancelBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1 },
   cancelText: { fontWeight: "600" },
   submitBtn: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
   submitText: { color: "white", fontWeight: "700" },
