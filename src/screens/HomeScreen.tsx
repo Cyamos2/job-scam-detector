@@ -1,39 +1,45 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { HomeStackParamList } from "../navigation/HomeStack";
+import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { HomeStackParamList } from "../navigation/HomeStack";
+import { useColors } from "../theme/useColors";
 
-export default function HomeScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+type Props = NativeStackScreenProps<HomeStackParamList, "HomeMain">;
+
+export default function HomeScreen({ navigation }: Props) {
+  const { bg, card, text, muted, colors } = useColors();
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Job Scam Detector</Text>
-      <Text style={styles.subtitle}>Home</Text>
-      <Text style={styles.body}>
-        Tap Start to add text/links or pick a screenshot to analyze.
-      </Text>
+    <ScrollView contentContainerStyle={[styles.container, bg]}>
+      <View style={[styles.headerCard, card]}>
+        <Text style={[styles.title, text]}>Job Scam Detector</Text>
+        <Text style={[styles.sectionTitle, text]}>Home</Text>
+        <Text style={[styles.body, muted]}>
+          Tap Start to add text/links or pick a screenshot to analyze.
+        </Text>
+      </View>
 
-      <Pressable onPress={() => navigation.navigate("AddContent")} style={styles.startBtn}>
+      <Pressable
+        onPress={() => navigation.navigate("AddContent")}
+        style={[styles.startBtn, { backgroundColor: colors.primary }]}
+      >
         <Text style={styles.startText}>Start</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, gap: 18 },
-  title: { fontSize: 22, fontWeight: "700", marginTop: 8 },
-  subtitle: { fontSize: 16, opacity: 0.7, marginBottom: 4 },
-  body: { fontSize: 14, opacity: 0.8 },
+  container: { flexGrow: 1, padding: 16, gap: 16 },
+  headerCard: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 6 },
+  title: { fontSize: 24, fontWeight: "800" },
+  sectionTitle: { fontSize: 16, fontWeight: "700", marginTop: 6 },
+  body: { fontSize: 14 },
   startBtn: {
-    marginTop: 8,
     alignSelf: "flex-start",
-    backgroundColor: "#1b72e8",
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
   },
-  startText: { color: "white", fontWeight: "700" },
+  startText: { color: "white", fontWeight: "700", fontSize: 16 },
 });

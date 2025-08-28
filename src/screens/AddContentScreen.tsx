@@ -1,3 +1,4 @@
+// src/screens/AddContentScreen.tsx
 import React, { useLayoutEffect, useState } from "react";
 import {
   View,
@@ -17,6 +18,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
 import { useSettings } from "../SettingsProvider";
+import { useColors } from "../theme/useColors";
 
 type AnalysisResult = {
   score: number;
@@ -24,11 +26,14 @@ type AnalysisResult = {
   flags: string[];
 };
 
-export default function AddContentScreen({ navigation }: { navigation: any }) {
+export default function AddContentScreen({ navigation }: any) {
+  const { bg, card, text, muted, colors } = useColors();
+
   const [input, setInput] = useState("");
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+
   const { add } = useSavedItems();
   const { autoSave, setAutoSave, sensitivity, setSensitivity } = useSettings();
   const [showOptions, setShowOptions] = useState(false);
@@ -40,25 +45,31 @@ export default function AddContentScreen({ navigation }: { navigation: any }) {
           onPress={() => setShowOptions(true)}
           style={{ paddingHorizontal: 10, paddingVertical: 6 }}
         >
-          <Text style={{ fontWeight: "700", color: "#1b72e8" }}>Options</Text>
+          <Text style={{ fontWeight: "700", color: colors.primary }}>
+            Options
+          </Text>
         </Pressable>
       ),
     });
-  }, [navigation]);
+  }, [navigation, colors.primary]);
 
   const onAnalyzeText = () => {
-    const text = input.trim();
-    if (!text)
-      return Alert.alert("Nothing to analyze", "Paste a job post or link first.");
-    const a = analyzeTextLocal(text);
+    const textVal = input.trim();
+    if (!textVal) {
+      Alert.alert("Nothing to analyze", "Paste a job post or link first.");
+      return;
+    }
+    const a = analyzeTextLocal(textVal);
     setResult(a);
     if (autoSave) saveEntry(a);
   };
 
   const onPickScreenshot = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted)
-      return Alert.alert("Permission needed", "Allow photo access to pick a screenshot.");
+    if (!perm.granted) {
+      Alert.alert("Permission needed", "Allow photo access to pick a screenshot.");
+      return;
+    }
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 1,
@@ -66,19 +77,21 @@ export default function AddContentScreen({ navigation }: { navigation: any }) {
     });
     if (res.canceled) return;
     const asset = res.assets?.[0];
-    if (!asset?.uri) return;
-    setImageUri(asset.uri);
-    setResult(null);
+    if (asset?.uri) {
+      setImageUri(asset.uri);
+      setResult(null);
+    }
   };
 
   const analyzeScreenshot = async () => {
     if (!imageUri) return Alert.alert("No screenshot", "Pick a screenshot first.");
     try {
       setBusy(true);
-      await new Promise((r) => setTimeout(r, 250)); // stub “OCR”
+      // stub “OCR time”
+      await new Promise((r) => setTimeout(r, 250));
       const fakeOCR =
         "Contact us via WhatsApp and pay for training with gift cards.";
-      const a = analyzeTextLocal(fakeOCR + " " + (input ?? ""));
+      const a = analyzeTextLocal(`${fakeOCR} ${input ?? ""}`);
       setResult(a);
       if (autoSave) saveEntry(a);
     } finally {
@@ -109,16 +122,17 @@ export default function AddContentScreen({ navigation }: { navigation: any }) {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={[{ flex: 1 }, bg]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={styles.panelTitle}>Add Content</Text>
+        <Text style={[styles.panelTitle, text]}>Add Content</Text>
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, card, text]}
           placeholder="Paste job text or link (https://…)"
+          placeholderTextColor={muted.color as string}
           value={input}
           onChangeText={(t) => {
             setInput(t);
@@ -129,58 +143,65 @@ export default function AddContentScreen({ navigation }: { navigation: any }) {
         />
 
         <View style={styles.row}>
-          <Pressable onPress={onAnalyzeText} style={styles.actionBtn}>
-            <Text style={styles.actionText}>Analyze Text/Link</Text>
+          <Pressable onPress={onAnalyzeText} style={[styles.actionBtn, card]}>
+            <Text style={[styles.actionText, text]}>Analyze Text/Link</Text>
           </Pressable>
-          <Pressable onPress={onPickScreenshot} style={styles.actionBtn}>
-            <Text style={styles.actionText}>Pick Screenshot</Text>
+          <Pressable onPress={onPickScreenshot} style={[styles.actionBtn, card]}>
+            <Text style={[styles.actionText, text]}>Pick Screenshot</Text>
           </Pressable>
         </View>
 
         {imageUri && (
-          <View style={styles.previewBox}>
+          <View style={{ gap: 10, marginTop: 10 }}>
             <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="cover" />
             <Pressable
               onPress={analyzeScreenshot}
-              style={[styles.actionBtn, styles.primaryBtn]}
+              style={[styles.actionBtn, { backgroundColor: colors.primary }]}
               disabled={busy}
             >
               {busy ? (
                 <ActivityIndicator />
               ) : (
-                <Text style={[styles.actionText, styles.primaryText]}>
+                <Text style={[styles.actionText, { color: "white", fontWeight: "700" }]}>
                   Analyze Screenshot
                 </Text>
               )}
             </Pressable>
             <Pressable onPress={() => setImageUri(null)} style={styles.clearBtn}>
-              <Text style={styles.clearText}>Remove screenshot</Text>
+              <Text style={{ color: "#c00", fontWeight: "600" }}>Remove screenshot</Text>
             </Pressable>
           </View>
         )}
 
         {result && (
-          <View style={styles.resultCard}>
-            <Text style={styles.resultTitle}>Analysis</Text>
-            <Text style={styles.resultScore}>
+          <View style={[styles.resultCard, card]}>
+            <Text style={[styles.resultTitle, text]}>Analysis</Text>
+            <Text style={[styles.resultScore, text]}>
               Score: {result.score} — {result.verdict} risk
             </Text>
-            <Text style={styles.resultFlags}>
+            <Text style={[styles.resultFlags, muted]}>
               Flags: {result.flags.length ? result.flags.join(", ") : "none"}
             </Text>
 
             {!autoSave && (
-              <Pressable onPress={saveCurrentManually} style={[styles.actionBtn, styles.saveBtn]}>
-                <Text style={[styles.actionText, styles.saveText]}>
+              <Pressable
+                onPress={saveCurrentManually}
+                style={[styles.actionBtn, { backgroundColor: colors.primary }]}
+              >
+                <Text style={[styles.actionText, { color: "white", fontWeight: "700" }]}>
                   Save to Database
                 </Text>
               </Pressable>
             )}
-            {autoSave && <Text style={styles.autoSaveNote}>Saved automatically ✓</Text>}
+            {autoSave && (
+              <Text style={[styles.autoSaveNote, { color: colors.primary }]}>
+                Saved automatically ✓
+              </Text>
+            )}
           </View>
         )}
 
-        <Text style={styles.hint}>
+        <Text style={[styles.hint, muted]}>
           Tip: LinkedIn/Indeed URL or raw message text both work.
         </Text>
       </ScrollView>
@@ -193,52 +214,46 @@ export default function AddContentScreen({ navigation }: { navigation: any }) {
         onRequestClose={() => setShowOptions(false)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Options</Text>
+          <View style={[styles.modalCard, card]}>
+            <Text style={[styles.modalTitle, text]}>Options</Text>
 
             <View style={styles.optRow}>
-              <Text style={styles.optLabel}>Auto-save analyses</Text>
+              <Text style={[styles.optLabel, text]}>Auto-save analyses</Text>
               <Switch value={autoSave} onValueChange={setAutoSave} />
             </View>
 
             <View style={styles.optBlock}>
-              <Text style={styles.optLabel}>Sensitivity: {sensitivity}</Text>
+              <Text style={[styles.optLabel, text]}>Sensitivity: {sensitivity}</Text>
               <View style={styles.row}>
-                <Pressable
-                  onPress={() => setSensitivity(Math.max(0, sensitivity - 10))}
-                  style={styles.smallBtn}
-                >
-                  <Text style={styles.btnText}>-10</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setSensitivity(Math.max(0, sensitivity - 5))}
-                  style={styles.smallBtn}
-                >
-                  <Text style={styles.btnText}>-5</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setSensitivity(Math.min(100, sensitivity + 5))}
-                  style={styles.smallBtn}
-                >
-                  <Text style={styles.btnText}>+5</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setSensitivity(Math.min(100, sensitivity + 10))}
-                  style={styles.smallBtn}
-                >
-                  <Text style={styles.btnText}>+10</Text>
-                </Pressable>
+                {[-10, -5, +5, +10].map((n) => (
+                  <Pressable
+                    key={n}
+                    onPress={() =>
+                      setSensitivity(Math.max(0, Math.min(100, sensitivity + n)))
+                    }
+                    style={[styles.smallBtn, card]}
+                  >
+                    <Text style={[styles.btnText, text]}>
+                      {n > 0 ? `+${n}` : n}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
-              <Text style={styles.muted}>
+              <Text style={[styles.muted, muted]}>
                 Higher = stricter risk flagging (used by future analyzers).
               </Text>
             </View>
 
             <Pressable
               onPress={() => setShowOptions(false)}
-              style={[styles.actionBtn, styles.primaryBtn, { alignSelf: "flex-end" }]}
+              style={[
+                styles.actionBtn,
+                { backgroundColor: colors.primary, alignSelf: "flex-end" },
+              ]}
             >
-              <Text style={[styles.actionText, styles.primaryText]}>Done</Text>
+              <Text style={[styles.actionText, { color: "white", fontWeight: "700" }]}>
+                Done
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -246,6 +261,8 @@ export default function AddContentScreen({ navigation }: { navigation: any }) {
     </KeyboardAvoidingView>
   );
 }
+
+/* helpers */
 
 function buildTitle(text: string, imageUri: string | null): string {
   if (imageUri) return "Screenshot analysis";
@@ -276,7 +293,7 @@ function analyzeTextLocal(raw: string): AnalysisResult {
   const flags: string[] = [];
   for (const [re, pts, label] of patterns) if (re.test(text)) { score += pts; flags.push(label); }
   const urlMatch = text.match(/https?:\/\/[^\s)]+/g);
-  if (urlMatch)
+  if (urlMatch) {
     for (const url of urlMatch) {
       try {
         const u = new URL(url);
@@ -289,6 +306,7 @@ function analyzeTextLocal(raw: string): AnalysisResult {
         }
       } catch {}
     }
+  }
   score = Math.max(0, Math.min(100, score));
   const verdict: AnalysisResult["verdict"] =
     score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
@@ -298,48 +316,40 @@ function analyzeTextLocal(raw: string): AnalysisResult {
 const styles = StyleSheet.create({
   scroll: { padding: 20, gap: 18, paddingBottom: 40 },
   panelTitle: { fontSize: 16, fontWeight: "700" },
+
   input: {
     height: 200,
     borderWidth: 1,
-    borderColor: "#ddd",
     borderRadius: 10,
     padding: 10,
-    backgroundColor: "white",
     textAlignVertical: "top",
   },
+
   row: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
-  actionBtn: { backgroundColor: "#eee", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+
+  actionBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   actionText: { fontWeight: "600" },
-  previewBox: { gap: 10, marginTop: 10 },
+
   preview: { width: "100%", height: 220, borderRadius: 10, backgroundColor: "#ddd" },
-  primaryBtn: { backgroundColor: "#1b72e8" },
-  primaryText: { color: "white", fontWeight: "700" },
   clearBtn: { alignSelf: "flex-start", padding: 6 },
-  clearText: { color: "#c00", fontWeight: "600" },
-  resultCard: {
-    marginTop: 8,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "white",
-    borderWidth: 1,
-    borderColor: "#e6e6e6",
-    gap: 6,
-  },
+
+  resultCard: { marginTop: 8, padding: 12, borderRadius: 12, borderWidth: 1, gap: 6 },
   resultTitle: { fontSize: 16, fontWeight: "700" },
   resultScore: { fontSize: 14, fontWeight: "600" },
-  resultFlags: { fontSize: 13, opacity: 0.8 },
-  saveBtn: { backgroundColor: "#1b72e8" },
-  saveText: { color: "white", fontWeight: "700" },
-  autoSaveNote: { fontSize: 12, color: "#1b72e8", marginTop: 6 },
+  resultFlags: { fontSize: 13 },
+  autoSaveNote: { fontSize: 12, marginTop: 6 },
 
-  // options modal
+  // modal
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  modalCard: { backgroundColor: "white", padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16, gap: 16 },
+  modalCard: { padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16, gap: 16, borderWidth: 1 },
   modalTitle: { fontSize: 18, fontWeight: "700" },
   optRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   optBlock: { gap: 8 },
   optLabel: { fontWeight: "600" },
-  smallBtn: { backgroundColor: "#eee", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
+  smallBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
   btnText: { fontWeight: "600" },
-  muted: { fontSize: 12, opacity: 0.6 },
+
+  // text helpers
+  muted: { fontSize: 12, opacity: 0.7 },
+  hint: { fontSize: 12, opacity: 0.6 }, // <- added; used in JSX
 });

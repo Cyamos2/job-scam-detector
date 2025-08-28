@@ -1,119 +1,119 @@
 // src/screens/SettingsScreen.tsx
 import React from "react";
-import { View, Text, StyleSheet, Pressable, Switch } from "react-native";
+import { View, Text, StyleSheet, Pressable, Switch, ScrollView } from "react-native";
 import { useSettings } from "../SettingsProvider";
+import { useColors } from "../theme/useColors";
 
 export default function SettingsScreen() {
-  const {
-    theme,
-    setTheme,
-    autoSave,
-    setAutoSave,
-    sensitivity,
-    setSensitivity,
-    loading,
-    resetSettings,
-  } = useSettings();
+  const { theme, setTheme, autoSave, setAutoSave, sensitivity, setSensitivity } = useSettings();
+  const { bg, card, text, muted, colors } = useColors();
+
+  // Local reset (don’t rely on a context method that may not exist)
+  const onReset = () => {
+    setTheme("light");
+    setAutoSave(false);
+    setSensitivity(50);
+  };
+
+  const bump = (n: number) =>
+    setSensitivity(Math.max(0, Math.min(100, sensitivity + n)));
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Settings</Text>
-      {loading ? <Text style={styles.muted}>Loading…</Text> : null}
+    <ScrollView contentContainerStyle={[styles.container, bg]}>
+      <Text style={[styles.h1, text]}>Settings</Text>
 
       {/* Theme */}
-      <View style={styles.rowBetween}>
-        <Text style={styles.label}>Theme</Text>
-        <View style={styles.row}>
-          <Pressable
-            onPress={() => setTheme("light")}
-            style={[styles.pill, theme === "light" && styles.pillActive]}
-          >
-            <Text
-              style={[styles.pillText, theme === "light" && styles.pillTextActive]}
-            >
-              Light
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setTheme("dark")}
-            style={[styles.pill, theme === "dark" && styles.pillActive]}
-          >
-            <Text
-              style={[styles.pillText, theme === "dark" && styles.pillTextActive]}
-            >
-              Dark
-            </Text>
-          </Pressable>
-        </View>
+      <Text style={[styles.label, text]}>Theme</Text>
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setTheme("light")}
+          style={[
+            styles.segment,
+            card,
+            theme === "light" && {
+              backgroundColor: colors.primary,
+              borderColor: colors.primary,
+            },
+          ]}
+        >
+          <Text style={[styles.segmentText, theme === "light" ? { color: "white" } : text]}>
+            Light
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setTheme("dark")}
+          style={[
+            styles.segment,
+            card,
+            theme === "dark" && {
+              backgroundColor: colors.primary,
+              borderColor: colors.primary,
+            },
+          ]}
+        >
+          <Text style={[styles.segmentText, theme === "dark" ? { color: "white" } : text]}>
+            Dark
+          </Text>
+        </Pressable>
       </View>
 
       {/* Auto-save */}
       <View style={styles.rowBetween}>
-        <Text style={styles.label}>Auto-save analyses</Text>
-        <Switch value={autoSave} onValueChange={setAutoSave} />
+        <Text style={[styles.label, text]}>Auto-save analyses</Text>
+        <Switch
+          value={autoSave}
+          onValueChange={setAutoSave}
+          trackColor={{ false: "#bbb", true: colors.primary }}
+          thumbColor={autoSave ? "white" : "#f4f3f4"}
+        />
       </View>
 
-      {/* Sensitivity (no slider, just +/-) */}
-      <View style={{ gap: 8 }}>
-        <Text style={styles.label}>Sensitivity: {sensitivity}</Text>
-        <View style={styles.row}>
-          <Pressable
-            onPress={() => setSensitivity(Math.max(0, sensitivity - 10))}
-            style={styles.smallBtn}
-          >
-            <Text style={styles.smallBtnText}>-10</Text>
+      {/* Sensitivity */}
+      <Text style={[styles.label, text]}>Sensitivity: {sensitivity}</Text>
+      <View style={styles.row}>
+        {[-10, -1, +1, +10].map((n) => (
+          <Pressable key={n} onPress={() => bump(n)} style={[styles.bumpBtn, card]}>
+            <Text style={[styles.bumpText, text]}>{n > 0 ? `+${n}` : n}</Text>
           </Pressable>
-          <Pressable
-            onPress={() => setSensitivity(Math.max(0, sensitivity - 1))}
-            style={styles.smallBtn}
-          >
-            <Text style={styles.smallBtnText}>-1</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setSensitivity(Math.min(100, sensitivity + 1))}
-            style={styles.smallBtn}
-          >
-            <Text style={styles.smallBtnText}>+1</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => setSensitivity(Math.min(100, sensitivity + 10))}
-            style={styles.smallBtn}
-          >
-            <Text style={styles.smallBtnText}>+10</Text>
-          </Pressable>
-        </View>
-        <Text style={styles.muted}>
-          Higher = stricter risk flagging (used by analyzers).
-        </Text>
+        ))}
       </View>
+      <Text style={[styles.help, muted]}>
+        Higher = stricter risk flagging (used by analyzers).
+      </Text>
 
-      {/* Reset */}
-      <Pressable onPress={resetSettings} style={[styles.btn, styles.danger]}>
-        <Text style={[styles.btnText, styles.dangerText]}>Reset to Defaults</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onReset}
+        style={[styles.resetBtn, { backgroundColor: "#f7d9d7", borderColor: "#f2c0bc" }]}
+      >
+        <Text style={{ color: "#c2392b", fontWeight: "700" }}>Reset to Defaults</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 18 },
-  title: { fontSize: 20, fontWeight: "700", marginBottom: 8 },
-  label: { fontWeight: "600" },
-  muted: { opacity: 0.6 },
+  container: { padding: 16, gap: 16 },
+  h1: { fontSize: 26, fontWeight: "800" },
+  label: { fontSize: 16, fontWeight: "700" },
 
   row: { flexDirection: "row", gap: 10, alignItems: "center" },
-  rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  rowBetween: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
 
-  pill: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: "#eee" },
-  pillActive: { backgroundColor: "#1b72e8" },
-  pillText: { fontWeight: "600" },
-  pillTextActive: { color: "white" },
+  segment: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 999, borderWidth: 1 },
+  segmentText: { fontWeight: "700" },
 
-  smallBtn: { backgroundColor: "#eee", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
-  smallBtnText: { fontWeight: "600" },
+  bumpBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
+  bumpText: { fontWeight: "700" },
+  help: { fontSize: 12 },
 
-  btn: { marginTop: 8, alignSelf: "flex-start", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
-  btnText: { fontWeight: "700" },
-  danger: { backgroundColor: "#fee" },
-  dangerText: { color: "#c00" },
+  resetBtn: {
+    alignSelf: "flex-start",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+  },
 });
