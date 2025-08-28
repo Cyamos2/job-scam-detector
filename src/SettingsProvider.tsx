@@ -1,72 +1,68 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  ReactNode,
-} from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type ThemeMode = "light" | "dark" | "system";
-
-type AppSettings = {
-  theme: ThemeMode;
-  sensitivity: number; // 0..100
-  autoSave: boolean;   // NEW
+export type Settings = {
+  theme: "light" | "dark";
+  sensitivity: number;   // 0–100
+  autoSave: boolean;
 };
 
-type SettingsContextValue = AppSettings & {
-  isHydrated: boolean;
-  setTheme: (t: ThemeMode) => void;
+const DEFAULTS: Settings = { theme: "light", sensitivity: 50, autoSave: false };
+const STORAGE_KEY = "@jsd/settings";
+
+type Ctx = {
+  theme: Settings["theme"];
+  sensitivity: number;
+  autoSave: boolean;
+  loading: boolean;
+  setTheme: (t: Settings["theme"]) => void;
   setSensitivity: (n: number) => void;
-  setAutoSave: (b: boolean) => void; // NEW
+  setAutoSave: (b: boolean) => void;
   resetSettings: () => void;
 };
 
-const STORAGE_KEY = "app.settings.v1";
-const DEFAULTS: AppSettings = { theme: "system", sensitivity: 50, autoSave: false };
+const SettingsContext = createContext<Ctx | undefined>(undefined);
 
-const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
+export function SettingsProvider({ children }: { children: React.ReactNode }) {
+  const [state, setState] = useState<Settings>(DEFAULTS);
+  const [loading, setLoading] = useState(true);
 
-export const SettingsProvider = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState<AppSettings>(DEFAULTS);
-  const [isHydrated, setHydrated] = useState(false);
-
+  // hydrate once
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) setState((s) => ({ ...s, ...(JSON.parse(raw) as Partial<AppSettings>) }));
-      } finally {
-        setHydrated(true);
-      }
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setState({ ...DEFAULTS, ...parsed });
+        }
+      } catch {}
+      setLoading(false);
     })();
   }, []);
 
+  // persist whenever state changes (after hydrate)
   useEffect(() => {
-    if (!isHydrated) return;
+    if (loading) return;
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
-  }, [state, isHydrated]);
+  }, [state, loading]);
 
-  const value = useMemo<SettingsContextValue>(
-    () => ({
-      ...state,
-      isHydrated,
-      setTheme: (t) => setState((s) => ({ ...s, theme: t })),
-      setSensitivity: (n) =>
-        setState((s) => ({ ...s, sensitivity: Math.max(0, Math.min(100, Math.round(n))) })),
-      setAutoSave: (b) => setState((s) => ({ ...s, autoSave: !!b })),
-      resetSettings: () => setState(DEFAULTS),
-    }),
-    [state, isHydrated]
+  const setTheme = (t: Settings["theme"]) => setState(s => ({ ...s, theme: t }));
+  const setSensitivity = (n: number) =>
+    setState(s => ({ ...s, sensitivity: Math.max(0, Math.min(100, Math.round(n))) }));
+  const setAutoSave = (b: boolean) => setState(s => ({ ...s, autoSave: b }));
+  const resetSettings = () => setState(DEFAULTS);
+
+  const value = useMemo(
+    () => ({ ...state, loading, setTheme, setSensitivity, setAutoSave, resetSettings }),
+    [state, loading]
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
-};
+}
 
-export const useSettings = () => {
+export function useSettings() {
   const ctx = useContext(SettingsContext);
   if (!ctx) throw new Error("useSettings must be used within a SettingsProvider");
   return ctx;
-};
+}
