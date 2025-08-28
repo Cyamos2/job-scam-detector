@@ -21,6 +21,13 @@ type SavedItemsContextType = {
   remove: (id: string) => void;
   clearAll: () => void;
   update: (id: string, partial: Partial<SavedAnalysis>) => void;
+
+  // NEW: backup/restore
+  exportJSON: () => string;
+  importJSON: (
+    raw: string,
+    mode?: "merge" | "replace"
+  ) => { added: number; replaced: number; skipped: number };
 };
 
 const CTX = createContext<SavedItemsContextType | undefined>(undefined);
@@ -51,8 +58,66 @@ export function SavedItemsProvider({ children }: { children: React.ReactNode }) 
   const update = (id: string, partial: Partial<SavedAnalysis>) =>
     setItems(prev => prev.map(x => (x.id === id ? { ...x, ...partial } : x)));
 
+  // -------- BACKUP / RESTORE --------
+  const exportJSON = () => {
+    const payload = {
+      schema: "job-scam-detector/v1",
+      exportedAt: Date.now(),
+      count: items.length,
+      items,
+    };
+    return JSON.stringify(payload, null, 2);
+  };
+
+  const importJSON: SavedItemsContextType["importJSON"] = (raw, mode = "merge") => {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new Error("Invalid JSON file.");
+    }
+
+    const incoming: SavedAnalysis[] = Array.isArray(parsed?.items)
+      ? parsed.items
+      : Array.isArray(parsed)
+      ? parsed
+      : [];
+
+    // quick validation of objects
+    const valid = incoming.filter(
+      (x) =>
+        x &&
+        typeof x.id === "string" &&
+        typeof x.title === "string" &&
+        (x.source === "text" || x.source === "image") &&
+        typeof x.score === "number" &&
+        (x.verdict === "Low" || x.verdict === "Medium" || x.verdict === "High") &&
+        Array.isArray(x.flags) &&
+        typeof x.createdAt === "number"
+    );
+
+    if (mode === "replace") {
+      setItems(valid);
+      return { added: valid.length, replaced: items.length, skipped: incoming.length - valid.length };
+    }
+
+    // merge mode (default): keep existing; add new that don’t duplicate ids
+    const map = new Map<string, SavedAnalysis>();
+    for (const i of items) map.set(i.id, i);
+
+    let added = 0;
+    for (const i of valid) {
+      if (!map.has(i.id)) {
+        map.set(i.id, i);
+        added++;
+      }
+    }
+    setItems(Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt));
+    return { added, replaced: 0, skipped: incoming.length - valid.length + (valid.length - added) };
+  };
+
   const value = useMemo(
-    () => ({ items, hydrated, add, remove, clearAll, update }),
+    () => ({ items, hydrated, add, remove, clearAll, update, exportJSON, importJSON }),
     [items, hydrated]
   );
 
