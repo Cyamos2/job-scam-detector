@@ -15,10 +15,7 @@ export default function HomeScreen() {
         Tap Start to add text/links or pick a screenshot to analyze.
       </Text>
 
-      <Pressable
-        onPress={() => navigation.navigate("AddContent")}
-        style={styles.startBtn}
-      >
+      <Pressable onPress={() => navigation.navigate("AddContent")} style={styles.startBtn}>
         <Text style={styles.startText}>Start</Text>
       </Pressable>
     </View>

@@ -1,4 +1,3 @@
-// src/SettingsProvider.tsx
 import React, {
   createContext,
   useContext,
@@ -14,53 +13,40 @@ export type ThemeMode = "light" | "dark" | "system";
 type AppSettings = {
   theme: ThemeMode;
   sensitivity: number; // 0..100
+  autoSave: boolean;   // NEW
 };
 
 type SettingsContextValue = AppSettings & {
   isHydrated: boolean;
   setTheme: (t: ThemeMode) => void;
   setSensitivity: (n: number) => void;
+  setAutoSave: (b: boolean) => void; // NEW
   resetSettings: () => void;
 };
 
 const STORAGE_KEY = "app.settings.v1";
+const DEFAULTS: AppSettings = { theme: "system", sensitivity: 50, autoSave: false };
 
-const DEFAULTS: AppSettings = {
-  theme: "system",
-  sensitivity: 50,
-};
-
-const SettingsContext = createContext<SettingsContextValue | undefined>(
-  undefined
-);
+const SettingsContext = createContext<SettingsContextValue | undefined>(undefined);
 
 export const SettingsProvider = ({ children }: { children: ReactNode }) => {
   const [state, setState] = useState<AppSettings>(DEFAULTS);
   const [isHydrated, setHydrated] = useState(false);
 
-  // Load on mount
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as Partial<AppSettings>;
-          setState((s) => ({ ...s, ...parsed }));
-        }
-      } catch (e) {
-        console.warn("Settings load failed:", e);
+        if (raw) setState((s) => ({ ...s, ...(JSON.parse(raw) as Partial<AppSettings>) }));
       } finally {
         setHydrated(true);
       }
     })();
   }, []);
 
-  // Persist after hydration
   useEffect(() => {
     if (!isHydrated) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch((e) =>
-      console.warn("Settings save failed:", e)
-    );
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
   }, [state, isHydrated]);
 
   const value = useMemo<SettingsContextValue>(
@@ -69,20 +55,14 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
       isHydrated,
       setTheme: (t) => setState((s) => ({ ...s, theme: t })),
       setSensitivity: (n) =>
-        setState((s) => ({
-          ...s,
-          sensitivity: Math.max(0, Math.min(100, Math.round(n))),
-        })),
+        setState((s) => ({ ...s, sensitivity: Math.max(0, Math.min(100, Math.round(n))) })),
+      setAutoSave: (b) => setState((s) => ({ ...s, autoSave: !!b })),
       resetSettings: () => setState(DEFAULTS),
     }),
     [state, isHydrated]
   );
 
-  return (
-    <SettingsContext.Provider value={value}>
-      {children}
-    </SettingsContext.Provider>
-  );
+  return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 };
 
 export const useSettings = () => {

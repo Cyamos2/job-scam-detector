@@ -5,20 +5,19 @@ import { useSettings } from "../SettingsProvider";
 export default function SettingsScreen() {
   const { theme, sensitivity, setTheme, setSensitivity, resetSettings, isHydrated } = useSettings();
 
-  const bump = (delta: number) => setSensitivity(Math.max(0, Math.min(100, sensitivity + delta)));
+  const bump = (d: number) => setSensitivity(Math.max(0, Math.min(100, sensitivity + d)));
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Settings</Text>
-
       {!isHydrated && <Text style={styles.muted}>Loading saved settings…</Text>}
 
       <View style={styles.section}>
         <Text style={styles.label}>Theme</Text>
         <View style={styles.row}>
           <Choice label="System" active={theme === "system"} onPress={() => setTheme("system")} />
-          <Choice label="Light" active={theme === "light"} onPress={() => setTheme("light")} />
-          <Choice label="Dark"  active={theme === "dark"}  onPress={() => setTheme("dark")} />
+          <Choice label="Light"  active={theme === "light"}  onPress={() => setTheme("light")} />
+          <Choice label="Dark"   active={theme === "dark"}   onPress={() => setTheme("dark")} />
         </View>
       </View>
 
@@ -32,7 +31,7 @@ export default function SettingsScreen() {
         </View>
       </View>
 
-      <Pressable onPress={resetSettings} style={[styles.resetBtn]}>
+      <Pressable onPress={resetSettings} style={styles.resetBtn}>
         <Text style={styles.resetText}>Reset to defaults</Text>
       </Pressable>
     </View>
@@ -46,16 +45,7 @@ function Button({ label, onPress }: { label: string; onPress: () => void }) {
     </Pressable>
   );
 }
-
-function Choice({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
+function Choice({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={[styles.choice, active && styles.choiceActive]}>
       <Text style={[styles.choiceText, active && styles.choiceTextActive]}>{label}</Text>
@@ -71,26 +61,14 @@ const styles = StyleSheet.create({
   label: { fontSize: 16, fontWeight: "600" },
   row: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
 
-  btn: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "#eee",
-  },
+  btn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, backgroundColor: "#eee" },
   btnText: { fontWeight: "600" },
 
   choice: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    backgroundColor: "#f7f7f7",
+    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: "#ddd", backgroundColor: "#f7f7f7",
   },
-  choiceActive: {
-    backgroundColor: "#1b72e8",
-    borderColor: "#1b72e8",
-  },
+  choiceActive: { backgroundColor: "#1b72e8", borderColor: "#1b72e8" },
   choiceText: { fontWeight: "600" },
   choiceTextActive: { color: "white" },
 
