@@ -1,45 +1,31 @@
+// src/screens/HomeScreen.tsx
 import React from "react";
-import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { HomeStackParamList } from "../navigation/HomeStack";
-import { useColors } from "../theme/useColors";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "HomeMain">;
 
 export default function HomeScreen({ navigation }: Props) {
-  const { bg, card, text, muted, colors } = useColors();
-
   return (
-    <ScrollView contentContainerStyle={[styles.container, bg]}>
-      <View style={[styles.headerCard, card]}>
-        <Text style={[styles.title, text]}>Job Scam Detector</Text>
-        <Text style={[styles.sectionTitle, text]}>Home</Text>
-        <Text style={[styles.body, muted]}>
-          Tap Start to add text/links or pick a screenshot to analyze.
-        </Text>
-      </View>
+    <View style={styles.container}>
+      <Text style={styles.h1}>Scamicide</Text>
+      <Text style={styles.sub}>Paste text or pick a screenshot to analyze.</Text>
 
       <Pressable
         onPress={() => navigation.navigate("AddContent")}
-        style={[styles.startBtn, { backgroundColor: colors.primary }]}
+        style={styles.primaryBtn}
       >
-        <Text style={styles.startText}>Start</Text>
+        <Text style={styles.primaryText}>Start</Text>
       </Pressable>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 16, gap: 16 },
-  headerCard: { borderRadius: 14, borderWidth: 1, padding: 16, gap: 6 },
-  title: { fontSize: 24, fontWeight: "800" },
-  sectionTitle: { fontSize: 16, fontWeight: "700", marginTop: 6 },
-  body: { fontSize: 14 },
-  startBtn: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  startText: { color: "white", fontWeight: "700", fontSize: 16 },
+  container: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
+  h1: { fontSize: 28, fontWeight: "800", marginBottom: 8 },
+  sub: { opacity: 0.7, marginBottom: 20 },
+  primaryBtn: { backgroundColor: "#1b72e8", paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
+  primaryText: { color: "white", fontWeight: "700" },
 });
