@@ -1,5 +1,5 @@
-// AddContentScreen.tsx
-import React, { useCallback, useLayoutEffect, useState } from "react";
+// src/screens/AddContentScreen.tsx
+import React from "react";
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   ScrollView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { useFocusEffect } from "@react-navigation/native";
 import { useColors } from "../theme/useColors";
 import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
 
@@ -22,44 +21,43 @@ export default function AddContentScreen({ navigation }: any) {
   const { colors, bg, card, text } = useColors();
   const { add } = useSavedItems();
 
-  const [input, setInput] = useState("");
-  const [imageUri, setImageUri] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [input, setInput] = React.useState("");
+  const [imageUri, setImageUri] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<AnalysisResult | null>(null);
+  const [busy, setBusy] = React.useState(false);
 
-  const resetForm = useCallback(() => {
+  const resetForm = React.useCallback(() => {
     setInput("");
     setImageUri(null);
     setResult(null);
     setBusy(false);
   }, []);
 
-  // Reset whenever this screen loses focus
-  useFocusEffect(
-    useCallback(() => {
-      return () => resetForm(); // on blur
-    }, [resetForm])
-  );
+  // Header: simple back that just pops this stack
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerBackVisible: false,
+      headerLeft: () => (
+        <Pressable
+          onPress={() => {
+            // Clear form and pop to HomeMain (in Home stack)
+            resetForm();
+            navigation.goBack();
+          }}
+          hitSlop={12}
+          style={{ paddingHorizontal: 8, paddingVertical: 6 }}
+        >
+          <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 17 }}>← Back</Text>
+        </Pressable>
+      ),
+      title: "Add Content",
+    });
+  }, [navigation, colors.primary, resetForm]);
 
-  // Back should go to Home tab's HomeMain
-  // inside AddContentScreen
-useLayoutEffect(() => {
-  navigation.setOptions({
-    headerBackVisible: false,
-    headerLeft: () => (
-      <Pressable
-        onPress={() => {
-          resetForm();           // keep clearing fields
-          navigation.goBack();   // ✅ just pop to HomeMain in the Home stack
-        }}
-        hitSlop={12}
-        style={{ paddingHorizontal: 8, paddingVertical: 6, flexDirection: "row", alignItems: "center" }}
-      >
-        <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 17 }}>← Back</Text>
-      </Pressable>
-    ),
-  });
-}, [navigation, colors.primary, resetForm]);
+  // Also clear when screen unmounts (e.g., back gesture)
+  React.useEffect(() => {
+    return () => resetForm();
+  }, [resetForm]);
 
   const onAnalyzeText = () => {
     const raw = input.trim();
@@ -82,6 +80,19 @@ useLayoutEffect(() => {
     }
   };
 
+  const analyzeScreenshot = async () => {
+    if (!imageUri) return Alert.alert("No screenshot", "Pick a screenshot first.");
+    try {
+      setBusy(true);
+      // demo OCR text
+      const fakeOCR = "Contact via WhatsApp. 60–90 minutes training. Earn $500/day.";
+      const a = analyzeTextLocal(fakeOCR + " " + (input ?? ""));
+      setResult(a);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveEntry = (a: AnalysisResult) => {
     const entry: SavedAnalysis = {
       id: String(Date.now()) + "-" + Math.floor(Math.random() * 1e6),
@@ -95,19 +106,7 @@ useLayoutEffect(() => {
       createdAt: Date.now(),
     };
     add(entry);
-  };
-
-  const analyzeScreenshot = async () => {
-    if (!imageUri) return Alert.alert("No screenshot", "Pick a screenshot first.");
-    try {
-      setBusy(true);
-      // stub OCR:
-      const fakeOCR = "Contact via WhatsApp and pay with gift cards. Earn $500/day.";
-      const a = analyzeTextLocal(fakeOCR + " " + (input ?? ""));
-      setResult(a);
-    } finally {
-      setBusy(false);
-    }
+    Alert.alert("Saved", "Analysis added to your Database.");
   };
 
   return (
@@ -164,10 +163,7 @@ useLayoutEffect(() => {
           </Text>
 
           <Pressable
-            onPress={() => {
-              saveEntry(result);
-              Alert.alert("Saved", "Analysis added to your Database.");
-            }}
+            onPress={() => saveEntry(result)}
             style={[styles.btnPrimary, { backgroundColor: colors.primary, alignSelf: "flex-start" }]}
           >
             <Text style={styles.btnPrimaryText}>Save to Database</Text>
@@ -182,7 +178,8 @@ useLayoutEffect(() => {
   );
 }
 
-/** simple local analyzer */
+/* Helpers */
+
 function analyzeTextLocal(raw: string): AnalysisResult {
   const text = (raw || "").toLowerCase();
   const rules: Array<[RegExp, number, string]> = [
@@ -199,7 +196,8 @@ function analyzeTextLocal(raw: string): AnalysisResult {
     }
   }
   score = Math.min(100, Math.max(0, score));
-  const verdict: AnalysisResult["verdict"] = score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
+  const verdict: AnalysisResult["verdict"] =
+    score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
   return { score, verdict, flags: Array.from(new Set(flags)) };
 }
 
