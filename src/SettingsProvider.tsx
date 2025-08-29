@@ -1,84 +1,116 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type Theme = "light" | "dark";
+type Theme = "light" | "dark";
+type VerdictFilter = "All" | "Low" | "Medium" | "High";
+type SortOrder = "Newest" | "Oldest";
 
-type SettingsCtx = {
+export type Settings = {
+  theme: Theme;
+  autoSave: boolean;
+  sensitivity: number;
+
+  // NEW: database UI prefs
+  dbSearch: string;
+  dbFilter: VerdictFilter;
+  dbSort: SortOrder;
+};
+
+const STORAGE_KEY = "@job-scam-detector/settings.v2";
+
+export const DEFAULT_SETTINGS: Settings = {
+  theme: "light",
+  autoSave: true,
+  sensitivity: 50,
+
+  dbSearch: "",
+  dbFilter: "All",
+  dbSort: "Newest",
+};
+
+type Ctx = {
+  // full settings object (handy if you want to read several at once)
+  settings: Settings;
+
+  // existing props kept for backwards compatibility
   theme: Theme;
   setTheme: (t: Theme) => void;
-
   autoSave: boolean;
-  setAutoSave: (b: boolean) => void;
-
-  sensitivity: number; // 0–100
+  setAutoSave: (v: boolean) => void;
+  sensitivity: number;
   setSensitivity: (n: number) => void;
 
-  reset: () => void; // ← required by SettingsScreen
+  // NEW setters
+  dbSearch: string;
+  setDbSearch: (s: string) => void;
+  dbFilter: VerdictFilter;
+  setDbFilter: (f: VerdictFilter) => void;
+  dbSort: SortOrder;
+  setDbSort: (s: SortOrder) => void;
+
+  // bulk update + reset
+  update: (partial: Partial<Settings>) => void;
+  reset: () => void;
+
+  loading: boolean;
 };
 
-const DEFAULTS: Readonly<Pick<SettingsCtx, "theme" | "autoSave" | "sensitivity">> = {
-  theme: "light",
-  autoSave: false,
-  sensitivity: 50,
-};
-
-const STORAGE_KEY = "@job-scam-detector/settings:v1";
-
-const Ctx = createContext<SettingsCtx | undefined>(undefined);
+const SettingsContext = createContext<Ctx | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(DEFAULTS.theme);
-  const [autoSave, setAutoSave] = useState<boolean>(DEFAULTS.autoSave);
-  const [sensitivity, setSensitivity] = useState<number>(DEFAULTS.sensitivity);
-  const [hydrated, setHydrated] = useState(false);
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [loading, setLoading] = useState(true);
 
-  // Hydrate once
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed.theme === "light" || parsed.theme === "dark") setTheme(parsed.theme);
-          if (typeof parsed.autoSave === "boolean") setAutoSave(parsed.autoSave);
-          if (typeof parsed.sensitivity === "number")
-            setSensitivity(Math.max(0, Math.min(100, parsed.sensitivity)));
+          const parsed = JSON.parse(raw) as Partial<Settings>;
+          setSettings({ ...DEFAULT_SETTINGS, ...parsed });
         }
       } catch {}
-      setHydrated(true);
+      setLoading(false);
     })();
   }, []);
 
-  // Persist after hydration
   useEffect(() => {
-    if (!hydrated) return;
-    const save = async () => {
-      try {
-        await AsyncStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({ theme, autoSave, sensitivity })
-        );
-      } catch {}
-    };
-    save();
-  }, [theme, autoSave, sensitivity, hydrated]);
+    if (loading) return;
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings)).catch(() => {});
+  }, [settings, loading]);
 
-  const reset = () => {
-    setTheme(DEFAULTS.theme);
-    setAutoSave(DEFAULTS.autoSave);
-    setSensitivity(DEFAULTS.sensitivity);
-  };
+  const update = (partial: Partial<Settings>) =>
+    setSettings((prev) => ({ ...prev, ...partial }));
 
-  const value = useMemo<SettingsCtx>(
-    () => ({ theme, setTheme, autoSave, setAutoSave, sensitivity, setSensitivity, reset }),
-    [theme, autoSave, sensitivity]
+  const value: Ctx = useMemo(
+    () => ({
+      settings,
+      theme: settings.theme,
+      setTheme: (t) => update({ theme: t }),
+      autoSave: settings.autoSave,
+      setAutoSave: (v) => update({ autoSave: v }),
+      sensitivity: settings.sensitivity,
+      setSensitivity: (n) => update({ sensitivity: n }),
+
+      dbSearch: settings.dbSearch,
+      setDbSearch: (s) => update({ dbSearch: s }),
+      dbFilter: settings.dbFilter,
+      setDbFilter: (f) => update({ dbFilter: f }),
+      dbSort: settings.dbSort,
+      setDbSort: (s) => update({ dbSort: s }),
+
+      update,
+      reset: () => setSettings(DEFAULT_SETTINGS),
+      loading,
+    }),
+    [settings, loading]
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }
 
-export function useSettings() {
-  const ctx = useContext(Ctx);
-  if (!ctx) throw new Error("useSettings must be used within SettingsProvider");
+export function useSettings(): Ctx {
+  const ctx = useContext(SettingsContext);
+  if (!ctx) throw new Error("useSettings must be used within a SettingsProvider");
   return ctx;
 }
