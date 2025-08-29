@@ -14,6 +14,7 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { useColors } from "../theme/useColors";
 import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
+import { appEvents } from "../lib/events";
 
 type AnalysisResult = { score: number; verdict: "Low" | "Medium" | "High"; flags: string[] };
 
