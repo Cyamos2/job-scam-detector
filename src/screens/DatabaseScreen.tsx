@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+// src/screens/DatabaseScreen.tsx
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,13 +8,11 @@ import {
   Pressable,
   Image,
   TextInput,
-  Alert,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { DatabaseStackParamList } from "../navigation/DatabaseStack";
 import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
 import { useColors } from "../theme/useColors";
-import { useSettings } from "../SettingsProvider";
 
 type VerdictFilter = "All" | "Low" | "Medium" | "High";
 type SortOrder = "Newest" | "Oldest";
@@ -22,213 +21,170 @@ type Props = NativeStackScreenProps<DatabaseStackParamList, "DatabaseList">;
 export default function DatabaseScreen({ navigation }: Props) {
   const { items, hydrated, remove, clearAll } = useSavedItems();
   const { bg, card, text, colors } = useColors();
-  const {
-    dbSearch, setDbSearch,
-    dbFilter, setDbFilter,
-    dbSort, setDbSort,
-  } = useSettings();
 
-  // local state for the input; persisted via debounce
-  const [query, setQuery] = useState(dbSearch);
-
-  // keep local query in sync with settings if they change elsewhere
-  useEffect(() => setQuery(dbSearch), [dbSearch]);
-
-  // debounce persist (200ms)
-  useEffect(() => {
-    const t = setTimeout(() => setDbSearch(query), 200);
-    return () => clearTimeout(t);
-  }, [query, setDbSearch]);
+  const [filter, setFilter] = useState<VerdictFilter>("All");
+  const [sort, setSort] = useState<SortOrder>("Newest");
+  const [query, setQuery] = useState("");
 
   const list = useMemo(() => {
-    const q = query.trim().toLowerCase();
     let arr = items.slice();
 
-    // search over title, flags, preview
+    // text search over title, flags, preview
+    const q = query.trim().toLowerCase();
     if (q) {
       arr = arr.filter((x) => {
-        const inTitle = x.title.toLowerCase().includes(q);
-        const inFlags = x.flags.join(" ").toLowerCase().includes(q);
-        const inPreview = (x.inputPreview || "").toLowerCase().includes(q);
-        return inTitle || inFlags || inPreview;
+        const hay = [
+          x.title,
+          x.inputPreview ?? "",
+          (x.flags || []).join(" "),
+        ]
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
       });
     }
 
-    // filter by verdict
-    if (dbFilter !== "All") arr = arr.filter((x) => x.verdict === dbFilter);
-
-    // sort
+    if (filter !== "All") arr = arr.filter((x) => x.verdict === filter);
     arr.sort((a, b) =>
-      dbSort === "Newest" ? b.createdAt - a.createdAt : a.createdAt - b.createdAt
+      sort === "Newest" ? b.createdAt - a.createdAt : a.createdAt - b.createdAt
     );
-
     return arr;
-  }, [items, query, dbFilter, dbSort]);
-
-  function goToDetail(id: string) {
-    navigation.navigate("ReportDetail", { id });
-  }
+  }, [items, filter, sort, query]);
 
   function goToAddContent() {
-    (navigation.getParent() as any)?.navigate("HomeTab", { screen: "AddContent" });
+    const parent = navigation.getParent();
+    if (!parent) return;
+    // Cross-navigator jump (types don't line up), cast just for this call.
+    (parent as any).navigate("HomeTab", { screen: "AddContent" });
   }
 
   if (!hydrated) {
     return (
       <View style={[styles.center, bg]}>
-        <Text style={[styles.muted, { color: colors.text }]}>Loading…</Text>
+        <Text style={[styles.muted, text]}>Loading…</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, bg]}>
-      {/* Search */}
-      <View style={[styles.searchRow, { borderColor: colors.border, backgroundColor: colors.card }]}>
+    <View style={[{ flex: 1 }, bg]}>
+      {/* Controls */}
+      <View style={styles.controls}>
         <TextInput
+          placeholder="Search saved analyses…"
+          placeholderTextColor="#999"
           value={query}
           onChangeText={setQuery}
-          placeholder="Search title, flags, preview…"
-          placeholderTextColor="#999"
-          style={[styles.searchInput, text]}
+          style={[styles.search, { borderColor: colors.border }]}
         />
-        {query.length > 0 && (
-          <Pressable onPress={() => setQuery("")} style={styles.clearBtn}>
-            <Text style={{ color: colors.primary, fontWeight: "700" }}>Clear</Text>
-          </Pressable>
-        )}
-      </View>
 
-      {/* Filter chips */}
-      <View style={styles.controls}>
-        <View style={styles.rowWrap}>
-          {(["All", "Low", "Medium", "High"] as VerdictFilter[]).map((v) => {
-            const active = dbFilter === v;
-            return (
-              <Pressable
-                key={v}
-                onPress={() => setDbFilter(v)}
+        <View style={styles.row}>
+          {(["All", "Low", "Medium", "High"] as VerdictFilter[]).map((v) => (
+            <Pressable
+              key={v}
+              onPress={() => setFilter(v)}
+              style={[
+                styles.chip,
+                { borderColor: colors.border, backgroundColor: colors.card },
+                filter === v && { backgroundColor: colors.primary },
+              ]}
+            >
+              <Text
                 style={[
-                  styles.chip,
-                  { borderColor: colors.border, backgroundColor: colors.card },
-                  active && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  styles.chipText,
+                  filter === v ? { color: "white" } : text,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.chipText,
-                    active ? { color: "white" } : { color: colors.text },
-                  ]}
-                >
-                  {v}
-                </Text>
-              </Pressable>
-            );
-          })}
+                {v}
+              </Text>
+            </Pressable>
+          ))}
         </View>
-        <View style={styles.rowWrap}>
-          {(["Newest", "Oldest"] as SortOrder[]).map((s) => {
-            const active = dbSort === s;
-            return (
-              <Pressable
-                key={s}
-                onPress={() => setDbSort(s)}
+
+        <View style={styles.row}>
+          {(["Newest", "Oldest"] as SortOrder[]).map((s) => (
+            <Pressable
+              key={s}
+              onPress={() => setSort(s)}
+              style={[
+                styles.chip,
+                { borderColor: colors.border, backgroundColor: colors.card },
+                sort === s && { backgroundColor: colors.primary },
+              ]}
+            >
+              <Text
                 style={[
-                  styles.chip,
-                  { borderColor: colors.border, backgroundColor: colors.card },
-                  active && { backgroundColor: colors.primary, borderColor: colors.primary },
+                  styles.chipText,
+                  sort === s ? { color: "white" } : text,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.chipText,
-                    active ? { color: "white" } : { color: colors.text },
-                  ]}
-                >
-                  {s}
-                </Text>
-              </Pressable>
-            );
-          })}
+                {s}
+              </Text>
+            </Pressable>
+          ))}
+
+          {list.length > 0 && (
+            <Pressable onPress={clearAll} style={styles.clearAll}>
+              <Text style={{ color: "#c00", fontWeight: "700" }}>Clear All</Text>
+            </Pressable>
+          )}
         </View>
       </View>
-
-      {list.length > 0 && (
-        <Pressable
-          onPress={() =>
-            Alert.alert("Clear all?", "This removes every saved report.", [
-              { text: "Cancel", style: "cancel" },
-              { text: "Clear", style: "destructive", onPress: clearAll },
-            ])
-          }
-          style={styles.clearAll}
-        >
-          <Text style={{ color: "#c00", fontWeight: "700" }}>Clear All</Text>
-        </Pressable>
-      )}
 
       {/* List */}
       <FlatList<SavedAnalysis>
         data={list}
         keyExtractor={(it) => it.id}
-        contentContainerStyle={list.length === 0 ? styles.center : { padding: 12, paddingBottom: 96 }}
+        contentContainerStyle={
+          list.length === 0 ? styles.center : { padding: 12 }
+        }
         ListEmptyComponent={
-          <View style={styles.centerInner}>
-            <Text style={[styles.emptyTitle, { color: colors.text, opacity: 0.8 }]}>
-              {query || dbFilter !== "All"
-                ? "No results"
-                : "No saved analyses yet."}
-            </Text>
-            <Pressable onPress={query || dbFilter !== "All" ? () => { setQuery(""); setDbFilter("All"); } : goToAddContent}
-              style={[styles.primaryBtn, { backgroundColor: colors.primary }]}>
-              <Text style={styles.primaryText}>
-                {query || dbFilter !== "All" ? "Clear filters" : "Add content"}
-              </Text>
-            </Pressable>
-          </View>
+          <Text style={[styles.emptyText, { color: colors.text + "99" }]}>
+            No saved analyses yet.
+          </Text>
         }
         renderItem={({ item }) => (
           <Pressable
-            onPress={() => goToDetail(item.id)}
-            onLongPress={() =>
-              Alert.alert("Delete?", `Remove “${item.title}”?`, [
-                { text: "Cancel", style: "cancel" },
-                { text: "Delete", style: "destructive", onPress: () => remove(item.id) },
-              ])
-            }
+            onPress={() => navigation.navigate("ReportDetail", { id: item.id })}
+            onLongPress={() => remove(item.id)}
             style={[
               styles.card,
               card,
               { borderColor: colors.border, backgroundColor: colors.card },
             ]}
           >
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>{item.title}</Text>
-              <Text style={[styles.cardSub, { color: colors.text, opacity: 0.6 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, text]}>{item.title}</Text>
+              <Text style={[styles.cardSub, { color: colors.text + "99" }]}>
                 {new Date(item.createdAt).toLocaleString()}
               </Text>
-              <Text style={[styles.cardInfo, { color: colors.text }]}>
+              <Text style={[styles.cardInfo, text]}>
                 Score {item.score} — {item.verdict} risk
               </Text>
-              <Text style={[styles.cardFlags, { color: colors.text, opacity: 0.6 }]} numberOfLines={1}>
+              <Text style={[styles.cardFlags, { color: colors.text + "CC" }]}>
                 Flags: {item.flags.length ? item.flags.join(", ") : "none"}
               </Text>
-              {item.inputPreview ? (
-                <Text style={[styles.preview, { color: colors.text, opacity: 0.6 }]} numberOfLines={2}>
+              {!!item.inputPreview && (
+                <Text
+                  style={[styles.preview, { color: colors.text + "B3" }]}
+                  numberOfLines={2}
+                >
                   {item.inputPreview}
                 </Text>
-              ) : null}
+              )}
             </View>
-            {item.imageUri ? <Image source={{ uri: item.imageUri }} style={styles.thumb} /> : null}
+            {item.imageUri ? (
+              <Image source={{ uri: item.imageUri }} style={styles.thumb} />
+            ) : null}
           </Pressable>
         )}
       />
 
-      {/* FAB jumps to AddContent */}
+      {/* FAB */}
       <Pressable
-        style={[styles.fab, { backgroundColor: colors.primary, shadowColor: "#000" }]}
-        onPress={goToAddContent}
         accessibilityLabel="Add to Database"
+        onPress={goToAddContent}
+        style={[styles.fab, { backgroundColor: colors.primary }]}
       >
         <Text style={styles.fabPlus}>＋</Text>
       </Pressable>
@@ -237,49 +193,44 @@ export default function DatabaseScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  controls: { paddingHorizontal: 12, paddingTop: 10, gap: 10 },
+  row: { flexDirection: "row", gap: 8, flexWrap: "wrap", alignItems: "center" },
 
-  // Search
-  searchRow: {
-    marginTop: 10,
-    marginHorizontal: 12,
+  search: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+
+  chip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
   },
-  searchInput: { flex: 1, fontSize: 16 },
-  clearBtn: { paddingHorizontal: 6, paddingVertical: 4 },
-
-  // Chips
-  controls: { paddingHorizontal: 12, paddingTop: 10, gap: 10 },
-  rowWrap: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1 },
   chipText: { fontWeight: "700" },
 
-  clearAll: { alignSelf: "flex-end", padding: 10 },
-
-  // List empty
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  centerInner: { alignItems: "center", gap: 12 },
-  emptyTitle: { fontSize: 16, fontWeight: "600" },
-  muted: { opacity: 0.7 },
+  emptyText: { fontSize: 16 },
 
-  // Cards
-  card: { flexDirection: "row", gap: 12, padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1 },
+  clearAll: { marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 6 },
+
+  card: {
+    flexDirection: "row",
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
   cardTitle: { fontWeight: "800", fontSize: 16 },
-  cardSub: { fontSize: 12 },
-  cardInfo: { fontWeight: "600" },
+  cardSub: { fontSize: 12, marginBottom: 4 },
+  cardInfo: { fontWeight: "700" },
   cardFlags: { fontSize: 12 },
-  preview: { fontSize: 12, marginTop: 4 },
+  preview: { fontSize: 12, marginTop: 6 },
   thumb: { width: 64, height: 64, borderRadius: 8, backgroundColor: "#ddd" },
 
-  // CTA / FAB
-  primaryBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
-  primaryText: { color: "white", fontWeight: "700" },
   fab: {
     position: "absolute",
     right: 16,
@@ -289,10 +240,11 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
     shadowOpacity: 0.25,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    elevation: 5,
   },
   fabPlus: { color: "white", fontSize: 28, fontWeight: "700", lineHeight: 30 },
 });
