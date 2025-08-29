@@ -1,79 +1,84 @@
 // src/lib/analyzer.ts
+
 export type AnalysisResult = {
-  score: number;                          // 0–100
+  score: number;
   verdict: "Low" | "Medium" | "High";
   flags: string[];
 };
 
-const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
-
-/**
- * Heuristic text analyzer for job-scam patterns.
- * Weights intentionally sum past 100; final score is clamped to 100.
- */
-export function analyzeText(raw: string): AnalysisResult {
+/** Heavier-weight scam analyzer v2 */
+export function analyzeTextLocal(raw: string, sensitivity: number = 50): AnalysisResult {
   const text = (raw || "").toLowerCase();
 
-  const addIf = (
-    re: RegExp,
-    weight: number,
-    flag: string,
-    hits: Set<string>,
-  ) => {
-    if (re.test(text)) hits.add(`${flag} (+${weight})`);
-    return re.test(text) ? weight : 0;
-  };
+  const has = (re: RegExp) => re.test(text);
 
-  const hits = new Set<string>();
+  // Core red-flag patterns with weights
+  const patterns: Array<[RegExp, number, string]> = [
+    // Contact methods
+    [/\b(whats\s*app|telegram|signal)\b/, 25, "chat-app contact"],
+    [/\b(text|message|sms)\s+(me|us)\b/, 15, "text/SMS contact"],
+    [/\+?\d[\d\s().-]{7,}\d/, 15, "phone number"],
+
+    // Payment methods
+    [/\bgift\s*card|apple\s*card|steam\s*card|voucher\b/, 40, "gift card payment"],
+    [/\bcrypto|bitcoin|usdt|binance|wallet address\b/, 30, "crypto payment"],
+
+    // Payout cadence
+    [/\bpaid\s+daily|daily\s+payout|pay\s+daily\b/, 20, "daily payout"],
+    [/\bguaranteed\b.*\b(month(ly)?|income)\b/, 25, "guaranteed income"],
+
+    // Compensation
+    [/\$\s?\d{3,4}\s*(per|\/)?\s*(day|daily|90\s*minutes)/, 30, "very high day-rate"],
+    [/\bearn\b.*\$\s?\d{3,}|\$\s?\d{4,}\b/, 20, "unrealistic pay"],
+
+    // Training / workload
+    [/\b(60|90)\s*minutes?\b.*\btraining\b/, 20, "short training"],
+    [/\bno|little\b.*\bexperience\b|\bwork\s*from\s*home\b.*\b(simple|easy)\b/, 15, "too-easy workload"],
+
+    // Shady hiring
+    [/\binterview\b.*(whatsapp|telegram|sms|chat)/, 20, "chat-app interview"],
+    [/\bverify\b.*(code|otp).*(sms|whatsapp)/, 15, "OTP via chat"],
+    [/\bpart[-\s]?time\b.*\bfull[-\s]?time\b.*\bchoose\b/, 8, "choose part/full-time"],
+    [/\b(18|21|22)\s*(\+|plus)?\s*(years?\s*old)?\b/, 6, "age requirement"],
+
+    // Email / domains
+    [/\b(gmail|outlook|yahoo)\.com\b.*(hr|recruit)?/, 10, "non-corp email"],
+  ];
+
   let score = 0;
+  const flags: string[] = [];
 
-  // 💰 Unrealistic/guaranteed pay & daily pay
-  score += addIf(/\b(us\$|\$)\s?(3\d{2,}|[4-9]\d{2,}|[1-9]\d{3,})\s*(per\s*)?(day|daily|hour)/i, 40, "unrealistic pay (daily/hourly)", hits);
-  score += addIf(/\bmonthly\s*income\b.*(no\s*less\s*than|guaranteed|at\s*least)/, 25, "guaranteed income claim", hits);
-  score += addIf(/\bpaid\s*daily\b|\bdaily\s*pay\b/, 15, "daily pay", hits);
-
-  // 🧪 “Too easy” + short training
-  score += addIf(/\b(simple|easy|can\s*be\s*completed\s*at\s*home)\b/, 12, "too-easy work", hits);
-  score += addIf(/\b(60|45|30)\s*minutes?\b.*(training|onboarding)/, 12, "very short training", hits);
-
-  // 📍 Remote + vague part-time/full-time pitch
-  score += addIf(/\bremote\b/, 6, "remote pitch (generic)", hits);
-  score += addIf(/\b(part[-\s]*time).*(full[-\s]*time)|\bfull[-\s]*time.*part[-\s]*time\b/, 8, "part-time/full-time bait", hits);
-
-  // 🧒 Age gate (odd for legit US roles)
-  score += addIf(/\b(2[12-9]|[3-9]\d)\s*(years? old|yo)\b|\b(22)\s*years?\s*old\b/, 10, "age requirement", hits);
-
-  // 🗓️ Overly generous paid leave for entry/remote
-  score += addIf(/\b(15|16|17|18|19|2[0-5])\s*-\s*(2[0-5])\s*days?\b.*paid\s*(annual\s*)?leave/, 8, "unusual paid leave", hits);
-
-  // 📞 Phone/IM contact in pitch
-  score += addIf(/\+\d{6,}/, 10, "phone contact in pitch", hits);
-  score += addIf(/\b(whatsapp|telegram|signal)\b/, 20, "chat-app contact", hits);
-
-  // 🪪 Company/name misrepresentation / vague recruiter hooks
-  score += addIf(/\b(recruit(ing|er)?|recommend you a high[-\s]*paying)\b/, 8, "vague recruiter pitch", hits);
-
-  // 🔗 Suspicious domains (keep from previous version)
-  const urlMatch = text.match(/https?:\/\/[^\s)]+/g);
-  if (urlMatch) {
-    for (const url of urlMatch) {
-      try {
-        const u = new URL(url);
-        if (/\.(top|xyz|live|shop|work|site)$/i.test(u.hostname) || /-career|careers?-?[0-9]{3,}/i.test(u.hostname)) {
-          score += 10;
-          hits.add("suspicious domain (+10)");
-        }
-      } catch {
-        /* ignore */
-      }
+  for (const [re, pts, label] of patterns) {
+    if (has(re)) {
+      score += pts;
+      flags.push(label);
     }
   }
 
-  // Finalize
-  score = clamp(score, 0, 100);
-  const verdict: AnalysisResult["verdict"] = score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
+  // Check URLs for sketchy domains
+  const urls = text.match(/https?:\/\/[^\s)]+/g) || [];
+  for (const url of urls) {
+    try {
+      const u = new URL(url);
+      if (
+        /\.(top|xyz|live|shop|work|site|click|buzz|win)$/i.test(u.hostname) ||
+        /-career|\bcareers?\b-?\d{3,}/i.test(u.hostname)
+      ) {
+        score += 12;
+        flags.push("suspicious domain");
+      }
+    } catch {
+      /* ignore parse errors */
+    }
+  }
 
-  // Convert to neat flags (drop the “(+N)” parts for UI if you prefer)
-  const flags = Array.from(hits).map(f => f.replace(/\s\(\+\d+\)$/, ""));
-  return { score, verdict, flags };
+  // Sensitivity adjustment: 0–100 → shift score -25..+25
+  const sensShift = Math.round((sensitivity - 50) / 2);
+  score = Math.max(0, Math.min(100, score + sensShift));
+
+  // Verdict thresholds
+  const verdict: AnalysisResult["verdict"] =
+    score >= 70 ? "High" : score >= 40 ? "Medium" : "Low";
+
+  return { score, verdict, flags: Array.from(new Set(flags)) };
 }
