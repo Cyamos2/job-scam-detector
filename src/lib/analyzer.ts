@@ -1,84 +1,100 @@
 // src/lib/analyzer.ts
-
 export type AnalysisResult = {
-  score: number;
+  score: number; // 0..100
   verdict: "Low" | "Medium" | "High";
   flags: string[];
 };
 
-/** Heavier-weight scam analyzer v2 */
-export function analyzeTextLocal(raw: string, sensitivity: number = 50): AnalysisResult {
+/**
+ * Heuristic analyzer (local, no network).
+ * - Looks for well-known scam patterns
+ * - Sums weighted signals -> 0..100
+ * - Applies "sensitivity" (0=very lenient, 100=very strict) to verdict thresholds
+ */
+export function analyzeTextLocal(raw: string, sensitivity = 50): AnalysisResult {
   const text = (raw || "").toLowerCase();
 
-  const has = (re: RegExp) => re.test(text);
+  // ---------- weighted patterns ----------
+  const rules: Array<{ re: RegExp; weight: number; label: string }> = [
+    // contact over chat apps
+    { re: /\b(whats\s*app|whatsapp|telegram|signal)\b/, weight: 22, label: "chat-app contact" },
 
-  // Core red-flag patterns with weights
-  const patterns: Array<[RegExp, number, string]> = [
-    // Contact methods
-    [/\b(whats\s*app|telegram|signal)\b/, 25, "chat-app contact"],
-    [/\b(text|message|sms)\s+(me|us)\b/, 15, "text/SMS contact"],
-    [/\+?\d[\d\s().-]{7,}\d/, 15, "phone number"],
+    // gift cards / crypto / wires
+    { re: /\bgift\s*card(s)?\b|\b(apple|steam|google)\s*card(s)?\b/, weight: 34, label: "gift card payment" },
+    { re: /\b(crypto|bitcoin|btc|usdt|binance)\b/, weight: 22, label: "crypto payment" },
+    { re: /\b(wire\s*transfer|western\s*union|money\s*gram|moneygram)\b/, weight: 18, label: "wire transfer" },
 
-    // Payment methods
-    [/\bgift\s*card|apple\s*card|steam\s*card|voucher\b/, 40, "gift card payment"],
-    [/\bcrypto|bitcoin|usdt|binance|wallet address\b/, 30, "crypto payment"],
+    // unrealistic pay and guarantees
+    { re: /\b(?:us?\$|\$)\s?\d{3,}\s*(?:per|\/)\s*(?:day|hour)\b/, weight: 30, label: "high daily/hourly pay" },
+    { re: /\b(?:us?\$|\$)\s?10[,.]?0{3,}\b.*\b(month|monthly)\b/, weight: 26, label: "guaranteed monthly income" },
+    { re: /\bpaid\s+daily\b|\bdaily\s+payout\b/, weight: 22, label: "paid daily" },
 
-    // Payout cadence
-    [/\bpaid\s+daily|daily\s+payout|pay\s+daily\b/, 20, "daily payout"],
-    [/\bguaranteed\b.*\b(month(ly)?|income)\b/, 25, "guaranteed income"],
+    // short “training” or “onboarding”
+    { re: /\b(60|90)\s*(minutes|min)\b.*\b(training|onboarding)\b/, weight: 18, label: "60–90 min training" },
 
-    // Compensation
-    [/\$\s?\d{3,4}\s*(per|\/)?\s*(day|daily|90\s*minutes)/, 30, "very high day-rate"],
-    [/\bearn\b.*\$\s?\d{3,}|\$\s?\d{4,}\b/, 20, "unrealistic pay"],
+    // phone contact exposed (very broad but indicative for spammy blasts)
+    { re: /\+?\d[\d\s\-().]{9,}/, weight: 16, label: "direct phone contact" },
 
-    // Training / workload
-    [/\b(60|90)\s*minutes?\b.*\btraining\b/, 20, "short training"],
-    [/\bno|little\b.*\bexperience\b|\bwork\s*from\s*home\b.*\b(simple|easy)\b/, 15, "too-easy workload"],
+    // easy work, work from home promise
+    { re: /\b(work\s*from\s*home|remote)\b.*\b(simple|easy|no\s+experience)\b/, weight: 12, label: "too-easy remote work" },
 
-    // Shady hiring
-    [/\binterview\b.*(whatsapp|telegram|sms|chat)/, 20, "chat-app interview"],
-    [/\bverify\b.*(code|otp).*(sms|whatsapp)/, 15, "OTP via chat"],
-    [/\bpart[-\s]?time\b.*\bfull[-\s]?time\b.*\bchoose\b/, 8, "choose part/full-time"],
-    [/\b(18|21|22)\s*(\+|plus)?\s*(years?\s*old)?\b/, 6, "age requirement"],
+    // age gate that looks like mass-recruitment
+    { re: /\b(2[12]|23|24|25)\s*(years?\s*old|\+)\b/, weight: 10, label: "age requirement 22+" },
 
-    // Email / domains
-    [/\b(gmail|outlook|yahoo)\.com\b.*(hr|recruit)?/, 10, "non-corp email"],
+    // non-corporate mailbox or interview via chat
+    { re: /\b(interview|chat)\b.*\b(whatsapp|telegram|sms|text)\b/, weight: 18, label: "chat interview" },
+    { re: /\b@(gmail|yahoo|outlook|hotmail)\.com\b/, weight: 10, label: "non-corporate email" },
   ];
 
+  // suspicious domains in links
+  const urlMatches = raw.match(/https?:\/\/[^\s)]+/gi) || [];
+  const suspiciousDomain = (host: string) =>
+    /\.(top|xyz|live|shop|work|site|click|link|info)$/i.test(host) ||
+    /-career|careers?-?\d{3,}/i.test(host);
+
+  // ---------- scoring ----------
   let score = 0;
   const flags: string[] = [];
 
-  for (const [re, pts, label] of patterns) {
-    if (has(re)) {
-      score += pts;
-      flags.push(label);
+  for (const r of rules) {
+    if (r.re.test(text)) {
+      score += r.weight;
+      flags.push(r.label);
     }
   }
 
-  // Check URLs for sketchy domains
-  const urls = text.match(/https?:\/\/[^\s)]+/g) || [];
-  for (const url of urls) {
+  for (const url of urlMatches) {
     try {
       const u = new URL(url);
-      if (
-        /\.(top|xyz|live|shop|work|site|click|buzz|win)$/i.test(u.hostname) ||
-        /-career|\bcareers?\b-?\d{3,}/i.test(u.hostname)
-      ) {
+      if (suspiciousDomain(u.hostname)) {
         score += 12;
         flags.push("suspicious domain");
       }
     } catch {
-      /* ignore parse errors */
+      /* ignore bad URLs */
     }
   }
 
-  // Sensitivity adjustment: 0–100 → shift score -25..+25
-  const sensShift = Math.round((sensitivity - 50) / 2);
-  score = Math.max(0, Math.min(100, score + sensShift));
+  // Cap and de-dupe
+  score = clamp(score, 0, 100);
+  const uniqueFlags = Array.from(new Set(flags));
 
-  // Verdict thresholds
+  // ---------- verdict with sensitivity ----------
+  // Base thresholds: Medium >= 30, High >= 60
+  // Sensitivity (0..100) shifts these: higher sensitivity lowers thresholds (more strict)
+  const s = clamp(sensitivity, 0, 100);
+  const sensUnit = (s - 50) / 50; // -1..+1
+  const hiBase = 60, medBase = 30;
+  const highThr = clamp(Math.round(hiBase - 15 * sensUnit), 35, 80); // 45 at s=100, 75 at s=0
+  const medThr  = clamp(Math.round(medBase - 10 * sensUnit), 15, 45); // 20 at s=100, 40 at s=0
+
   const verdict: AnalysisResult["verdict"] =
-    score >= 70 ? "High" : score >= 40 ? "Medium" : "Low";
+    score >= highThr ? "High" : score >= medThr ? "Medium" : "Low";
 
-  return { score, verdict, flags: Array.from(new Set(flags)) };
+  return { score, verdict, flags: uniqueFlags };
+}
+
+/* utils */
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
 }
