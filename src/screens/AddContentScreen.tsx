@@ -34,16 +34,14 @@ export default function AddContentScreen({ navigation }: any) {
     setBusy(false);
   }, []);
 
-  // Header: simple back that just pops this stack
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerBackVisible: false,
       headerLeft: () => (
         <Pressable
           onPress={() => {
-            // Clear form and pop to HomeMain (in Home stack)
             resetForm();
-            navigation.goBack();
+            navigation.goBack(); // pop Home stack (HomeMain)
           }}
           hitSlop={12}
           style={{ paddingHorizontal: 8, paddingVertical: 6 }}
@@ -55,9 +53,8 @@ export default function AddContentScreen({ navigation }: any) {
     });
   }, [navigation, colors.primary, resetForm]);
 
-  // Also clear when screen unmounts (e.g., back gesture)
   React.useEffect(() => {
-    return () => resetForm();
+    return () => resetForm(); // clear when unmounting
   }, [resetForm]);
 
   const onAnalyzeText = () => {
@@ -85,8 +82,8 @@ export default function AddContentScreen({ navigation }: any) {
     if (!imageUri) return Alert.alert("No screenshot", "Pick a screenshot first.");
     try {
       setBusy(true);
-      // demo OCR text
-      const fakeOCR = "Contact via WhatsApp. 60–90 minutes training. Earn $500/day.";
+      // demo OCR text that triggers rules
+      const fakeOCR = "Contact via WhatsApp. Earn $500/day. Daily payout guaranteed.";
       const a = analyzeTextLocal(fakeOCR + " " + (input ?? ""));
       setResult(a);
     } finally {
@@ -107,7 +104,8 @@ export default function AddContentScreen({ navigation }: any) {
       createdAt: Date.now(),
     };
     add(entry);
-    Alert.alert("Saved", "Analysis added to your Database.");
+    appEvents.emit("db:saved", { id: entry.id }); // ✅ inform Database
+    Alert.alert("Saved", "Added to your Database.");
   };
 
   return (
@@ -187,18 +185,13 @@ function analyzeTextLocal(raw: string): AnalysisResult {
     [/whats\s*app|telegram|signal/, 25, "chat app contact"],
     [/gift\s*card|apple\s*card|steam\s*card/, 35, "gift card payment"],
     [/earn\s*\$?\s?\d{3,}\s*per\s*(day|hour)|\$\s?\d{3,}\s*(daily|day)/, 25, "unrealistic pay"],
+    [/daily\s*payout|guaranteed\s*monthly|guaranteed\s*income/, 15, "guaranteed payout"],
   ];
   let score = 0;
   const flags: string[] = [];
-  for (const [re, pts, label] of rules) {
-    if (re.test(text)) {
-      score += pts;
-      flags.push(label);
-    }
-  }
+  for (const [re, pts, label] of rules) if (re.test(text)) { score += pts; flags.push(label); }
   score = Math.min(100, Math.max(0, score));
-  const verdict: AnalysisResult["verdict"] =
-    score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
+  const verdict: AnalysisResult["verdict"] = score >= 60 ? "High" : score >= 30 ? "Medium" : "Low";
   return { score, verdict, flags: Array.from(new Set(flags)) };
 }
 

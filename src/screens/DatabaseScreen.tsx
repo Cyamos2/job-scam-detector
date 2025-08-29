@@ -1,5 +1,5 @@
 // src/screens/DatabaseScreen.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,13 @@ import {
   Pressable,
   Image,
   TextInput,
+  Animated,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { DatabaseStackParamList } from "../navigation/DatabaseStack";
 import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
 import { useColors } from "../theme/useColors";
+import { appEvents } from "../lib/events";
 
 type VerdictFilter = "All" | "Low" | "Medium" | "High";
 type SortOrder = "Newest" | "Oldest";
@@ -26,25 +28,47 @@ export default function DatabaseScreen({ navigation }: Props) {
   const [sort, setSort] = useState<SortOrder>("Newest");
   const [query, setQuery] = useState("");
 
+  // FlatList ref for auto-scroll
+  const listRef = useRef<FlatList<SavedAnalysis>>(null);
+
+  // Tiny toast
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const toastY = useRef(new Animated.Value(-40)).current;
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    Animated.timing(toastY, { toValue: 0, duration: 160, useNativeDriver: true }).start(() => {
+      setTimeout(() => {
+        Animated.timing(toastY, { toValue: -40, duration: 160, useNativeDriver: true }).start(() =>
+          setToastMsg(null)
+        );
+      }, 1400);
+    });
+  };
+
+  useEffect(() => {
+    const handler = (_p: { id: string }) => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+      showToast("✓ Added to Database");
+    };
+    appEvents.on("db:saved", handler);
+    return () => {
+      appEvents.off("db:saved", handler);
+    };
+  }, []);
+
   const list = useMemo(() => {
     let arr = items.slice();
 
-    // text search over title, flags, preview
     const q = query.trim().toLowerCase();
     if (q) {
       arr = arr.filter((x) => {
-        const hay = [
-          x.title,
-          x.inputPreview ?? "",
-          (x.flags || []).join(" "),
-        ]
-          .join(" ")
-          .toLowerCase();
+        const hay = [x.title, x.inputPreview ?? "", (x.flags || []).join(" ")].join(" ").toLowerCase();
         return hay.includes(q);
       });
     }
 
     if (filter !== "All") arr = arr.filter((x) => x.verdict === filter);
+
     arr.sort((a, b) =>
       sort === "Newest" ? b.createdAt - a.createdAt : a.createdAt - b.createdAt
     );
@@ -54,7 +78,6 @@ export default function DatabaseScreen({ navigation }: Props) {
   function goToAddContent() {
     const parent = navigation.getParent();
     if (!parent) return;
-    // Cross-navigator jump (types don't line up), cast just for this call.
     (parent as any).navigate("HomeTab", { screen: "AddContent" });
   }
 
@@ -68,14 +91,27 @@ export default function DatabaseScreen({ navigation }: Props) {
 
   return (
     <View style={[{ flex: 1 }, bg]}>
-      {/* Controls */}
+      {/* Toast */}
+      {toastMsg ? (
+        <Animated.View
+          style={[
+            styles.toast,
+            { transform: [{ translateY: toastY }], backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+          pointerEvents="none"
+        >
+          <Text style={[styles.toastText, text]}>{toastMsg}</Text>
+        </Animated.View>
+      ) : null}
+
+      {/* Search + filters */}
       <View style={styles.controls}>
         <TextInput
-          placeholder="Search saved analyses…"
-          placeholderTextColor="#999"
           value={query}
           onChangeText={setQuery}
-          style={[styles.search, { borderColor: colors.border }]}
+          placeholder="Search title, flags, preview…"
+          placeholderTextColor="#999"
+          style={[styles.search, card, { borderColor: colors.border }]}
         />
 
         <View style={styles.row}>
@@ -89,14 +125,7 @@ export default function DatabaseScreen({ navigation }: Props) {
                 filter === v && { backgroundColor: colors.primary },
               ]}
             >
-              <Text
-                style={[
-                  styles.chipText,
-                  filter === v ? { color: "white" } : text,
-                ]}
-              >
-                {v}
-              </Text>
+              <Text style={[styles.chipText, filter === v ? { color: "white" } : text]}>{v}</Text>
             </Pressable>
           ))}
         </View>
@@ -112,14 +141,7 @@ export default function DatabaseScreen({ navigation }: Props) {
                 sort === s && { backgroundColor: colors.primary },
               ]}
             >
-              <Text
-                style={[
-                  styles.chipText,
-                  sort === s ? { color: "white" } : text,
-                ]}
-              >
-                {s}
-              </Text>
+              <Text style={[styles.chipText, sort === s ? { color: "white" } : text]}>{s}</Text>
             </Pressable>
           ))}
 
@@ -133,58 +155,53 @@ export default function DatabaseScreen({ navigation }: Props) {
 
       {/* List */}
       <FlatList<SavedAnalysis>
+        ref={listRef}
         data={list}
         keyExtractor={(it) => it.id}
-        contentContainerStyle={
-          list.length === 0 ? styles.center : { padding: 12 }
-        }
+        contentContainerStyle={list.length === 0 ? styles.center : { padding: 12 }}
         ListEmptyComponent={
-          <Text style={[styles.emptyText, { color: colors.text + "99" }]}>
-            No saved analyses yet.
-          </Text>
+          <View style={styles.center}>
+            <Text style={[styles.title, text]}>No saved analyses yet.</Text>
+            <Text style={[styles.muted, { color: colors.text, opacity: 0.6, marginTop: 6 }]}>
+              Try adding content from the Home tab or using the + button.
+            </Text>
+          </View>
         }
         renderItem={({ item }) => (
           <Pressable
             onPress={() => navigation.navigate("ReportDetail", { id: item.id })}
             onLongPress={() => remove(item.id)}
-            style={[
-              styles.card,
-              card,
-              { borderColor: colors.border, backgroundColor: colors.card },
-            ]}
+            style={[styles.card, card, { borderColor: colors.border, backgroundColor: colors.card }]}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.cardTitle, text]}>{item.title}</Text>
-              <Text style={[styles.cardSub, { color: colors.text + "99" }]}>
+              <Text style={[styles.cardTitle, text]} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={[styles.cardSub, { color: colors.text, opacity: 0.6 }]}>
                 {new Date(item.createdAt).toLocaleString()}
               </Text>
               <Text style={[styles.cardInfo, text]}>
                 Score {item.score} — {item.verdict} risk
               </Text>
-              <Text style={[styles.cardFlags, { color: colors.text + "CC" }]}>
+              <Text style={[styles.cardFlags, { color: colors.text, opacity: 0.8 }]} numberOfLines={1}>
                 Flags: {item.flags.length ? item.flags.join(", ") : "none"}
               </Text>
-              {!!item.inputPreview && (
-                <Text
-                  style={[styles.preview, { color: colors.text + "B3" }]}
-                  numberOfLines={2}
-                >
+              {item.inputPreview ? (
+                <Text style={[styles.preview, { color: colors.text, opacity: 0.7 }]} numberOfLines={2}>
                   {item.inputPreview}
                 </Text>
-              )}
+              ) : null}
             </View>
-            {item.imageUri ? (
-              <Image source={{ uri: item.imageUri }} style={styles.thumb} />
-            ) : null}
+            {item.imageUri ? <Image source={{ uri: item.imageUri }} style={styles.thumb} /> : null}
           </Pressable>
         )}
       />
 
       {/* FAB */}
       <Pressable
-        accessibilityLabel="Add to Database"
-        onPress={goToAddContent}
         style={[styles.fab, { backgroundColor: colors.primary }]}
+        onPress={goToAddContent}
+        accessibilityLabel="Add to Database"
       >
         <Text style={styles.fabPlus}>＋</Text>
       </Pressable>
@@ -211,8 +228,9 @@ const styles = StyleSheet.create({
   },
   chipText: { fontWeight: "700" },
 
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  emptyText: { fontSize: 16 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
+  title: { fontSize: 18, fontWeight: "700" },
+  muted: { fontSize: 14 },
 
   clearAll: { marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 6 },
 
@@ -226,7 +244,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontWeight: "800", fontSize: 16 },
   cardSub: { fontSize: 12, marginBottom: 4 },
-  cardInfo: { fontWeight: "700" },
+  cardInfo: { fontWeight: "600" },
   cardFlags: { fontSize: 12 },
   preview: { fontSize: 12, marginTop: 6 },
   thumb: { width: 64, height: 64, borderRadius: 8, backgroundColor: "#ddd" },
@@ -247,4 +265,17 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   fabPlus: { color: "white", fontSize: 28, fontWeight: "700", lineHeight: 30 },
+
+  // Toast
+  toast: {
+    position: "absolute",
+    top: 6,
+    alignSelf: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    zIndex: 10,
+  },
+  toastText: { fontWeight: "700" },
 });
