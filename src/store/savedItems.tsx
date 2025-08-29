@@ -7,10 +7,11 @@ export type SavedAnalysis = {
   source: "text" | "image";
   inputPreview?: string | null;
   imageUri?: string | null;
-  score: number; // 0–100
+  score: number;
   verdict: "Low" | "Medium" | "High";
   flags: string[];
-  createdAt: number; // epoch ms
+  createdAt: number;
+  notes?: string; // ⬅️ new (optional) – used by ReportDetailScreen inline editor
 };
 
 type SavedItemsContextType = {
