@@ -1,68 +1,84 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type Settings = {
-  theme: "light" | "dark";
-  sensitivity: number;   // 0–100
-  autoSave: boolean;
-};
+export type Theme = "light" | "dark";
 
-const DEFAULTS: Settings = { theme: "light", sensitivity: 50, autoSave: false };
-const STORAGE_KEY = "@jsd/settings";
+type SettingsCtx = {
+  theme: Theme;
+  setTheme: (t: Theme) => void;
 
-type Ctx = {
-  theme: Settings["theme"];
-  sensitivity: number;
   autoSave: boolean;
-  loading: boolean;
-  setTheme: (t: Settings["theme"]) => void;
-  setSensitivity: (n: number) => void;
   setAutoSave: (b: boolean) => void;
-  resetSettings: () => void;
+
+  sensitivity: number; // 0–100
+  setSensitivity: (n: number) => void;
+
+  reset: () => void; // ← required by SettingsScreen
 };
 
-const SettingsContext = createContext<Ctx | undefined>(undefined);
+const DEFAULTS: Readonly<Pick<SettingsCtx, "theme" | "autoSave" | "sensitivity">> = {
+  theme: "light",
+  autoSave: false,
+  sensitivity: 50,
+};
+
+const STORAGE_KEY = "@job-scam-detector/settings:v1";
+
+const Ctx = createContext<SettingsCtx | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<Settings>(DEFAULTS);
-  const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState<Theme>(DEFAULTS.theme);
+  const [autoSave, setAutoSave] = useState<boolean>(DEFAULTS.autoSave);
+  const [sensitivity, setSensitivity] = useState<number>(DEFAULTS.sensitivity);
+  const [hydrated, setHydrated] = useState(false);
 
-  // hydrate once
+  // Hydrate once
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
-          setState({ ...DEFAULTS, ...parsed });
+          if (parsed.theme === "light" || parsed.theme === "dark") setTheme(parsed.theme);
+          if (typeof parsed.autoSave === "boolean") setAutoSave(parsed.autoSave);
+          if (typeof parsed.sensitivity === "number")
+            setSensitivity(Math.max(0, Math.min(100, parsed.sensitivity)));
         }
       } catch {}
-      setLoading(false);
+      setHydrated(true);
     })();
   }, []);
 
-  // persist whenever state changes (after hydrate)
+  // Persist after hydration
   useEffect(() => {
-    if (loading) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => {});
-  }, [state, loading]);
+    if (!hydrated) return;
+    const save = async () => {
+      try {
+        await AsyncStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ theme, autoSave, sensitivity })
+        );
+      } catch {}
+    };
+    save();
+  }, [theme, autoSave, sensitivity, hydrated]);
 
-  const setTheme = (t: Settings["theme"]) => setState(s => ({ ...s, theme: t }));
-  const setSensitivity = (n: number) =>
-    setState(s => ({ ...s, sensitivity: Math.max(0, Math.min(100, Math.round(n))) }));
-  const setAutoSave = (b: boolean) => setState(s => ({ ...s, autoSave: b }));
-  const resetSettings = () => setState(DEFAULTS);
+  const reset = () => {
+    setTheme(DEFAULTS.theme);
+    setAutoSave(DEFAULTS.autoSave);
+    setSensitivity(DEFAULTS.sensitivity);
+  };
 
-  const value = useMemo(
-    () => ({ ...state, loading, setTheme, setSensitivity, setAutoSave, resetSettings }),
-    [state, loading]
+  const value = useMemo<SettingsCtx>(
+    () => ({ theme, setTheme, autoSave, setAutoSave, sensitivity, setSensitivity, reset }),
+    [theme, autoSave, sensitivity]
   );
 
-  return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
 export function useSettings() {
-  const ctx = useContext(SettingsContext);
-  if (!ctx) throw new Error("useSettings must be used within a SettingsProvider");
+  const ctx = useContext(Ctx);
+  if (!ctx) throw new Error("useSettings must be used within SettingsProvider");
   return ctx;
 }
