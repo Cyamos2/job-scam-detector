@@ -1,9 +1,10 @@
 // App.tsx
 import React from "react";
-import { StatusBar } from "react-native";
-import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
+import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
+import { StatusBar } from "expo-status-bar";
+
 import RootNavigator from "./src/navigation/RootNavigator";
-import { useSettings, SettingsProvider } from "./src/SettingsProvider";
+import { SettingsProvider, useSettings } from "./src/SettingsProvider";
 import { SavedItemsProvider } from "./src/store/savedItems";
 
 function Shell() {
@@ -12,11 +13,8 @@ function Shell() {
 
   return (
     <>
-      {/* ✅ Status bar adapts to theme */}
-      <StatusBar
-        barStyle={theme === "dark" ? "light-content" : "dark-content"}
-        backgroundColor={navTheme.colors.background}
-      />
+      {/* status bar matches current theme */}
+      <StatusBar style={theme === "dark" ? "light" : "dark"} />
       <NavigationContainer theme={navTheme}>
         <RootNavigator />
       </NavigationContainer>
