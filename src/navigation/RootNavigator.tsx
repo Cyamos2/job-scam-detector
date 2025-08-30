@@ -1,26 +1,21 @@
 // src/navigation/RootNavigator.tsx
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-
-// These files already exist in your repo
 import HomeStack from "./HomeStack";
 import DatabaseStack from "./DatabaseStack";
 import SettingsScreen from "../screens/SettingsScreen";
 
-const Tab = createBottomTabNavigator();
+export type RootTabsParamList = {
+  HomeTab: undefined;
+  DatabaseTab: undefined;
+  SettingsTab: undefined;
+};
 
-/**
- * Tab names are important:
- * - "HomeTab" is used elsewhere (e.g., navigation.getParent()?.navigate("HomeTab", ...))
- * - "DatabaseTab" is used for cross-tab jumps from AddContent, etc.
- */
+const Tab = createBottomTabNavigator<RootTabsParamList>();
+
 export default function RootNavigator() {
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false, // stacks/screens manage their own headers
-      }}
-    >
+    <Tab.Navigator>
       <Tab.Screen
         name="HomeTab"
         component={HomeStack}
