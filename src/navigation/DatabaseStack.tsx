@@ -1,4 +1,3 @@
-// src/navigation/DatabaseStack.tsx
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import DatabaseScreen from "../screens/DatabaseScreen";
@@ -13,17 +12,9 @@ const Stack = createNativeStackNavigator<DatabaseStackParamList>();
 
 export default function DatabaseStack() {
   return (
-    <Stack.Navigator>
-      <Stack.Screen
-        name="DatabaseMain"
-        component={DatabaseScreen}
-        options={{ title: "Database" }}
-      />
-      <Stack.Screen
-        name="ReportDetail"
-        component={ReportDetailScreen}
-        options={{ title: "Report" }}
-      />
+    <Stack.Navigator screenOptions={{ headerTitleAlign: "center" }}>
+      <Stack.Screen name="DatabaseMain" component={DatabaseScreen} options={{ title: "Database" }} />
+      <Stack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: "Report" }} />
     </Stack.Navigator>
   );
 }

@@ -1,21 +1,13 @@
-// src/navigation/goTo.ts
-import { NavigationProp } from '@react-navigation/native';
-import { RootTabParamList } from './types';
+import { CommonActions, NavigationHelpers } from "@react-navigation/native";
 
-export function goToAddContent(navigation: NavigationProp<RootTabParamList>) {
-  // reach the Tab navigator then navigate to the Home stack's AddContent
-  const parent = navigation.getParent<NavigationProp<RootTabParamList>>();
+/** Jump from anywhere to HomeTab -> AddContent (no type fuss, no loops). */
+export function goToAddContent(navigation: NavigationHelpers<any>) {
+  const parent = (navigation as any).getParent?.();
   if (!parent) return;
-
-  parent.navigate('HomeTab', { screen: 'AddContent' });
-}
-
-export function goToHome(navigation: NavigationProp<RootTabParamList>) {
-  const parent = navigation.getParent<NavigationProp<RootTabParamList>>();
-  parent?.navigate('HomeTab');
-}
-
-export function goToDatabase(navigation: NavigationProp<RootTabParamList>) {
-  const parent = navigation.getParent<NavigationProp<RootTabParamList>>();
-  parent?.navigate('DatabaseTab');
+  parent.dispatch(
+    CommonActions.navigate({
+      name: "HomeTab",
+      params: { screen: "AddContent" },
+    })
+  );
 }
