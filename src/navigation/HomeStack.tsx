@@ -10,7 +10,7 @@ export type HomeStackParamList = {
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
 
-export default function HomeStack() {
+export default function HomeStack(): JSX.Element {
   return (
     <Stack.Navigator screenOptions={{ headerTitleAlign: "center" }}>
       <Stack.Screen name="HomeMain" component={HomeScreen} options={{ title: "Home" }} />

@@ -10,7 +10,7 @@ export type DatabaseStackParamList = {
 
 const Stack = createNativeStackNavigator<DatabaseStackParamList>();
 
-export default function DatabaseStack() {
+export default function DatabaseStack(): JSX.Element {
   return (
     <Stack.Navigator screenOptions={{ headerTitleAlign: "center" }}>
       <Stack.Screen name="DatabaseMain" component={DatabaseScreen} options={{ title: "Database" }} />

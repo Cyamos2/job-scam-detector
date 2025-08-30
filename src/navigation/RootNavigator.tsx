@@ -4,15 +4,15 @@ import HomeStack from "./HomeStack";
 import DatabaseStack from "./DatabaseStack";
 import SettingsScreen from "../screens/SettingsScreen";
 
-export type RootTabParamList = {
+export type TabsParamList = {
   HomeTab: undefined;
   DatabaseTab: undefined;
   SettingsTab: undefined;
 };
 
-const Tab = createBottomTabNavigator<RootTabParamList>();
+const Tab = createBottomTabNavigator<TabsParamList>();
 
-export default function RootNavigator() {
+export default function RootNavigator(): JSX.Element {
   return (
     <Tab.Navigator screenOptions={{ headerTitleAlign: "center" }}>
       <Tab.Screen name="HomeTab" component={HomeStack} options={{ title: "Home" }} />

@@ -1,27 +1,68 @@
+// src/screens/DatabaseScreen.tsx
 import React from "react";
-import { View, TextInput, StyleSheet, Pressable, Text } from "react-native";
-import { CommonActions } from "@react-navigation/native";
+import { View, Text, Pressable, StyleSheet, TextInput, FlatList } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { DatabaseStackParamList } from "../navigation/DatabaseStack";
+import type { DatabaseStackParamList } from "../navigation/DatabaseStack";
+import { useColors } from "../theme/useColors";
+import { useSavedItems } from "../store/savedItems";
 
 type Props = NativeStackScreenProps<DatabaseStackParamList, "DatabaseMain">;
 
 export default function DatabaseScreen({ navigation }: Props) {
-  return (
-    <View style={{ flex: 1 }}>
-      <TextInput placeholder="Search title/flags/preview" style={styles.search} />
-      {/* … your list … */}
+  const { colors, bg, card, text } = useColors();
+  const { items, hydrated } = useSavedItems();
+  const [q, setQ] = React.useState("");
 
-      {/* FAB → HomeTab/AddContent (no loop) */}
-      <Pressable
-        style={styles.fab}
-        onPress={() =>
-          navigation.getParent()?.dispatch(
-            CommonActions.navigate({ name: "HomeTab", params: { screen: "AddContent" } })
-          )
-        }
-        accessibilityLabel="Add content"
-      >
+  React.useLayoutEffect(() => {
+    navigation.setOptions({ headerTitle: "Database" });
+  }, [navigation]);
+
+  if (!hydrated) return null;
+
+  const filtered = items.filter((it) => {
+    if (!q.trim()) return true;
+    const hay = `${it.title} ${it.flags.join(" ")} ${it.inputPreview}`.toLowerCase();
+    return hay.includes(q.toLowerCase());
+  });
+
+  const goToAddContent = () =>
+    navigation.getParent()?.navigate("HomeTab" as never, { screen: "AddContent" } as never);
+
+  return (
+    <View style={[styles.container, bg]}>
+      <TextInput
+        value={q}
+        onChangeText={setQ}
+        placeholder="Search title/flags/preview"
+        placeholderTextColor="#9aa0a6"
+        style={[styles.search, card, { borderColor: colors.border }]}
+      />
+
+      {filtered.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={[styles.emptyText, text]}>No saved analyses yet.</Text>
+          <Pressable onPress={goToAddContent} style={[styles.cta, { backgroundColor: colors.primary }]}>
+            <Text style={styles.ctaText}>Add content</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={(it) => it.id}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => navigation.navigate("ReportDetail", { id: item.id })}
+              style={[styles.row, card, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.rowTitle, text]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[styles.rowSub, text]} numberOfLines={1}>{item.verdict} · {item.score}</Text>
+            </Pressable>
+          )}
+        />
+      )}
+
+      <Pressable onPress={goToAddContent} style={[styles.fab, { backgroundColor: colors.primary }]}>
         <Text style={styles.fabPlus}>＋</Text>
       </Pressable>
     </View>
@@ -29,11 +70,18 @@ export default function DatabaseScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  search: { margin: 16, padding: 12, borderWidth: 1, borderRadius: 10, borderColor: "#ddd" },
+  container: { flex: 1 },
+  search: { margin: 16, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  emptyText: { fontSize: 18 },
+  cta: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10 },
+  ctaText: { color: "white", fontWeight: "700" },
+  row: { padding: 12, borderWidth: 1, borderRadius: 12, marginBottom: 12 },
+  rowTitle: { fontSize: 16, fontWeight: "700" },
+  rowSub: { fontSize: 12, opacity: 0.8 },
   fab: {
-    position: "absolute", right: 18, bottom: 28,
-    width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center",
-    backgroundColor: "#1E6DFF", elevation: 5,
+    position: "absolute", right: 20, bottom: 28, width: 60, height: 60, borderRadius: 30,
+    alignItems: "center", justifyContent: "center", elevation: 6,
   },
-  fabPlus: { color: "white", fontSize: 28, fontWeight: "700", lineHeight: 30 },
+  fabPlus: { color: "white", fontSize: 30, lineHeight: 30, fontWeight: "700" },
 });

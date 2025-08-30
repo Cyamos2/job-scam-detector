@@ -1,13 +1,10 @@
-import { CommonActions, NavigationHelpers } from "@react-navigation/native";
+import type { NavigationProp } from "@react-navigation/native";
 
-/** Jump from anywhere to HomeTab -> AddContent (no type fuss, no loops). */
-export function goToAddContent(navigation: NavigationHelpers<any>) {
+export function goToAddContent(navigation: NavigationProp<any>) {
   const parent = (navigation as any).getParent?.();
-  if (!parent) return;
-  parent.dispatch(
-    CommonActions.navigate({
-      name: "HomeTab",
-      params: { screen: "AddContent" },
-    })
-  );
+  if (parent?.navigate) {
+    (parent as any).navigate("HomeTab", { screen: "AddContent" });
+  } else {
+    (navigation as any).navigate("AddContent");
+  }
 }

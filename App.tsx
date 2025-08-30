@@ -1,30 +1,27 @@
-// App.tsx (root)
+// App.tsx
 import React from "react";
 import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
-import RootNavigator from "./src/navigation/RootNavigator"; // ⬅ path fixed
-
+import RootNavigator from "./src/navigation/RootNavigator";
 import { SettingsProvider, useSettings } from "./src/SettingsProvider";
 import { SavedItemsProvider } from "./src/store/savedItems";
-
-// ...rest unchanged
 
 function Shell() {
   const { theme } = useSettings();
   const navTheme = theme === "dark" ? DarkTheme : DefaultTheme;
 
   return (
-    <NavigationContainer theme={navTheme}>
-      <RootNavigator />
-    </NavigationContainer>
+    <SavedItemsProvider>
+      <NavigationContainer theme={navTheme}>
+        <RootNavigator />
+      </NavigationContainer>
+    </SavedItemsProvider>
   );
 }
 
 export default function App() {
   return (
     <SettingsProvider>
-      <SavedItemsProvider>
-        <Shell />
-      </SavedItemsProvider>
+      <Shell />
     </SettingsProvider>
   );
 }
