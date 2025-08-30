@@ -1,8 +1,12 @@
+// App.tsx (root)
 import React from "react";
 import { NavigationContainer, DarkTheme, DefaultTheme } from "@react-navigation/native";
-import RootNavigator from "./navigation/RootNavigator";
-import { SettingsProvider, useSettings } from "./SettingsProvider";
-import { SavedItemsProvider } from "./store/savedItems";
+import RootNavigator from "./src/navigation/RootNavigator"; // ⬅ path fixed
+
+import { SettingsProvider, useSettings } from "./src/SettingsProvider";
+import { SavedItemsProvider } from "./src/store/savedItems";
+
+// ...rest unchanged
 
 function Shell() {
   const { theme } = useSettings();
