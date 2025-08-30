@@ -1,6 +1,14 @@
 // src/screens/SettingsScreen.tsx
-import React, { useEffect } from "react";
-import { View, Text, Pressable, StyleSheet, ScrollView, Switch, Alert } from "react-native";
+import React from "react";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  Switch,
+  Alert,
+} from "react-native";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
 import * as DocumentPicker from "expo-document-picker";
@@ -9,15 +17,50 @@ import { useColors } from "../theme/useColors";
 import { useSettings } from "../SettingsProvider";
 import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
 
-export default function SettingsScreen({ navigation }: any) {
+type Props = { navigation: any };
+
+export default function SettingsScreen({ navigation }: Props) {
   const { colors, text, card, bg } = useColors();
-  const { theme, setTheme, autoSave, setAutoSave, sensitivity, setSensitivity, reset } =
-    useSettings();
+  const {
+    theme,
+    setTheme,
+    autoSave,
+    setAutoSave,
+    sensitivity,
+    setSensitivity,
+    reset,
+  } = useSettings();
   const { items, addMany } = useSavedItems();
 
-  useEffect(() => {
-    navigation.setOptions({ title: "Settings" });
+  const goHome = React.useCallback(() => {
+    const parent = navigation.getParent?.();
+    if (parent) {
+      // Bottom tab navigator
+      (parent as any).navigate("HomeTab", { screen: "HomeMain" });
+    } else {
+      // Fallback: if we’re already in the Home stack
+      navigation.navigate("HomeMain" as never);
+    }
   }, [navigation]);
+
+  // Header (re-run when theme/colors change so the header matches)
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      headerTitle: "Settings",
+      headerBackVisible: false,
+      headerLeft: () => (
+        <Pressable
+          onPress={goHome}
+          accessibilityRole="button"
+          hitSlop={10}
+          style={{ paddingHorizontal: 8, paddingVertical: 6, flexDirection: "row", alignItems: "center" }}
+        >
+          <Text style={{ fontWeight: "700" }}>‹ Home</Text>
+        </Pressable>
+      ),
+    });
+  }, [navigation, goHome, colors.text, theme]);
 
   const bumpSensitivity = (delta: number) =>
     setSensitivity(Math.max(0, Math.min(100, sensitivity + delta)));
@@ -35,22 +78,51 @@ export default function SettingsScreen({ navigation }: any) {
   const importData = async () => {
     const res = await DocumentPicker.getDocumentAsync({ type: "application/json" });
     if (res.canceled) return;
+
     try {
-      const raw = await FileSystem.readAsStringAsync(res.assets[0].uri);
+      const uri = res.assets?.[0]?.uri;
+      if (!uri) throw new Error("No file selected");
+
+      const raw = await FileSystem.readAsStringAsync(uri);
       const parsed = JSON.parse(raw) as unknown;
 
-      if (!Array.isArray(parsed)) throw new Error("Invalid backup: not an array");
-      // Basic shape check
-      const cleaned: SavedAnalysis[] = parsed.filter((x: any) =>
-        x && typeof x.id === "string" && typeof x.title === "string" &&
-        typeof x.score === "number" && typeof x.verdict === "string" &&
-        Array.isArray(x.flags) && typeof x.createdAt === "number"
+      if (!Array.isArray(parsed)) {
+        throw new Error("Invalid backup format (expected an array).");
+      }
+
+      const incoming: SavedAnalysis[] = parsed.filter((x: any) =>
+        x &&
+        typeof x.id === "string" &&
+        typeof x.title === "string" &&
+        (x.source === "text" || x.source === "image") &&
+        typeof x.score === "number" &&
+        (x.verdict === "Low" || x.verdict === "Medium" || x.verdict === "High") &&
+        Array.isArray(x.flags) &&
+        typeof x.createdAt === "number"
       );
 
-      if (!cleaned.length) throw new Error("No valid records found");
+      if (incoming.length === 0) throw new Error("No valid records found.");
 
-      addMany(cleaned); // your SavedItems store exposes this
-      Alert.alert("Import complete", `${cleaned.length} analyses imported.`);
+      const existingIds = new Set(items.map((i) => i.id));
+      const deduped = incoming.filter((i) => !existingIds.has(i.id));
+      const skipped = incoming.length - deduped.length;
+
+      if (deduped.length === 0) {
+        Alert.alert(
+          "Nothing to import",
+          skipped > 0 ? "All records were duplicates." : "No new records found."
+        );
+        return;
+      }
+
+      addMany(deduped);
+
+      Alert.alert(
+        skipped > 0 ? "Imported with warnings" : "Import complete",
+        skipped > 0
+          ? `${deduped.length} added, ${skipped} duplicates skipped.`
+          : `${deduped.length} analyses imported.`
+      );
     } catch (e) {
       Alert.alert("Import failed", String(e));
     }
@@ -62,16 +134,37 @@ export default function SettingsScreen({ navigation }: any) {
       <Text style={[styles.sectionTitle, text]}>Theme</Text>
       <View style={styles.row}>
         <Pressable
-          style={[styles.chip, card, theme === "light" && { backgroundColor: colors.primary, borderColor: colors.primary }]}
           onPress={() => setTheme("light")}
+          accessibilityRole="button"
+          style={[
+            styles.chip,
+            card,
+            theme === "light" && {
+              backgroundColor: colors.primary,
+              borderColor: colors.primary,
+            },
+          ]}
         >
-          <Text style={[styles.chipText, theme === "light" ? { color: "white" } : text]}>Light</Text>
+          <Text style={[styles.chipText, theme === "light" ? { color: "white" } : text]}>
+            Light
+          </Text>
         </Pressable>
+
         <Pressable
-          style={[styles.chip, card, theme === "dark" && { backgroundColor: colors.primary, borderColor: colors.primary }]}
           onPress={() => setTheme("dark")}
+          accessibilityRole="button"
+          style={[
+            styles.chip,
+            card,
+            theme === "dark" && {
+              backgroundColor: colors.primary,
+              borderColor: colors.primary,
+            },
+          ]}
         >
-          <Text style={[styles.chipText, theme === "dark" ? { color: "white" } : text]}>Dark</Text>
+          <Text style={[styles.chipText, theme === "dark" ? { color: "white" } : text]}>
+            Dark
+          </Text>
         </Pressable>
       </View>
 
@@ -88,7 +181,9 @@ export default function SettingsScreen({ navigation }: any) {
           </Pressable>
         ))}
       </View>
-      <Text style={[styles.note, text]}>Higher = stricter risk flagging (used by analyzers).</Text>
+      <Text style={[styles.note, text]}>
+        Higher = stricter risk flagging (used by analyzers).
+      </Text>
 
       {/* Backups */}
       <Text style={[styles.sectionTitle, text]}>Backups</Text>
@@ -107,7 +202,7 @@ export default function SettingsScreen({ navigation }: any) {
         onPress={() =>
           Alert.alert("Confirm reset", "Restore settings to defaults?", [
             { text: "Cancel", style: "cancel" },
-            { text: "Reset", style: "destructive", onPress: reset }, // ✅ use `reset`
+            { text: "Reset", style: "destructive", onPress: reset },
           ])
         }
       >
