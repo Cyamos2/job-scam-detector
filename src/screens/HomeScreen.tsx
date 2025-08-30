@@ -1,33 +1,143 @@
+// src/screens/HomeScreen.tsx
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
-// HomeScreen.tsx
-import type { HomeStackParamList } from "../navigation/HomeStack";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  SafeAreaView,
+} from "react-native";
+import { useColors } from "../theme/useColors";
+import { goToAddContent } from "../navigation/goTo";
 
-type Props = NativeStackScreenProps<HomeStackParamList, "HomeMain">;
+type Props = { navigation: any };
 
 export default function HomeScreen({ navigation }: Props) {
-  return (
-    <View style={styles.center}>
-      {/* Keep only one header: the stack header. Avoid second big H1 to prevent “double titles”. */}
-      <Text style={styles.title}>Scamicide</Text>
-      <Text style={styles.subtitle}>Paste text or pick a screenshot to analyze.</Text>
+  const { colors, bg, card, text, muted } = useColors();
 
-      <Pressable
-        onPress={() => navigation.navigate("AddContent")}
-        style={styles.startBtn}
-        accessibilityLabel="Start adding content"
+  React.useLayoutEffect(() => {
+    navigation.setOptions({ title: "Home" });
+  }, [navigation]);
+
+  return (
+    <SafeAreaView style={[styles.safe, bg]}>
+      <ScrollView
+        contentContainerStyle={[styles.container]}
+        keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.startBtnText}>Start</Text>
-      </Pressable>
-    </View>
+        {/* Hero Card */}
+        <View style={[styles.hero, card, { borderColor: colors.border }]}>
+          <Text style={[styles.appTitle, text]}>Scamicide</Text>
+          <Text style={[styles.subtitle, muted]}>
+            Paste job text or pick a screenshot to analyze.
+          </Text>
+
+          <Pressable
+            onPress={() => goToAddContent(navigation)}
+            style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
+          >
+            <Text style={styles.primaryBtnText}>Start</Text>
+          </Pressable>
+        </View>
+
+        {/* Quick actions */}
+        <View style={styles.actionsRow}>
+          <Pressable
+            onPress={() => goToAddContent(navigation)}
+            style={[styles.action, card, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.actionTitle, text]}>Analyze Text</Text>
+            <Text style={[styles.actionHint, muted]}>Paste a post or message</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => goToAddContent(navigation)}
+            style={[styles.action, card, { borderColor: colors.border }]}
+          >
+            <Text style={[styles.actionTitle, text]}>Pick Screenshot</Text>
+            <Text style={[styles.actionHint, muted]}>Scan image content</Text>
+          </Pressable>
+        </View>
+
+        {/* Tips */}
+        <View style={[styles.tipCard, card, { borderColor: colors.border }]}>
+          <Text style={[styles.tipTitle, text]}>Tips</Text>
+          <Text style={[styles.tipItem, muted]}>
+            • Links work: paste a LinkedIn/Indeed URL.
+          </Text>
+          <Text style={[styles.tipItem, muted]}>
+            • Sensitivity is adjustable in Settings.
+          </Text>
+          <Text style={[styles.tipItem, muted]}>
+            • Saved results live in the Database tab.
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 16 },
-  title: { fontSize: 34, fontWeight: "800", marginBottom: 8 },
-  subtitle: { fontSize: 16, opacity: 0.7, marginBottom: 16, textAlign: "center" },
-  startBtn: { backgroundColor: "#1E6DFF", paddingHorizontal: 22, paddingVertical: 12, borderRadius: 12 },
-  startBtnText: { color: "white", fontWeight: "700" },
+  safe: { flex: 1 },
+  container: {
+    padding: 16,
+    paddingBottom: 32,
+    gap: 16,
+  },
+
+  hero: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
+  },
+  appTitle: {
+    fontSize: 32,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  subtitle: {
+    fontSize: 15,
+  },
+  primaryBtn: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  primaryBtnText: {
+    color: "white",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+
+  actionsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  action: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    gap: 4,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  actionHint: {
+    fontSize: 12,
+  },
+
+  tipCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 14,
+    gap: 6,
+  },
+  tipTitle: { fontSize: 14, fontWeight: "800" },
+  tipItem: { fontSize: 13, lineHeight: 18 },
 });
