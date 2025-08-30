@@ -1,17 +1,20 @@
 // src/navigation/RootNavigator.tsx
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createNativeStackNavigator, NativeStackNavigationOptions } from "@react-navigation/native-stack";
+import {
+  createNativeStackNavigator,
+  type NativeStackNavigationOptions,
+} from "@react-navigation/native-stack";
 import { useTheme } from "@react-navigation/native";
 
 // Screens
 import HomeScreen from "../screens/HomeScreen";
 import AddContentScreen from "../screens/AddContentScreen";
-import ReportDetailScreen from "../screens/ReportDetailScreen";
 import DatabaseScreen from "../screens/DatabaseScreen";
+import ReportDetailScreen from "../screens/ReportDetailScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 
-/** ---------- Param types (exported so other files can import) ---------- */
+/** ----- Param Lists (exported for screen typing) ----- */
 export type HomeStackParamList = {
   HomeMain: undefined;
   AddContent: undefined;
@@ -23,57 +26,80 @@ export type DatabaseStackParamList = {
   ReportDetail: { id: string };
 };
 
-export type RootTabParamList = {
-  HomeTab: undefined;
-  DatabaseTab: undefined;
-  SettingsTab: undefined;
-};
+const HomeStackNav = createNativeStackNavigator<HomeStackParamList>();
+const DatabaseStackNav = createNativeStackNavigator<DatabaseStackParamList>();
+const Tabs = createBottomTabNavigator();
 
-/** ---------- Navigators ---------- */
-const HomeStack = createNativeStackNavigator<HomeStackParamList>();
-const DatabaseStack = createNativeStackNavigator<DatabaseStackParamList>();
-const Tabs = createBottomTabNavigator<RootTabParamList>();
-
-/** Shared stack header styling that follows theme */
+/** Shared, theme-aware header options */
 function useThemedStackOptions(): NativeStackNavigationOptions {
   const { colors } = useTheme();
   return {
     headerStyle: { backgroundColor: colors.card },
     headerTitleStyle: { color: colors.text },
-    headerTintColor: colors.text,
+    headerTintColor: colors.text, // back arrow / icons
     headerShadowVisible: false,
-    headerBackVisible: true, // or false if you want to hide it
+    // headerBackVisible defaults to true; omit unless you want to hide
   };
 }
 
-function HomeStackNavigator() {
+/** Home stack */
+function HomeStack() {
   const opts = useThemedStackOptions();
   return (
-    <HomeStack.Navigator screenOptions={opts}>
-      <HomeStack.Screen name="HomeMain" component={HomeScreen} options={{ title: "Home" }} />
-      <HomeStack.Screen name="AddContent" component={AddContentScreen} options={{ title: "Add Content" }} />
-      <HomeStack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: "Report" }} />
-    </HomeStack.Navigator>
+    <HomeStackNav.Navigator screenOptions={opts}>
+      <HomeStackNav.Screen
+        name="HomeMain"
+        component={HomeScreen}
+        options={{ title: "Home" }}
+      />
+      <HomeStackNav.Screen
+        name="AddContent"
+        component={AddContentScreen}
+        options={{ title: "Add Content" }}
+      />
+      <HomeStackNav.Screen
+        name="ReportDetail"
+        component={ReportDetailScreen}
+        options={{ title: "Report" }}
+      />
+    </HomeStackNav.Navigator>
   );
 }
 
-function DatabaseStackNavigator() {
+/** Database stack */
+function DatabaseStack() {
   const opts = useThemedStackOptions();
   return (
-    <DatabaseStack.Navigator screenOptions={opts}>
-      <DatabaseStack.Screen name="DatabaseMain" component={DatabaseScreen} options={{ title: "Database" }} />
-      <DatabaseStack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: "Report" }} />
-    </DatabaseStack.Navigator>
+    <DatabaseStackNav.Navigator screenOptions={opts}>
+      <DatabaseStackNav.Screen
+        name="DatabaseMain"
+        component={DatabaseScreen}
+        options={{ title: "Database" }}
+      />
+      <DatabaseStackNav.Screen
+        name="ReportDetail"
+        component={ReportDetailScreen}
+        options={{ title: "Report" }}
+      />
+    </DatabaseStackNav.Navigator>
   );
 }
 
-/** Bottom tabs show only once (stacks render the headers) */
+/** Root tabs */
 export default function RootNavigator() {
   return (
     <Tabs.Navigator screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="HomeTab" component={HomeStackNavigator} options={{ title: "Home" }} />
-      <Tabs.Screen name="DatabaseTab" component={DatabaseStackNavigator} options={{ title: "Database" }} />
-      <Tabs.Screen name="SettingsTab" component={SettingsScreen} options={{ title: "Settings" }} />
+      <Tabs.Screen name="HomeTab" component={HomeStack} options={{ title: "Home" }} />
+      <Tabs.Screen
+        name="DatabaseTab"
+        component={DatabaseStack}
+        options={{ title: "Database" }}
+      />
+      <Tabs.Screen
+        name="SettingsTab"
+        component={SettingsScreen}
+        options={{ title: "Settings" }}
+      />
     </Tabs.Navigator>
   );
 }
