@@ -1,15 +1,21 @@
 // src/navigation/goTo.ts
-import type { NavigationProp } from "@react-navigation/native";
-// If you export RootTabsParamList from RootNavigator, you can import and use it here:
-// import type { RootTabsParamList } from "./RootNavigator";
+import { NavigationProp } from '@react-navigation/native';
+import { RootTabParamList } from './types';
 
-export function goToAddContent(navigation: NavigationProp<any>) {
-  // Jump from any child stack to Home tab → AddContent screen
-  const parent = navigation.getParent();
-  if (parent) {
-    (parent as any).navigate("HomeTab", { screen: "AddContent" });
-  } else {
-    // Fallback if caller is already at the tab level
-    (navigation as any).navigate("HomeTab", { screen: "AddContent" });
-  }
+export function goToAddContent(navigation: NavigationProp<RootTabParamList>) {
+  // reach the Tab navigator then navigate to the Home stack's AddContent
+  const parent = navigation.getParent<NavigationProp<RootTabParamList>>();
+  if (!parent) return;
+
+  parent.navigate('HomeTab', { screen: 'AddContent' });
+}
+
+export function goToHome(navigation: NavigationProp<RootTabParamList>) {
+  const parent = navigation.getParent<NavigationProp<RootTabParamList>>();
+  parent?.navigate('HomeTab');
+}
+
+export function goToDatabase(navigation: NavigationProp<RootTabParamList>) {
+  const parent = navigation.getParent<NavigationProp<RootTabParamList>>();
+  parent?.navigate('DatabaseTab');
 }

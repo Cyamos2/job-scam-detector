@@ -2,42 +2,22 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useColors } from "../theme/useColors";
+import { goToAddContent } from "../navigation/goTo";
 
-type Props = { navigation: any };
-
-export default function HomeScreen({ navigation }: Props) {
-  const { colors, bg, card, text } = useColors();
-
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: "Home",
-      headerShown: true,
-    });
-  }, [navigation]);
+export default function HomeScreen({ navigation }: any) {
+  const { colors, text, bg } = useColors();
 
   return (
-    <View style={[styles.container, bg]}>
-      {/* ⬇️ removed <Text>Home</Text> title */}
-      <Text style={[styles.appTitle, text]}>Scamicide</Text>
-
-      <Text style={[styles.subtitle, text]}>
-        Paste text or pick a screenshot to analyze.
-      </Text>
-
+    <View style={[{ flex: 1, justifyContent: "center", alignItems: "center" }, bg]}>
+      {/* REMOVE any <Text> that says “Home” at top — header already shows it */}
+      <Text style={[{ fontSize: 32, fontWeight: "800", marginBottom: 16 }, text]}>Scamicide</Text>
+      <Text style={[{ marginBottom: 20 }, text]}>Paste text or pick a screenshot to analyze.</Text>
       <Pressable
-        onPress={() => navigation.navigate("AddContent")}
-        style={[styles.startBtn, { backgroundColor: colors.primary }]}
+        onPress={() => goToAddContent(navigation)}
+        style={{ backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 }}
       >
-        <Text style={styles.startBtnText}>Start</Text>
+        <Text style={{ color: "white", fontWeight: "700" }}>Start</Text>
       </Pressable>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, alignItems: "center", justifyContent: "center" },
-  appTitle: { fontSize: 36, fontWeight: "800", marginBottom: 8, textAlign: "center" },
-  subtitle: { fontSize: 16, textAlign: "center", marginBottom: 20 },
-  startBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
-  startBtnText: { color: "white", fontWeight: "700", fontSize: 18 },
-});
