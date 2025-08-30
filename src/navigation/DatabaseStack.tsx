@@ -13,16 +13,8 @@ const Stack = createNativeStackNavigator<DatabaseStackParamList>();
 export default function DatabaseStack() {
   return (
     <Stack.Navigator>
-      <Stack.Screen
-        name="DatabaseList"
-        component={DatabaseScreen}
-        options={{ title: "Database" }}
-      />
-      <Stack.Screen
-        name="ReportDetail"
-        component={ReportDetailScreen}
-        options={{ title: "Report" }}
-      />
+      <Stack.Screen name="DatabaseList" component={DatabaseScreen} options={{ title: "Database" }} />
+      <Stack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: "Report" }} />
     </Stack.Navigator>
   );
 }

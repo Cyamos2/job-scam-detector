@@ -23,7 +23,7 @@ import { analyzeTextLocal, type AnalysisResult } from "../lib/analyzer";
 type Props = { navigation: any };
 
 export default function AddContentScreen({ navigation }: Props) {
-  const { colors, bg, card, text, muted } = useColors(); // ⬅️ no "border" here
+  const { colors, bg, card, text, muted } = useColors();
   const { autoSave, sensitivity } = useSettings();
   const { add } = useSavedItems();
 
@@ -32,31 +32,21 @@ export default function AddContentScreen({ navigation }: Props) {
   const [busy, setBusy] = React.useState(false);
   const [result, setResult] = React.useState<AnalysisResult | null>(null);
 
+  // Header with custom Back
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerBackVisible: false,
       headerLeft: () => (
         <Pressable
-          onPress={() => {
-            if (navigation.canGoBack()) navigation.goBack();
-            else navigation.getParent()?.navigate("DatabaseTab" as never);
-          }}
+          onPress={() => navigation.goBack()}
           hitSlop={10}
-          style={{ paddingHorizontal: 10, paddingVertical: 6 }}
+          style={{ paddingHorizontal: 8, paddingVertical: 6 }}
         >
-          <Text style={{ color: colors.primary, fontWeight: "700" }}>← Back</Text>
-        </Pressable>
-      ),
-      headerRight: () => (
-        <Pressable
-          onPress={() => Alert.alert("Options", "More options coming soon.")}
-          style={{ paddingHorizontal: 10, paddingVertical: 6 }}
-        >
-          <Text style={{ color: colors.primary, fontWeight: "700" }}>Options</Text>
+          <Text style={{ fontWeight: "700" }}>‹ Back</Text>
         </Pressable>
       ),
     });
-  }, [navigation, colors.primary]);
+  }, [navigation]);
 
   const onAnalyzeText = () => {
     const raw = input.trim();
@@ -142,7 +132,7 @@ export default function AddContentScreen({ navigation }: Props) {
         />
 
         <View style={styles.row}>
-          <Pressable onPress={onAnalyzeText} style={[styles.btn, { backgroundColor: colors.primary }]}>
+          <Pressable onPress={onAnalyzeText} style={[styles.btn, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
             <Text style={styles.btnPrimaryText}>Analyze Text/Link</Text>
           </Pressable>
           <Pressable onPress={pickScreenshot} style={[styles.btn, card, { borderColor: colors.border }]}>
@@ -156,14 +146,10 @@ export default function AddContentScreen({ navigation }: Props) {
             <View style={styles.row}>
               <Pressable
                 onPress={analyzeScreenshot}
-                style={[styles.btn, { backgroundColor: colors.primary }]}
+                style={[styles.btn, { backgroundColor: colors.primary, borderColor: colors.primary }]}
                 disabled={busy}
               >
-                {busy ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Text style={styles.btnPrimaryText}>Analyze Screenshot</Text>
-                )}
+                {busy ? <ActivityIndicator color="white" /> : <Text style={styles.btnPrimaryText}>Analyze Screenshot</Text>}
               </Pressable>
               <Pressable onPress={() => setImageUri(null)} style={styles.linkBtn}>
                 <Text style={{ color: "#c00", fontWeight: "600" }}>Remove screenshot</Text>
@@ -175,9 +161,7 @@ export default function AddContentScreen({ navigation }: Props) {
         {result && (
           <View style={[styles.panel, card, { borderColor: colors.border }]}>
             <Text style={[styles.cardTitle, text]}>Analysis</Text>
-            <Text style={[styles.cardInfo, text]}>
-              Score: {result.score} — {result.verdict} risk
-            </Text>
+            <Text style={[styles.cardInfo, text]}>Score: {result.score} — {result.verdict} risk</Text>
             <Text style={[styles.cardFlags, muted]}>
               Flags: {result.flags.length ? result.flags.join(", ") : "none"}
             </Text>
@@ -187,16 +171,11 @@ export default function AddContentScreen({ navigation }: Props) {
                 <Text style={styles.btnPrimaryText}>Save to Database</Text>
               </Pressable>
             )}
-
-            {autoSave && (
-              <Text style={[styles.autoNote, { color: colors.primary }]}>Saved automatically ✓</Text>
-            )}
+            {autoSave && <Text style={[styles.autoNote, { color: colors.primary }]}>Saved automatically ✓</Text>}
           </View>
         )}
 
-        <Text style={[styles.tip, muted]}>
-          Tip: LinkedIn/Indeed URL or raw message text both work.
-        </Text>
+        <Text style={[styles.tip, muted]}>Tip: LinkedIn/Indeed URL or raw message text both work.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
