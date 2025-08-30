@@ -8,6 +8,7 @@ import {
   Switch,
   Alert,
 } from "react-native";
+import { useHeaderHeight } from "@react-navigation/elements";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
 import * as DocumentPicker from "expo-document-picker";
@@ -15,41 +16,24 @@ import * as DocumentPicker from "expo-document-picker";
 import { useColors } from "../theme/useColors";
 import { useSettings } from "../SettingsProvider";
 import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
-import { goHome } from "../navigation/goTo";
 
-type Props = { navigation: any };
-
-export default function SettingsScreen({ navigation }: Props) {
-  const { colors, bg, card, text, muted } = useColors();
+export default function SettingsScreen() {
+  const headerHeight = useHeaderHeight(); // ✅ space under the stack header
+  const { colors, text, card, bg } = useColors();
   const { theme, setTheme, autoSave, setAutoSave, sensitivity, setSensitivity, reset } =
     useSettings();
   const { items, addMany } = useSavedItems();
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: "Settings",
-      headerLeft: () => (
-        <Pressable
-          onPress={() => goHome(navigation)}
-          hitSlop={10}
-          style={{ paddingHorizontal: 8, paddingVertical: 6 }}
-        >
-          <Text style={{ fontWeight: "700" }}>‹ Home</Text>
-        </Pressable>
-      ),
-    });
-  }, [navigation]);
-
-  const bump = (d: number) =>
-    setSensitivity(Math.max(0, Math.min(100, sensitivity + d)));
+  const bumpSensitivity = (delta: number) =>
+    setSensitivity(Math.max(0, Math.min(100, sensitivity + delta)));
 
   const exportData = async () => {
     try {
       const path = FileSystem.documentDirectory + "scamicide-backup.json";
       await FileSystem.writeAsStringAsync(path, JSON.stringify(items, null, 2));
       await Sharing.shareAsync(path);
-    } catch (e) {
-      Alert.alert("Export failed", String(e));
+    } catch (err) {
+      Alert.alert("Export failed", String(err));
     }
   };
 
@@ -70,44 +54,57 @@ export default function SettingsScreen({ navigation }: Props) {
         Array.isArray(x.flags) &&
         typeof x.createdAt === "number"
       );
-
       if (!cleaned.length) throw new Error("No valid records found");
-      addMany(cleaned);
-      Alert.alert("Import complete", `${cleaned.length} analyses imported.`);
+
+      // naive dedupe by id (keep existing)
+      const existing = new Set(items.map((i) => i.id));
+      const fresh = cleaned.filter((i) => !existing.has(i.id));
+      addMany(fresh);
+      Alert.alert(
+        "Import complete",
+        fresh.length === cleaned.length
+          ? `${fresh.length} analyses imported.`
+          : `${fresh.length} imported, ${cleaned.length - fresh.length} duplicates skipped.`
+      );
     } catch (e) {
       Alert.alert("Import failed", String(e));
     }
   };
 
   return (
-    <ScrollView style={[{ flex: 1 }, bg]} contentContainerStyle={{ padding: 16, gap: 16 }}>
+    <ScrollView
+      style={[{ flex: 1 }, bg]}
+      contentContainerStyle={[styles.scroll, { paddingTop: headerHeight + 8 }]} // ✅ push below header
+    >
       {/* Theme */}
       <View style={[styles.card, card]}>
         <Text style={[styles.cardTitle, text]}>Theme</Text>
         <View style={styles.row}>
           <Pressable
-            onPress={() => setTheme("light")}
             style={[
               styles.chip,
               card,
-              theme === "light" && { backgroundColor: colors.primary, borderColor: colors.primary },
+              theme === "light" && {
+                backgroundColor: colors.primary,
+                borderColor: colors.primary,
+              },
             ]}
+            onPress={() => setTheme("light")}
           >
-            <Text style={[styles.chipText, theme === "light" ? { color: "white" } : text]}>
-              Light
-            </Text>
+            <Text style={[styles.chipText, theme === "light" ? { color: "white" } : text]}>Light</Text>
           </Pressable>
           <Pressable
-            onPress={() => setTheme("dark")}
             style={[
               styles.chip,
               card,
-              theme === "dark" && { backgroundColor: colors.primary, borderColor: colors.primary },
+              theme === "dark" && {
+                backgroundColor: colors.primary,
+                borderColor: colors.primary,
+              },
             ]}
+            onPress={() => setTheme("dark")}
           >
-            <Text style={[styles.chipText, theme === "dark" ? { color: "white" } : text]}>
-              Dark
-            </Text>
+            <Text style={[styles.chipText, theme === "dark" ? { color: "white" } : text]}>Dark</Text>
           </Pressable>
         </View>
       </View>
@@ -123,12 +120,12 @@ export default function SettingsScreen({ navigation }: Props) {
         <Text style={[styles.cardTitle, text]}>Sensitivity: {sensitivity}</Text>
         <View style={styles.row}>
           {[-10, -1, +1, +10].map((d) => (
-            <Pressable key={d} style={[styles.chip, card]} onPress={() => bump(d)}>
+            <Pressable key={d} style={[styles.chip, card]} onPress={() => bumpSensitivity(d)}>
               <Text style={text}>{d > 0 ? `+${d}` : d}</Text>
             </Pressable>
           ))}
         </View>
-        <Text style={[styles.note, muted]}>
+        <Text style={[styles.note, text]}>
           Higher = stricter risk flagging (used by analyzers).
         </Text>
       </View>
@@ -148,7 +145,7 @@ export default function SettingsScreen({ navigation }: Props) {
 
       {/* Reset */}
       <Pressable
-        style={[styles.reset, { backgroundColor: "#f55" }]}
+        style={[styles.resetBtn]}
         onPress={() =>
           Alert.alert("Confirm reset", "Restore settings to defaults?", [
             { text: "Cancel", style: "cancel" },
@@ -156,20 +153,29 @@ export default function SettingsScreen({ navigation }: Props) {
           ])
         }
       >
-        <Text style={styles.btnText}>Reset to Defaults</Text>
+        <Text style={styles.resetText}>Reset to Defaults</Text>
       </Pressable>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 16, padding: 16, gap: 12 },
-  cardTitle: { fontSize: 16, fontWeight: "800" },
-  row: { flexDirection: "row", gap: 12, flexWrap: "wrap", alignItems: "center" },
+  scroll: { padding: 16, gap: 16, paddingBottom: 32 },
+  card: { padding: 16, borderRadius: 16, borderWidth: 1, borderColor: "rgba(0,0,0,0.08)", gap: 12 },
+  cardTitle: { fontSize: 18, fontWeight: "800", marginBottom: 4 },
+  row: { flexDirection: "row", gap: 12, alignItems: "center", flexWrap: "wrap" },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1 },
   chipText: { fontWeight: "700" },
-  note: { fontSize: 12 },
+  note: { fontSize: 12, opacity: 0.8 },
   btn: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10 },
   btnText: { color: "white", fontWeight: "700" },
-  reset: { paddingHorizontal: 14, paddingVertical: 14, borderRadius: 12, marginTop: 4, alignItems: "center" },
+  resetBtn: {
+    marginTop: 4,
+    marginHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#f55",
+    alignItems: "center",
+  },
+  resetText: { color: "white", fontWeight: "800" },
 });

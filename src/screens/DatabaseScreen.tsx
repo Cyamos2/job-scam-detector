@@ -1,24 +1,18 @@
 import React from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  FlatList,
-} from "react-native";
+import { View, Text, Pressable, StyleSheet, TextInput, FlatList } from "react-native";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { DatabaseStackParamList } from "../navigation/DatabaseStack";
 import { useColors } from "../theme/useColors";
 import { useSavedItems } from "../store/savedItems";
-import { goToAddContent } from "../navigation/goTo";
 
 type Props = NativeStackScreenProps<DatabaseStackParamList, "DatabaseMain">;
 
 export default function DatabaseScreen({ navigation }: Props) {
-  const { colors, bg, card, text, muted } = useColors();
+  const headerHeight = useHeaderHeight(); // ✅ space under header
+  const { colors, bg, card, text } = useColors();
   const { items, hydrated } = useSavedItems();
-  const [query, setQuery] = React.useState("");
+  const [q, setQ] = React.useState("");
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ headerTitle: "Database" });
@@ -26,81 +20,52 @@ export default function DatabaseScreen({ navigation }: Props) {
 
   if (!hydrated) return null;
 
-  const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((it) => {
-      const hay = `${it.title} ${it.flags.join(" ")} ${it.inputPreview}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [items, query]);
+  const filtered = items.filter((it) => {
+    if (!q.trim()) return true;
+    const hay = `${it.title} ${it.flags.join(" ")} ${it.inputPreview}`.toLowerCase();
+    return hay.includes(q.toLowerCase());
+  });
 
-  const renderItem = ({ item }: { item: (typeof items)[number] }) => (
-    <Pressable
-      onPress={() => navigation.navigate("ReportDetail", { id: item.id })}
-      style={[styles.row, card, { borderColor: colors.border }]}
-    >
-      <Text style={[styles.rowTitle, text]} numberOfLines={1}>
-        {item.title}
-      </Text>
-      <Text style={[styles.rowSub, muted]} numberOfLines={1}>
-        {item.verdict} • {item.score}
-      </Text>
-    </Pressable>
-  );
+  const goToAddContent = () =>
+    navigation.getParent()?.navigate("HomeTab" as never, { screen: "AddContent" } as never);
 
   return (
-    <View style={[styles.screen, bg]}>
-      {/* Search */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search title / flags / preview"
-          placeholderTextColor={muted.color as string}
-          style={[styles.search, card, { borderColor: colors.border }]}
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-      </View>
+    <View style={[styles.container, bg, { paddingTop: headerHeight + 8 }]}>
+      <TextInput
+        value={q}
+        onChangeText={setQ}
+        placeholder="Search title/flags/preview"
+        placeholderTextColor="#9aa0a6"
+        style={[styles.search, card, { borderColor: colors.border }]}
+      />
 
-      {/* Content */}
       {filtered.length === 0 ? (
-        <View style={[styles.emptyCardWrap]}>
-          <View style={[styles.emptyCard, card, { borderColor: colors.border }]}>
-            <Text style={[styles.emptyTitle, text]}>No saved analyses</Text>
-            {query ? (
-              <Text style={[styles.emptySub, muted]}>
-                No results for “{query}”.
-              </Text>
-            ) : (
-              <Text style={[styles.emptySub, muted]}>
-                Add your first analysis to get started.
-              </Text>
-            )}
-            <Pressable
-              onPress={() => goToAddContent(navigation)}
-              style={[styles.cta, { backgroundColor: colors.primary }]}
-            >
-              <Text style={styles.ctaText}>Add content</Text>
-            </Pressable>
-          </View>
+        <View style={styles.empty}>
+          <Text style={[styles.emptyText, text]}>No saved analyses yet.</Text>
+          <Pressable onPress={goToAddContent} style={[styles.cta, { backgroundColor: colors.primary }]}>
+            <Text style={styles.ctaText}>Add content</Text>
+          </Pressable>
         </View>
       ) : (
         <FlatList
           data={filtered}
           keyExtractor={(it) => it.id}
-          renderItem={renderItem}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 80 }}
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => navigation.navigate("ReportDetail", { id: item.id })}
+              style={[styles.row, card, { borderColor: colors.border }]}
+            >
+              <Text style={[styles.rowTitle, text]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[styles.rowSub, text]} numberOfLines={1}>
+                {item.verdict} · {item.score}
+              </Text>
+            </Pressable>
+          )}
         />
       )}
 
-      {/* FAB */}
-      <Pressable
-        onPress={() => goToAddContent(navigation)}
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-        hitSlop={10}
-      >
+      <Pressable onPress={goToAddContent} style={[styles.fab, { backgroundColor: colors.primary }]}>
         <Text style={styles.fabPlus}>＋</Text>
       </Pressable>
     </View>
@@ -108,27 +73,15 @@ export default function DatabaseScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  search: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  row: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
-  },
-  rowTitle: { fontSize: 16, fontWeight: "700" },
-  rowSub: { fontSize: 12 },
-  emptyCardWrap: { flex: 1, justifyContent: "center", padding: 16 },
-  emptyCard: { borderWidth: 1, borderRadius: 16, padding: 16, gap: 10 },
-  emptyTitle: { fontSize: 18, fontWeight: "800" },
-  emptySub: { fontSize: 14 },
-  cta: { marginTop: 4, paddingVertical: 12, borderRadius: 10, alignItems: "center" },
+  container: { flex: 1 },
+  search: { margin: 16, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
+  emptyText: { fontSize: 18 },
+  cta: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10 },
   ctaText: { color: "white", fontWeight: "700" },
+  row: { padding: 12, borderWidth: 1, borderRadius: 12, marginBottom: 12 },
+  rowTitle: { fontSize: 16, fontWeight: "700" },
+  rowSub: { fontSize: 12, opacity: 0.8 },
   fab: {
     position: "absolute",
     right: 20,
