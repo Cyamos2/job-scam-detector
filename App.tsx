@@ -1,23 +1,28 @@
-import React from "react";
-import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { GestureHandlerRootView } from "react-native-gesture-handler"; // ⬅️ add
-
+// App.tsx
+import * as React from "react";
+import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
 import RootNavigator from "./src/navigation/RootNavigator";
-import { SettingsProvider } from "./src/SettingsProvider";
+import { SettingsProvider, useSettings } from "./src/SettingsProvider";
 import { SavedItemsProvider } from "./src/store/savedItems";
+
+function Shell() {
+  // Read theme from Settings so nav theming follows Light/Dark
+  const { theme } = useSettings();
+  const navTheme = theme === "dark" ? DarkTheme : DefaultTheme;
+
+  return (
+    <NavigationContainer theme={navTheme}>
+      <RootNavigator />
+    </NavigationContainer>
+  );
+}
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>{/* ⬅️ wrap once */}
-      <SafeAreaProvider>
-        <SettingsProvider>
-          <SavedItemsProvider>
-            <RootNavigator />
-            <StatusBar style="auto" />
-          </SavedItemsProvider>
-        </SettingsProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <SettingsProvider>
+      <SavedItemsProvider>
+        <Shell />
+      </SavedItemsProvider>
+    </SettingsProvider>
   );
 }

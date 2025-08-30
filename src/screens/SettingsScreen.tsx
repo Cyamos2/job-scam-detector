@@ -32,18 +32,18 @@ export default function SettingsScreen({ navigation }: Props) {
   } = useSettings();
   const { items, addMany } = useSavedItems();
 
+  // ✅ Robust "‹ Home" handler: switch the parent tab only
   const goHome = React.useCallback(() => {
     const parent = navigation.getParent?.();
     if (parent) {
-      // Bottom tab navigator
-      (parent as any).navigate("HomeTab", { screen: "HomeMain" });
+      (parent as any).navigate("HomeTab"); // don't target a nested route
     } else {
-      // Fallback: if we’re already in the Home stack
-      navigation.navigate("HomeMain" as never);
+      // last-resort: back if possible
+      if (navigation.canGoBack?.()) navigation.goBack();
     }
   }, [navigation]);
 
-  // Header (re-run when theme/colors change so the header matches)
+  // ✅ Make sure header re-renders when theme/colors change
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerShown: true,
@@ -52,15 +52,14 @@ export default function SettingsScreen({ navigation }: Props) {
       headerLeft: () => (
         <Pressable
           onPress={goHome}
-          accessibilityRole="button"
           hitSlop={10}
-          style={{ paddingHorizontal: 8, paddingVertical: 6, flexDirection: "row", alignItems: "center" }}
+          style={{ paddingHorizontal: 8, paddingVertical: 6 }}
         >
           <Text style={{ fontWeight: "700" }}>‹ Home</Text>
         </Pressable>
       ),
     });
-  }, [navigation, goHome, colors.text, theme]);
+  }, [navigation, goHome, theme, colors]);
 
   const bumpSensitivity = (delta: number) =>
     setSensitivity(Math.max(0, Math.min(100, sensitivity + delta)));
@@ -86,9 +85,7 @@ export default function SettingsScreen({ navigation }: Props) {
       const raw = await FileSystem.readAsStringAsync(uri);
       const parsed = JSON.parse(raw) as unknown;
 
-      if (!Array.isArray(parsed)) {
-        throw new Error("Invalid backup format (expected an array).");
-      }
+      if (!Array.isArray(parsed)) throw new Error("Invalid backup format (expected an array).");
 
       const incoming: SavedAnalysis[] = parsed.filter((x: any) =>
         x &&
@@ -135,7 +132,6 @@ export default function SettingsScreen({ navigation }: Props) {
       <View style={styles.row}>
         <Pressable
           onPress={() => setTheme("light")}
-          accessibilityRole="button"
           style={[
             styles.chip,
             card,
@@ -152,7 +148,6 @@ export default function SettingsScreen({ navigation }: Props) {
 
         <Pressable
           onPress={() => setTheme("dark")}
-          accessibilityRole="button"
           style={[
             styles.chip,
             card,
