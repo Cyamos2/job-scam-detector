@@ -12,7 +12,7 @@ export type TabsParamList = {
 
 const Tab = createBottomTabNavigator<TabsParamList>();
 
-export default function RootNavigator(): JSX.Element {
+export default function RootNavigator(): React.ReactElement {
   return (
     <Tab.Navigator screenOptions={{ headerTitleAlign: "center" }}>
       <Tab.Screen name="HomeTab" component={HomeStack} options={{ title: "Home" }} />

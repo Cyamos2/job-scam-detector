@@ -1,9 +1,9 @@
 import type { NavigationProp } from "@react-navigation/native";
 
 export function goToAddContent(navigation: NavigationProp<any>) {
-  const parent = (navigation as any).getParent?.();
+  const parent: any = (navigation as any).getParent?.();
   if (parent?.navigate) {
-    (parent as any).navigate("HomeTab", { screen: "AddContent" });
+    parent.navigate("HomeTab", { screen: "AddContent" });
   } else {
     (navigation as any).navigate("AddContent");
   }

@@ -5,6 +5,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { DatabaseStackParamList } from "../navigation/DatabaseStack";
 import { useColors } from "../theme/useColors";
 import { useSavedItems } from "../store/savedItems";
+import { goToAddContent } from "../navigation/goTo";
 
 type Props = NativeStackScreenProps<DatabaseStackParamList, "DatabaseMain">;
 
@@ -25,9 +26,6 @@ export default function DatabaseScreen({ navigation }: Props) {
     return hay.includes(q.toLowerCase());
   });
 
-  const goToAddContent = () =>
-    navigation.getParent()?.navigate("HomeTab" as never, { screen: "AddContent" } as never);
-
   return (
     <View style={[styles.container, bg]}>
       <TextInput
@@ -41,7 +39,10 @@ export default function DatabaseScreen({ navigation }: Props) {
       {filtered.length === 0 ? (
         <View style={styles.empty}>
           <Text style={[styles.emptyText, text]}>No saved analyses yet.</Text>
-          <Pressable onPress={goToAddContent} style={[styles.cta, { backgroundColor: colors.primary }]}>
+          <Pressable
+            onPress={() => goToAddContent(navigation)}
+            style={[styles.cta, { backgroundColor: colors.primary }]}
+          >
             <Text style={styles.ctaText}>Add content</Text>
           </Pressable>
         </View>
@@ -55,14 +56,22 @@ export default function DatabaseScreen({ navigation }: Props) {
               onPress={() => navigation.navigate("ReportDetail", { id: item.id })}
               style={[styles.row, card, { borderColor: colors.border }]}
             >
-              <Text style={[styles.rowTitle, text]} numberOfLines={1}>{item.title}</Text>
-              <Text style={[styles.rowSub, text]} numberOfLines={1}>{item.verdict} · {item.score}</Text>
+              <Text style={[styles.rowTitle, text]} numberOfLines={1}>
+                {item.title}
+              </Text>
+              <Text style={[styles.rowSub, text]} numberOfLines={1}>
+                {item.verdict} · {item.score}
+              </Text>
             </Pressable>
           )}
         />
       )}
 
-      <Pressable onPress={goToAddContent} style={[styles.fab, { backgroundColor: colors.primary }]}>
+      <Pressable
+        onPress={() => goToAddContent(navigation)}
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        accessibilityLabel="Add to Database"
+      >
         <Text style={styles.fabPlus}>＋</Text>
       </Pressable>
     </View>
@@ -80,8 +89,15 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 16, fontWeight: "700" },
   rowSub: { fontSize: 12, opacity: 0.8 },
   fab: {
-    position: "absolute", right: 20, bottom: 28, width: 60, height: 60, borderRadius: 30,
-    alignItems: "center", justifyContent: "center", elevation: 6,
+    position: "absolute",
+    right: 20,
+    bottom: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 6,
   },
   fabPlus: { color: "white", fontSize: 30, lineHeight: 30, fontWeight: "700" },
 });
