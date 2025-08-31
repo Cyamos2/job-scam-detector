@@ -1,15 +1,12 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet, TextInput, FlatList } from "react-native";
-import { useHeaderHeight } from "@react-navigation/elements";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { DatabaseStackParamList } from "../navigation/DatabaseStack";
 import { useColors } from "../theme/useColors";
 import { useSavedItems } from "../store/savedItems";
+import { goToAddContent } from "../navigation/goTo";
 
-type Props = NativeStackScreenProps<DatabaseStackParamList, "DatabaseMain">;
+type Props = { navigation: any };
 
 export default function DatabaseScreen({ navigation }: Props) {
-  const headerHeight = useHeaderHeight(); // ✅ space under header
   const { colors, bg, card, text } = useColors();
   const { items, hydrated } = useSavedItems();
   const [q, setQ] = React.useState("");
@@ -22,15 +19,12 @@ export default function DatabaseScreen({ navigation }: Props) {
 
   const filtered = items.filter((it) => {
     if (!q.trim()) return true;
-    const hay = `${it.title} ${it.flags.join(" ")} ${it.inputPreview}`.toLowerCase();
+    const hay = `${it.title} ${it.flags.join(" ")} ${it.inputPreview ?? ""}`.toLowerCase();
     return hay.includes(q.toLowerCase());
   });
 
-  const goToAddContent = () =>
-    navigation.getParent()?.navigate("HomeTab" as never, { screen: "AddContent" } as never);
-
   return (
-    <View style={[styles.container, bg, { paddingTop: headerHeight + 8 }]}>
+    <View style={[styles.container, bg]}>
       <TextInput
         value={q}
         onChangeText={setQ}
@@ -41,8 +35,13 @@ export default function DatabaseScreen({ navigation }: Props) {
 
       {filtered.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={[styles.emptyText, text]}>No saved analyses yet.</Text>
-          <Pressable onPress={goToAddContent} style={[styles.cta, { backgroundColor: colors.primary }]}>
+          <Text style={[styles.emptyText, text]}>
+            {q.trim() ? "No results match your search." : "No saved analyses yet."}
+          </Text>
+          <Pressable
+            onPress={() => goToAddContent(navigation)}
+            style={[styles.cta, { backgroundColor: colors.primary }]}
+          >
             <Text style={styles.ctaText}>Add content</Text>
           </Pressable>
         </View>
@@ -50,13 +49,15 @@ export default function DatabaseScreen({ navigation }: Props) {
         <FlatList
           data={filtered}
           keyExtractor={(it) => it.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 80 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
           renderItem={({ item }) => (
             <Pressable
-              onPress={() => navigation.navigate("ReportDetail", { id: item.id })}
+              onPress={() => navigation.navigate("ReportDetail" as never, { id: item.id } as never)}
               style={[styles.row, card, { borderColor: colors.border }]}
             >
-              <Text style={[styles.rowTitle, text]} numberOfLines={1}>{item.title}</Text>
+              <Text style={[styles.rowTitle, text]} numberOfLines={1}>
+                {item.title}
+              </Text>
               <Text style={[styles.rowSub, text]} numberOfLines={1}>
                 {item.verdict} · {item.score}
               </Text>
@@ -65,7 +66,11 @@ export default function DatabaseScreen({ navigation }: Props) {
         />
       )}
 
-      <Pressable onPress={goToAddContent} style={[styles.fab, { backgroundColor: colors.primary }]}>
+      <Pressable
+        onPress={() => goToAddContent(navigation)}
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        accessibilityLabel="Add content"
+      >
         <Text style={styles.fabPlus}>＋</Text>
       </Pressable>
     </View>

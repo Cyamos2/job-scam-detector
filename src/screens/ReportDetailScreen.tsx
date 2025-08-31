@@ -1,80 +1,107 @@
+// src/screens/ReportDetailScreen.tsx
 import React from "react";
 import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from "react-native";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { DatabaseStackParamList } from "../navigation/DatabaseStack";
-import { useSavedItems } from "../store/savedItems";
+import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system";
 import { useColors } from "../theme/useColors";
+import { useSavedItems } from "../store/savedItems";
 
-type Props = NativeStackScreenProps<DatabaseStackParamList, "ReportDetail">;
+type Props = { navigation: any; route: { params: { id: string } } };
 
 export default function ReportDetailScreen({ navigation, route }: Props) {
-  const { id } = route.params;
-  const { items, remove } = useSavedItems();
   const { colors, bg, card, text, muted } = useColors();
+  const { items } = useSavedItems();
+  const item = items.find((i) => i.id === route.params.id);
 
-  const item = items.find((x) => x.id === id);
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerTitle: "Report",
+      headerLeft: () => (
+        <Pressable onPress={() => navigation.goBack()} hitSlop={10} style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+          <Text style={{ color: colors.primary, fontWeight: "700" }}>‹ Back</Text>
+        </Pressable>
+      ),
+    });
+  }, [navigation, colors.primary]);
 
   if (!item) {
     return (
       <View style={[styles.center, bg]}>
-        <Text style={text}>Report not found.</Text>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <Text style={text}>This report no longer exists.</Text>
+        <Pressable onPress={() => navigation.goBack()} style={{ padding: 10 }}>
           <Text style={{ color: colors.primary, fontWeight: "700" }}>Go back</Text>
         </Pressable>
       </View>
     );
   }
 
-  const onDelete = () =>
-    Alert.alert("Delete", "Remove this report?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          remove(item.id);
-          navigation.goBack();
-        },
-      },
-    ]);
+  const shareOne = async () => {
+    try {
+      const body = [
+        `Scamicide report: ${item.title}`,
+        `Created: ${new Date(item.createdAt).toLocaleString()}`,
+        `Risk: ${item.verdict} (${item.score})`,
+        item.flags.length ? `Flags: ${item.flags.join(", ")}` : "",
+        item.inputPreview ? `Preview: ${item.inputPreview}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const path = `${FileSystem.cacheDirectory}report-${item.id}.txt`;
+      await FileSystem.writeAsStringAsync(path, body, { encoding: FileSystem.EncodingType.UTF8 });
+
+      await Sharing.shareAsync(path, {
+        mimeType: "text/plain",
+        UTI: "public.plain-text",
+        dialogTitle: "Share report",
+      } as any);
+      
+      // optional cleanup
+      try { await FileSystem.deleteAsync(path, { idempotent: true }); } catch {}
+    } catch (e) {
+      Alert.alert("Share failed", String(e));
+    }
+  };
 
   return (
-    <ScrollView style={[{ flex: 1 }, bg]} contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <View style={[styles.panel, card, { borderColor: colors.border }]}>
-        <Text style={[styles.big, text]} numberOfLines={2}>
-          {item.title}
+    <ScrollView style={bg} contentContainerStyle={styles.scroll}>
+      <View style={[styles.card, card, { borderColor: colors.border }]}>
+        <Text style={[styles.title, text]}>{item.title}</Text>
+        <Text style={[styles.sub, text]}>{new Date(item.createdAt).toLocaleString()}</Text>
+
+        <Text style={[styles.row, text]}>
+          Score: <Text style={{ fontWeight: "800" }}>{item.score}</Text> — {item.verdict} risk
         </Text>
-        <Text style={muted}>{new Date(item.createdAt).toLocaleString()}</Text>
-      </View>
+        <Text style={[styles.row, muted]}>
+          Flags: {item.flags.length ? item.flags.join(", ") : "none"}
+        </Text>
 
-      <View style={[styles.panel, card, { borderColor: colors.border }]}>
-        <Text style={[styles.label, text]}>Score: {item.score}</Text>
-        <Text style={[styles.label, text]}>Risk: {item.verdict}</Text>
-        <Text style={muted}>Flags: {item.flags?.join(", ") || "none"}</Text>
-      </View>
+        {item.inputPreview ? (
+          <Text style={[styles.preview, text]}>{item.inputPreview}</Text>
+        ) : null}
 
-      <View style={[styles.panel, card, { borderColor: colors.border }]}>
-        <Text style={[styles.label, text]}>Input Preview</Text>
-        <Text style={text}>{item.inputPreview}</Text>
-      </View>
-
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        <Pressable onPress={() => navigation.goBack()} style={[styles.btn, card]}>
-          <Text style={text}>Back</Text>
-        </Pressable>
-        <Pressable onPress={onDelete} style={[styles.btn, { backgroundColor: "#f55" }]}>
-          <Text style={{ color: "white", fontWeight: "700" }}>Delete</Text>
-        </Pressable>
+        <View style={styles.rowBtns}>
+          <Pressable onPress={shareOne} style={[styles.btn, { backgroundColor: colors.primary }]}>
+            <Text style={styles.btnText}>Share</Text>
+          </Pressable>
+          <Pressable onPress={() => navigation.goBack()} style={[styles.btn, card, { borderColor: colors.border }]}>
+            <Text style={text}>Close</Text>
+          </Pressable>
+        </View>
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
-  backBtn: { paddingHorizontal: 12, paddingVertical: 8 },
-  panel: { padding: 12, borderRadius: 12, borderWidth: 1, gap: 6 },
-  big: { fontSize: 22, fontWeight: "800" },
-  label: { fontWeight: "700" },
-  btn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
+  scroll: { padding: 16, paddingBottom: 32 },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  card: { padding: 16, borderRadius: 12, borderWidth: 1, gap: 8 },
+  title: { fontSize: 18, fontWeight: "800" },
+  sub: { fontSize: 12, opacity: 0.7 },
+  row: { fontSize: 14 },
+  preview: { marginTop: 6, fontSize: 13, opacity: 0.85 },
+  rowBtns: { flexDirection: "row", gap: 10, marginTop: 8 },
+  btn: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, borderWidth: 1 },
+  btnText: { color: "white", fontWeight: "700" },
 });
