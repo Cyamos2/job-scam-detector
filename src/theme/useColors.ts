@@ -1,49 +1,57 @@
-// src/theme/useColors.ts
-import { useTheme } from "@react-navigation/native";
+import { useMemo } from "react";
+import { useSettings } from "../SettingsProvider";
 
-/**
- * Central color tokens + ready-to-use style shorthands.
- * Every screen should pull colors/text/bg/card from here.
- */
-export function useColors() {
-  const navTheme = useTheme(); // { dark, colors: { primary, background, card, text, border, notification } }
-
-  // You can tune these two palettes freely
-  const palette = navTheme.dark
-    ? {
-        primary: navTheme.colors.primary, // keep whatever you set in NavigationContainer
-        background: "#000000",
-        card: "#121212",
-        text: "#FFFFFF",
-        border: "#2A2A2A",
-        notification: "#FF453A",
-        muted: "#9AA0A6",
-      }
-    : {
-        primary: navTheme.colors.primary,
-        background: "#FFFFFF",
-        card: "#F2F2F7",
-        text: "#111111",
-        border: "#E0E0E6",
-        notification: "#FF453A",
-        muted: "#6B7280",
-      };
-
-  const colors = {
-    primary: palette.primary,
-    background: palette.background,
-    card: palette.card,
-    text: palette.text,
-    border: palette.border,
-    notification: palette.notification,
-    muted: palette.muted, // <- handy for placeholders/secondary text
+type NavTheme = {
+  dark: boolean;
+  colors: {
+    primary: string;
+    background: string;
+    card: string;
+    border: string;
+    text: string;
+    notification: string;
   };
+};
 
-  // ready-to-use style shorthands
-  const bg = { backgroundColor: colors.background };
-  const card = { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1 };
-  const text = { color: colors.text };
-  const muted = { color: colors.muted };
+const light: NavTheme = {
+  dark: false,
+  colors: {
+    primary: "#2563eb",
+    background: "#ffffff",
+    card: "#f5f6fb",
+    border: "#e5e7eb",
+    text: "#111827",
+    notification: "#2563eb",
+  },
+};
 
-  return { theme: navTheme, colors, bg, card, text, muted };
+const dark: NavTheme = {
+  dark: true,
+  colors: {
+    primary: "#3b82f6",
+    background: "#0b0b0f",
+    card: "#121218",
+    border: "#2a2a33",
+    text: "#f3f4f6",
+    notification: "#3b82f6",
+  },
+};
+
+export function useColors() {
+  const { theme } = useSettings();
+  const t = theme === "dark" ? dark : light;
+
+  const mutedColor = theme === "dark" ? "#9aa0a6" : "#6b7280";
+
+  const helpers = useMemo(
+    () => ({
+      bg: { backgroundColor: t.colors.background },
+      card: { backgroundColor: t.colors.card, borderColor: t.colors.border },
+      text: { color: t.colors.text },
+      muted: { color: mutedColor },
+    }),
+    [t, mutedColor]
+  );
+
+  return { theme, ...t, colors: t.colors, ...helpers };
 }

@@ -1,47 +1,99 @@
-// src/SettingsProvider.tsx
-import React, { createContext, useContext, useMemo, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type ThemeName = "light" | "dark";
+export type VerdictFilter = "All" | "Low" | "Medium" | "High";
+export type SortOrder = "Newest" | "Oldest";
+
+type DbPrefs = {
+  search: string;
+  filter: VerdictFilter;
+  sort: SortOrder;
+};
+
+type Settings = {
+  theme: ThemeName;
+  autoSave: boolean;
+  sensitivity: number; // 0–100
+  dbPrefs: DbPrefs;
+};
 
 type Ctx = {
+  settings: Settings;
+  hydrated: boolean;
+  // handy top-level fields for convenience
   theme: ThemeName;
-  setTheme: (t: ThemeName) => void;
   autoSave: boolean;
+  sensitivity: number;
+
+  setTheme: (t: ThemeName) => void;
   setAutoSave: (v: boolean) => void;
-  sensitivity: number; // 0..100
   setSensitivity: (n: number) => void;
+
+  setDbPrefs: (patch: Partial<DbPrefs>) => void;
   reset: () => void;
 };
 
-const SettingsCtx = createContext<Ctx | undefined>(undefined);
-
-const DEFAULTS = {
-  theme: "light" as ThemeName,
+const DEFAULTS: Settings = {
+  theme: "light",
   autoSave: false,
   sensitivity: 50,
+  dbPrefs: { search: "", filter: "All", sort: "Newest" },
 };
 
-export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<ThemeName>(DEFAULTS.theme);
-  const [autoSave, setAutoSave] = useState<boolean>(DEFAULTS.autoSave);
-  const [sensitivity, setSensitivity] = useState<number>(DEFAULTS.sensitivity);
+const KEY = "app:settings:v1";
+const CTX = createContext<Ctx | null>(null);
 
-  const reset = useCallback(() => {
-    setTheme(DEFAULTS.theme);
-    setAutoSave(DEFAULTS.autoSave);
-    setSensitivity(DEFAULTS.sensitivity);
+export function SettingsProvider({ children }: { children: React.ReactNode }) {
+  const [settings, setSettings] = useState<Settings>(DEFAULTS);
+  const [hydrated, setHydrated] = useState(false);
+
+  // hydrate once
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<Settings>;
+          setSettings({ ...DEFAULTS, ...parsed });
+        }
+      } finally {
+        setHydrated(true);
+      }
+    })();
   }, []);
 
-  const value = useMemo<Ctx>(
-    () => ({ theme, setTheme, autoSave, setAutoSave, sensitivity, setSensitivity, reset }),
-    [theme, autoSave, sensitivity, reset]
-  );
+  // persist on change (after hydration)
+  useEffect(() => {
+    if (!hydrated) return;
+    AsyncStorage.setItem(KEY, JSON.stringify(settings)).catch(() => {});
+  }, [settings, hydrated]);
 
-  return <SettingsCtx.Provider value={value}>{children}</SettingsCtx.Provider>;
-};
+  const api = useMemo<Ctx>(() => {
+    const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+    return {
+      settings,
+      hydrated,
+      theme: settings.theme,
+      autoSave: settings.autoSave,
+      sensitivity: settings.sensitivity,
 
-export function useSettings(): Ctx {
-  const v = useContext(SettingsCtx);
-  if (!v) throw new Error("useSettings must be used within SettingsProvider");
-  return v;
+      setTheme: (t) => setSettings((s) => (s.theme === t ? s : { ...s, theme: t })),
+      setAutoSave: (v) => setSettings((s) => ({ ...s, autoSave: v })),
+      setSensitivity: (n) => setSettings((s) => ({ ...s, sensitivity: clamp(n) })),
+
+      setDbPrefs: (patch) =>
+        setSettings((s) => ({ ...s, dbPrefs: { ...s.dbPrefs, ...patch } })),
+
+      reset: () => setSettings(DEFAULTS),
+    };
+  }, [settings, hydrated]);
+
+  return <CTX.Provider value={api}>{children}</CTX.Provider>;
+}
+
+export function useSettings() {
+  const ctx = useContext(CTX);
+  if (!ctx) throw new Error("useSettings must be used within SettingsProvider");
+  return ctx;
 }
