@@ -1,0 +1,6 @@
+title,company,url,email,source,risk,score,notes,imageUris
+"Remote Data Entry","Acme LLC","https://acme.example","","LinkedIn","LOW",12,"legit",""
+"Day Rate Helper","Weird Co","","hiring@gmail.com","Indeed","HIGH",82,"$300–$700/day + WhatsApp","https://picsum.photos/seed/job1a/600;https://picsum.photos/seed/job1b/600"
+"Payroll Assistant","Fakester Ltd","http://fakester.top","","Indeed","HIGH",73,"non-corp email + odd TLD",""
+"Onboarding Trainee","Daily Pay Partners","","textme@outlook.com","LinkedIn","MEDIUM",55,"mentions training + daily pay","https://picsum.photos/seed/job2/600"
+"Operations Intern","BrightFuture Inc","https://brightfuture.io","","Referral","LOW",10,"benign listing",""

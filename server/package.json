@@ -10,7 +10,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "seed": "tsx src/seed/seed.ts"
+    "seed": "tsx ./src/seed/seed.ts",
+    "reset:db": "prisma migrate reset --force && tsx ./src/seed/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

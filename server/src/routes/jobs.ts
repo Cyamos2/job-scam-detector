@@ -1,15 +1,31 @@
 import { Router } from "express";
-import { prisma } from "../prisma";  // using named export from prisma.ts
+import { prisma } from "../prisma";
 
 const router = Router();
 
-// GET /jobs → list all jobs
-router.get("/", async (_req, res) => {
+// GET /jobs?risk=LOW|MEDIUM|HIGH&search=text
+router.get("/", async (req, res) => {
   try {
+    const { risk, search } = req.query as { risk?: string; search?: string };
+    const where: any = {};
+
+    if (risk && ["LOW", "MEDIUM", "HIGH"].includes(risk.toUpperCase())) {
+      where.risk = risk.toUpperCase();
+    }
+
+    if (search && search.trim()) {
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { company: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
     const jobs = await prisma.job.findMany({
+      where,
       include: { images: true },
       orderBy: { createdAt: "desc" },
     });
+
     res.json(jobs);
   } catch (err) {
     console.error("[ERROR] GET /jobs:", err);
@@ -17,7 +33,7 @@ router.get("/", async (_req, res) => {
   }
 });
 
-// GET /jobs/:id → get a single job
+// GET /jobs/:id → single job
 router.get("/:id", async (req, res) => {
   try {
     const job = await prisma.job.findUnique({
@@ -32,12 +48,10 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// POST /jobs → create a job
+// POST /jobs → create job
 router.post("/", async (req, res) => {
   try {
-    const { title, company, url, email, source, risk, score, notes, images } =
-      req.body;
-
+    const { title, company, url, email, source, risk, score, notes, images } = req.body;
     const job = await prisma.job.create({
       data: {
         title,
@@ -45,16 +59,13 @@ router.post("/", async (req, res) => {
         url,
         email,
         source,
-        risk,
-        score,
+        risk: risk?.toUpperCase() ?? "LOW",
+        score: score ?? 0,
         notes,
-        images: {
-          create: (images || []).map((uri: string) => ({ uri })),
-        },
+        images: { create: (images ?? []).map((uri: string) => ({ uri })) },
       },
       include: { images: true },
     });
-
     res.status(201).json(job);
   } catch (err) {
     console.error("[ERROR] POST /jobs:", err);
@@ -62,11 +73,11 @@ router.post("/", async (req, res) => {
   }
 });
 
-// DELETE /jobs → bulk delete
+// DELETE /jobs → bulk delete { ids: string[] }
 router.delete("/", async (req, res) => {
   try {
-    const { ids } = req.body as { ids: string[] };
-    if (!ids?.length) {
+    const ids = (req.body?.ids ?? []) as string[];
+    if (!ids.length) {
       return res.status(400).json({ error: "No IDs provided" });
     }
 
