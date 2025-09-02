@@ -8,22 +8,22 @@ generator client {
 }
 
 model Job {
-  id        String   @id @default(cuid())
-  title     String
-  company   String
-  url       String?
-  email     String?
-  source    String?
-  risk      String   @default("LOW")  // "LOW" | "MEDIUM" | "HIGH" (enforced in app code)
-  score     Int      @default(0)
-  createdAt DateTime @default(now())
-  images    Image[]
-  notes     String?
+  id         String   @id @default(cuid())
+  title      String
+  company    String
+  risk       String   @default("LOW") // keep string (SQLite friendly)
+  score      Int      @default(0)
+  source     String?
+  url        String?
+  email      String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  images     Image[]
 }
 
 model Image {
-  id    String @id @default(cuid())
-  jobId String
-  uri   String
-  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  uri    String
+  jobId  String
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade) // <= important
 }

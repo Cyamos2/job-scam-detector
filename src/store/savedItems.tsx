@@ -1,100 +1,52 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as React from "react";
 
 export type SavedAnalysis = {
   id: string;
   title: string;
-  source: "text" | "image";
-  inputPreview?: string | null;
+  source: string; // "text" | "image" | etc.
+  inputPreview?: string;
   imageUri?: string | null;
   score: number;
-  verdict: "Low" | "Medium" | "High";
+  verdict: "LOW" | "MEDIUM" | "HIGH" | string;
   flags: string[];
-  createdAt: number;
-  notes?: string; // ⬅️ new (optional) – used by ReportDetailScreen inline editor
+  createdAt: number; // ms since epoch
 };
 
-type SavedItemsContextType = {
+type Ctx = {
   items: SavedAnalysis[];
-  hydrated: boolean;
-
   add: (item: SavedAnalysis) => void;
-  addMany: (items: SavedAnalysis[]) => void; // ← needed for Import
-  update: (id: string, partial: Partial<SavedAnalysis>) => void;
-
+  update: (id: string, patch: Partial<SavedAnalysis>) => void;
   remove: (id: string) => void;
-  clearAll: () => void;
+  clear: () => void;
 };
 
-const STORAGE_KEY = "@job-scam-detector/saved-items:v1";
-const CTX = createContext<SavedItemsContextType | undefined>(undefined);
+const CTX = React.createContext<Ctx | null>(null);
 
 export function SavedItemsProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<SavedAnalysis[]>([]);
-  const [hydrated, setHydrated] = useState(false);
+  const [items, setItems] = React.useState<SavedAnalysis[]>([]);
 
-  // Hydrate from storage
-  useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed: unknown = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            // light validation
-            const safe = parsed.filter(
-              (x) => x && typeof x.id === "string" && typeof x.createdAt === "number"
-            ) as SavedAnalysis[];
-            setItems(safe);
-          }
-        }
-      } catch {}
-      setHydrated(true);
-    })();
+  const add = React.useCallback((item: SavedAnalysis) => {
+    setItems((prev) => [item, ...prev]);
   }, []);
 
-  // Persist when hydrated
-  useEffect(() => {
-    if (!hydrated) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items)).catch(() => {});
-  }, [items, hydrated]);
+  const update = React.useCallback((id: string, patch: Partial<SavedAnalysis>) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  }, []);
 
-  const add = (item: SavedAnalysis) => {
-    setItems((prev) => [item, ...prev]);
-  };
+  const remove = React.useCallback((id: string) => {
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  }, []);
 
-  const addMany = (incoming: SavedAnalysis[]) => {
-    setItems((prev) => {
-      const map = new Map<string, SavedAnalysis>(prev.map((i) => [i.id, i]));
-      for (const x of incoming) {
-        if (!x || typeof x.id !== "string") continue;
-        if (!map.has(x.id)) map.set(x.id, x);
-      }
-      // newest first
-      return Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
-    });
-  };
+  const clear = React.useCallback(() => setItems([]), []);
 
-  const update = (id: string, partial: Partial<SavedAnalysis>) => {
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...partial } : x)));
-  };
-
-  const remove = (id: string) => {
-    setItems((prev) => prev.filter((x) => x.id !== id));
-  };
-
-  const clearAll = () => setItems([]);
-
-  const value = useMemo<SavedItemsContextType>(
-    () => ({ items, hydrated, add, addMany, update, remove, clearAll }),
-    [items, hydrated]
-  );
+  const value = React.useMemo<Ctx>(() => ({ items, add, update, remove, clear }), [items, add, update, remove, clear]);
 
   return <CTX.Provider value={value}>{children}</CTX.Provider>;
 }
 
-export function useSavedItems() {
-  const ctx = useContext(CTX);
+/** Hook to access saved items (throws if provider missing) */
+export function useSavedItems(): Ctx {
+  const ctx = React.useContext(CTX);
   if (!ctx) throw new Error("useSavedItems must be used within SavedItemsProvider");
   return ctx;
 }

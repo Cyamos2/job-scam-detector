@@ -1,25 +1,10 @@
 {
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "esnext",
-    "moduleResolution": "node",
-    "jsx": "react-native",
-    "strict": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
     "baseUrl": ".",
-    "paths": {
-      "@/*": [
-        "src/*"
-      ]
-    }
+    "paths": { "@/*": ["src/*"] },
+    "noEmit": true
   },
-  "include": [
-    "src",
-    "App.tsx"
-  ],
-  "extends": "expo/tsconfig.base"
+  "include": ["App.tsx", "src", "index.ts", "index.tsx"],
+  "exclude": ["server", "node_modules"]
 }

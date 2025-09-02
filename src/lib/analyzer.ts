@@ -1,100 +1,56 @@
 // src/lib/analyzer.ts
-export type AnalysisResult = {
-  score: number; // 0..100
-  verdict: "Low" | "Medium" | "High";
-  flags: string[];
+export type Verdict = "LOW" | "MEDIUM" | "HIGH";
+export type AnalysisResult = { score: number; verdict: Verdict; flags: string[] };
+
+// Heavier weights for the Sprint 2 acceptance list
+const WEIGHTS: Record<string, number> = {
+  "300-700/day": 30,
+  "60-90min training": 20,
+  "paid daily": 18,
+  "guaranteed monthly": 18,
+  "phone/whatsapp": 16,
+  "fee request": 24,
+  "crypto/gift cards": 28,
+  "non-corp email": 14,
+  "weird domain": 12,
+  // extra signals
+  "too-easy remote work": 8,
+  "age requirement": 6,
 };
 
-/**
- * Heuristic analyzer (local, no network).
- * - Looks for well-known scam patterns
- * - Sums weighted signals -> 0..100
- * - Applies "sensitivity" (0=very lenient, 100=very strict) to verdict thresholds
- */
-export function analyzeTextLocal(raw: string, sensitivity = 50): AnalysisResult {
-  const text = (raw || "").toLowerCase();
+// Helpers
+const has = (t: string, re: RegExp) => re.test(t);
 
-  // ---------- weighted patterns ----------
-  const rules: Array<{ re: RegExp; weight: number; label: string }> = [
-    // contact over chat apps
-    { re: /\b(whats\s*app|whatsapp|telegram|signal)\b/, weight: 22, label: "chat-app contact" },
+export function analyzeTextLocal(raw: string, sensitivity: number): AnalysisResult {
+  const t = (raw || "").toLowerCase();
 
-    // gift cards / crypto / wires
-    { re: /\bgift\s*card(s)?\b|\b(apple|steam|google)\s*card(s)?\b/, weight: 34, label: "gift card payment" },
-    { re: /\b(crypto|bitcoin|btc|usdt|binance)\b/, weight: 22, label: "crypto payment" },
-    { re: /\b(wire\s*transfer|western\s*union|money\s*gram|moneygram)\b/, weight: 18, label: "wire transfer" },
-
-    // unrealistic pay and guarantees
-    { re: /\b(?:us?\$|\$)\s?\d{3,}\s*(?:per|\/)\s*(?:day|hour)\b/, weight: 30, label: "high daily/hourly pay" },
-    { re: /\b(?:us?\$|\$)\s?10[,.]?0{3,}\b.*\b(month|monthly)\b/, weight: 26, label: "guaranteed monthly income" },
-    { re: /\bpaid\s+daily\b|\bdaily\s+payout\b/, weight: 22, label: "paid daily" },
-
-    // short “training” or “onboarding”
-    { re: /\b(60|90)\s*(minutes|min)\b.*\b(training|onboarding)\b/, weight: 18, label: "60–90 min training" },
-
-    // phone contact exposed (very broad but indicative for spammy blasts)
-    { re: /\+?\d[\d\s\-().]{9,}/, weight: 16, label: "direct phone contact" },
-
-    // easy work, work from home promise
-    { re: /\b(work\s*from\s*home|remote)\b.*\b(simple|easy|no\s+experience)\b/, weight: 12, label: "too-easy remote work" },
-
-    // age gate that looks like mass-recruitment
-    { re: /\b(2[12]|23|24|25)\s*(years?\s*old|\+)\b/, weight: 10, label: "age requirement 22+" },
-
-    // non-corporate mailbox or interview via chat
-    { re: /\b(interview|chat)\b.*\b(whatsapp|telegram|sms|text)\b/, weight: 18, label: "chat interview" },
-    { re: /\b@(gmail|yahoo|outlook|hotmail)\.com\b/, weight: 10, label: "non-corporate email" },
-  ];
-
-  // suspicious domains in links
-  const urlMatches = raw.match(/https?:\/\/[^\s)]+/gi) || [];
-  const suspiciousDomain = (host: string) =>
-    /\.(top|xyz|live|shop|work|site|click|link|info)$/i.test(host) ||
-    /-career|careers?-?\d{3,}/i.test(host);
-
-  // ---------- scoring ----------
-  let score = 0;
   const flags: string[] = [];
 
-  for (const r of rules) {
-    if (r.re.test(text)) {
-      score += r.weight;
-      flags.push(r.label);
-    }
-  }
+  // Core matches (heavier)
+  if (/(?:\$|usd)\s?(?:3\d{2}|[4-6]\d{2}|700)\s*\/?\s*day\b/.test(t)) flags.push("300-700/day");
+  if (/(60|90)\s*[-– ]?\s*min(ute)?\b.*training/.test(t)) flags.push("60-90min training");
+  if (/paid\s+daily/.test(t)) flags.push("paid daily");
+  if (/guaranteed\s+monthly|guarantee.*month/.test(t)) flags.push("guaranteed monthly");
+  if (/(whatsapp|text\s+me|phone\s+number|\+\d{7,})/.test(t)) flags.push("phone/whatsapp");
+  if (/(fee|deposit|upfront)\s+(required|pay|payment)/.test(t)) flags.push("fee request");
+  if (/(crypto|bitcoin|gift\s*card|apple\s*card|steam\s*card)/.test(t)) flags.push("crypto/gift cards");
+  if (/\b[\w.+-]+@(gmail|yahoo|outlook|hotmail)\.com\b/.test(t)) flags.push("non-corp email");
+  if (/\b(\w+-\w+|\w{1,3})\.(top|xyz|buzz|click|work|life|live)\b/.test(t)) flags.push("weird domain");
 
-  for (const url of urlMatches) {
-    try {
-      const u = new URL(url);
-      if (suspiciousDomain(u.hostname)) {
-        score += 12;
-        flags.push("suspicious domain");
-      }
-    } catch {
-      /* ignore bad URLs */
-    }
-  }
+  // extra
+  if (/remote\s+job\s+(no\s+experience|simple|easy)|work\s+at\s+home\s+(simple|easy)/.test(t))
+    flags.push("too-easy remote work");
+  if (/\b(18|21|22)\+\b|\bage\s+(?:req|require)/.test(t)) flags.push("age requirement");
 
-  // Cap and de-dupe
-  score = clamp(score, 0, 100);
-  const uniqueFlags = Array.from(new Set(flags));
+  // Sum → normalize to 0–100
+  const rawSum = flags.reduce((sum, f) => sum + (WEIGHTS[f] ?? 0), 0);
+  const MAX = Object.values(WEIGHTS).reduce((a, b) => a + b, 0) || 1;
+  let score = Math.round((rawSum / MAX) * 100);
 
-  // ---------- verdict with sensitivity ----------
-  // Base thresholds: Medium >= 30, High >= 60
-  // Sensitivity (0..100) shifts these: higher sensitivity lowers thresholds (more strict)
-  const s = clamp(sensitivity, 0, 100);
-  const sensUnit = (s - 50) / 50; // -1..+1
-  const hiBase = 60, medBase = 30;
-  const highThr = clamp(Math.round(hiBase - 15 * sensUnit), 35, 80); // 45 at s=100, 75 at s=0
-  const medThr  = clamp(Math.round(medBase - 10 * sensUnit), 15, 45); // 20 at s=100, 40 at s=0
+  // Sensitivity bump (0..1) up to +10
+  const bump = Math.round((sensitivity || 0) * 10);
+  score = Math.max(0, Math.min(100, score + bump));
 
-  const verdict: AnalysisResult["verdict"] =
-    score >= highThr ? "High" : score >= medThr ? "Medium" : "Low";
-
-  return { score, verdict, flags: uniqueFlags };
-}
-
-/* utils */
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n));
+  const verdict: Verdict = score >= 70 ? "HIGH" : score >= 40 ? "MEDIUM" : "LOW";
+  return { score, verdict, flags };
 }

@@ -1,68 +1,70 @@
-// IMPORTANT: set this to your Mac's LAN IP so the phone can reach it
-const BASE = "http://192.168.1.76:4000";
+import Constants from "expo-constants";
 
-export type ListParams = { risk?: "LOW" | "MEDIUM" | "HIGH"; search?: string };
-export type JobInput = {
-  title?: string;
-  company?: string;
+const BASE =
+  process.env.EXPO_PUBLIC_API_BASE ||
+  (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_API_BASE ||
+  "http://localhost:4000";
+
+export type Job = {
+  id: string;
+  title: string;
+  company: string;
+  risk: "LOW" | "MEDIUM" | "HIGH";
+  score: number;
+  source?: string | null;
   url?: string | null;
   email?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  images: { id: string; uri: string; jobId: string }[];
+};
+
+export type JobInput = {
+  title: string;
+  company: string;
+  risk: "LOW" | "MEDIUM" | "HIGH";
+  score: number;
   source?: string | null;
-  risk?: "LOW" | "MEDIUM" | "HIGH";
-  score?: number;
+  url?: string | null;
+  email?: string | null;
   notes?: string | null;
   images?: string[];
 };
 
-async function okOrThrow(r: Response, label: string) {
-  if (r.ok) return r;
-  const body = await r.text().catch(() => "");
-  throw new Error(`${label} failed: ${r.status} ${body}`);
+function qs(params: Record<string, any> = {}) {
+  const u = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== "") u.set(k, String(v));
+  const s = u.toString();
+  return s ? `?${s}` : "";
+}
+
+async function http<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `${res.status} ${res.statusText}`);
+  }
+  return (await res.json().catch(() => ({}))) as T;
 }
 
 export const api = {
-  async list(params: ListParams = {}) {
-    const qs = new URLSearchParams();
-    if (params.risk) qs.set("risk", params.risk);
-    if (params.search) qs.set("search", params.search.trim());
-    const r = await fetch(`${BASE}/jobs${qs.toString() ? `?${qs}` : ""}`);
-    await okOrThrow(r, "list");
-    return r.json();
-  },
+  list: (p: { risk?: "LOW" | "MEDIUM" | "HIGH"; search?: string; limit?: number; offset?: number } = {}) =>
+    http<{ items: Job[]; total: number }>(`/jobs${qs(p)}`),
 
-  async create(data: Required<Pick<JobInput, "title" | "company">> & JobInput) {
-    const r = await fetch(`${BASE}/jobs`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    await okOrThrow(r, "create");
-    return r.json();
-  },
+  create: (input: JobInput) =>
+    http<Job>("/jobs", { method: "POST", body: JSON.stringify(input) }),
 
-  async update(id: string, data: JobInput) {
-    const r = await fetch(`${BASE}/jobs/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    await okOrThrow(r, "update");
-    return r.json();
-  },
+  update: (id: string, input: Partial<JobInput>) =>
+    http<Job>(`/jobs/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
 
-  async remove(id: string) {
-    const r = await fetch(`${BASE}/jobs/${id}`, { method: "DELETE" });
-    await okOrThrow(r, "remove");
-    return r.json();
-  },
+  replace: (id: string, input: JobInput) =>
+    http<Job>(`/jobs/${id}`, { method: "PUT", body: JSON.stringify(input) }),
 
-  async bulkDelete(ids: string[]) {
-    const r = await fetch(`${BASE}/jobs`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids }),
-    });
-    await okOrThrow(r, "bulkDelete");
-    return r.json();
-  },
+  remove: (id: string) =>
+    fetch(`${BASE}/jobs/${id}`, { method: "DELETE" }).then((r) => {
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    }),
 };

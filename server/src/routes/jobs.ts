@@ -1,127 +1,140 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
 import { prisma } from "../prisma";
 
 const router = Router();
 
-/** LIST: GET /jobs?risk=LOW|MEDIUM|HIGH&search=text */
-router.get("/", async (req: Request, res: Response) => {
-  try {
-    const { risk, search } = req.query as { risk?: string; search?: string };
-    const where: any = {};
+type Query = {
+  risk?: string;
+  search?: string;
+  limit?: string;
+  offset?: string;
+};
 
-    if (risk && ["LOW", "MEDIUM", "HIGH"].includes(risk.toUpperCase())) {
-      where.risk = risk.toUpperCase();
-    }
+const toInt = (v: unknown, d = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
+};
 
-    if (search && search.trim()) {
-      where.OR = [
-        { title: { contains: search, mode: "insensitive" } },
-        { company: { contains: search, mode: "insensitive" } },
-      ];
-    }
+// GET /jobs?risk=LOW|MEDIUM|HIGH&search=foo&limit=50&offset=0
+router.get("/", async (req, res) => {
+  const { risk, search, limit, offset } = req.query as Query;
 
-    const jobs = await prisma.job.findMany({
+  const where: any = {};
+  if (risk && ["LOW", "MEDIUM", "HIGH"].includes(risk.toUpperCase())) {
+    where.risk = risk.toUpperCase();
+  }
+  if (search?.trim()) {
+    where.OR = [
+      { title: { contains: search, mode: "insensitive" } },
+      { company: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  const take = Math.max(1, Math.min(100, toInt(limit, 50)));
+  const skip = Math.max(0, toInt(offset, 0));
+
+  const [items, total] = await Promise.all([
+    prisma.job.findMany({
       where,
       include: { images: true },
       orderBy: { createdAt: "desc" },
-    });
-    res.json(jobs);
-  } catch (err) {
-    console.error("[ERROR] GET /jobs:", err);
-    res.status(500).json({ error: "Failed to fetch jobs" });
-  }
+      take,
+      skip,
+    }),
+    prisma.job.count({ where }),
+  ]);
+
+  res.json({ items, total });
 });
 
-/** CREATE: POST /jobs  */
-router.post("/", async (req: Request, res: Response) => {
-  try {
-    const { title, company, url, email, source, risk, score, notes, images } = req.body || {};
-    if (!title || !company) {
-      return res.status(400).json({ error: "title and company are required" });
-    }
+// POST /jobs
+router.post("/", async (req, res) => {
+  const { title, company, score = 0, risk = "LOW", source, url, email, notes, images = [] } = req.body || {};
 
-    const created = await prisma.job.create({
+  if (!title || !company) {
+    return res.status(400).json({ error: "title and company are required" });
+  }
+
+  const job = await prisma.job.create({
+    data: {
+      title: String(title).trim(),
+      company: String(company).trim(),
+      score: Number(score) || 0,
+      risk: String(risk).toUpperCase(),
+      source: source ? String(source) : null,
+      url: url ? String(url) : null,
+      email: email ? String(email) : null,
+      notes: notes ? String(notes) : null,
+      images: { create: (images as string[]).map((uri) => ({ uri })) },
+    },
+    include: { images: true },
+  });
+
+  res.status(201).json(job);
+});
+
+// PUT /jobs/:id  (replace)
+router.put("/:id", async (req, res) => {
+  const { id } = req.params;
+  const { title, company, score, risk, source, url, email, notes, images } = req.body || {};
+
+  try {
+    const job = await prisma.job.update({
+      where: { id },
       data: {
-        title: String(title),
-        company: String(company),
-        url: url ?? null,
-        email: email ?? null,
-        source: source ?? null,
-        risk: String(risk || "LOW").toUpperCase(),
-        score: Number(score) || 0,
-        notes: notes ?? null,
-        images: { create: (Array.isArray(images) ? images : []).map((uri: string) => ({ uri })) },
+        title: title ?? undefined,
+        company: company ?? undefined,
+        score: typeof score === "number" ? score : undefined,
+        risk: typeof risk === "string" ? risk.toUpperCase() : undefined,
+        source: source ?? undefined,
+        url: url ?? undefined,
+        email: email ?? undefined,
+        notes: notes ?? undefined,
+        ...(Array.isArray(images)
+          ? {
+              images: {
+                deleteMany: {}, // wipe existing
+                create: images.map((uri: string) => ({ uri })),
+              },
+            }
+          : {}),
       },
       include: { images: true },
     });
-    console.log("[POST /jobs] created", created.id, created.title);
-    res.status(201).json(created);
-  } catch (err) {
-    console.error("[ERROR] POST /jobs:", err);
-    res.status(500).json({ error: "Failed to create job" });
+
+    res.json(job);
+  } catch {
+    res.status(404).json({ error: "job not found" });
   }
 });
 
-/** UPDATE: PATCH /jobs/:id  */
-router.patch("/:id", async (req: Request, res: Response) => {
-  try {
-    const { title, company, url, email, source, risk, score, notes, images } = req.body || {};
-    const updates: any = {};
-    if (title !== undefined) updates.title = String(title);
-    if (company !== undefined) updates.company = String(company);
-    if (url !== undefined) updates.url = url ?? null;
-    if (email !== undefined) updates.email = email ?? null;
-    if (source !== undefined) updates.source = source ?? null;
-    if (risk !== undefined) updates.risk = String(risk).toUpperCase();
-    if (score !== undefined) updates.score = Number(score) || 0;
-    if (notes !== undefined) updates.notes = notes ?? null;
+// PATCH /jobs/:id  (partial update)
+router.patch("/:id", async (req, res) => {
+  const { id } = req.params;
+  const data: any = {};
+  for (const k of ["title", "company", "source", "url", "email", "notes"]) {
+    if (k in req.body) data[k] = req.body[k];
+  }
+  if ("score" in req.body) data.score = Number(req.body.score) || 0;
+  if ("risk" in req.body) data.risk = String(req.body.risk).toUpperCase();
 
-    const updated = await prisma.job.update({
-      where: { id: req.params.id },
-      data: {
-        ...updates,
-        ...(images !== undefined && {
-          images: {
-            deleteMany: { jobId: req.params.id },
-            create: (Array.isArray(images) ? images : []).map((uri: string) => ({ uri })),
-          },
-        }),
-      },
-      include: { images: true },
-    });
-    console.log("[PATCH /jobs/:id] updated", updated.id);
-    res.json(updated);
-  } catch (err) {
-    console.error("[ERROR] PATCH /jobs/:id:", err);
-    res.status(500).json({ error: "Failed to update job" });
+  try {
+    const job = await prisma.job.update({ where: { id }, data, include: { images: true } });
+    res.json(job);
+  } catch {
+    res.status(404).json({ error: "job not found" });
   }
 });
 
-/** DELETE ONE: DELETE /jobs/:id */
-router.delete("/:id", async (req: Request, res: Response) => {
+// DELETE /jobs/:id
+router.delete("/:id", async (req, res) => {
+  const { id } = req.params;
   try {
-    await prisma.image.deleteMany({ where: { jobId: req.params.id } });
-    const j = await prisma.job.delete({ where: { id: req.params.id } });
-    res.json({ deleted: j.id });
-  } catch (err) {
-    console.error("[ERROR] DELETE /jobs/:id:", err);
-    res.status(500).json({ error: "Failed to delete job" });
-  }
-});
-
-/** BULK DELETE: DELETE /jobs  { ids: string[] } */
-router.delete("/", async (req: Request, res: Response) => {
-  try {
-    const ids = (req.body?.ids ?? []) as string[];
-    if (!ids.length) return res.status(400).json({ error: "No IDs provided" });
-
-    await prisma.image.deleteMany({ where: { jobId: { in: ids } } });
-    const result = await prisma.job.deleteMany({ where: { id: { in: ids } } });
-
-    res.json({ deleted: result.count });
-  } catch (err) {
-    console.error("[ERROR] DELETE /jobs:", err);
-    res.status(500).json({ error: "Failed to delete jobs" });
+    // thanks to onDelete: Cascade, images go automatically
+    await prisma.job.delete({ where: { id } });
+    res.status(204).end();
+  } catch {
+    res.status(404).json({ error: "job not found" });
   }
 });
 
