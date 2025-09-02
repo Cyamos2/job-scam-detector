@@ -1,104 +1,172 @@
-import React from "react";
-import {
-  View, Text, Pressable, StyleSheet, TextInput, FlatList,
-} from "react-native";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { DatabaseStackParamList } from "../navigation/RootNavigator";
-import { useColors } from "../theme/useColors";
-import { useSavedItems } from "../store/savedItems";
-import { goToAddContent } from "../navigation/goTo";
+import * as React from "react";
+import { View, FlatList, Text, Pressable, Alert } from "react-native";
+import { useJobs } from "../hooks/useJobs";
+import { FilterBar } from "../components/FilterBar";
+import { EditJobModal, EditPayload } from "../components/EditJobModal";
+import { api } from "../lib/api";
 
-type Props = NativeStackScreenProps<DatabaseStackParamList, "DatabaseMain">;
+export default function DatabaseScreen() {
+  const { items, loading, error, risk, setRisk, search, setSearch, refetch } = useJobs();
 
-export default function DatabaseScreen({ navigation }: Props) {
-  const { colors, bg, card, text } = useColors();
-  const { items, hydrated } = useSavedItems();
-  const [q, setQ] = React.useState("");
+  const [selected, setSelected] = React.useState<Record<string, boolean>>({});
+  const [editId, setEditId] = React.useState<string | null>(null);
+  const [showCreate, setShowCreate] = React.useState(false);
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({ headerTitle: "Database" });
-  }, [navigation]);
+  const ids = React.useMemo(() => Object.keys(selected).filter(k => selected[k]), [selected]);
+  const inSelectMode = ids.length > 0;
 
-  if (!hydrated) return null;
+  const toggle = (id: string) => setSelected(s => ({ ...s, [id]: !s[id] }));
+  const onLongPress = (id: string) => setSelected({ [id]: true });
 
-  const filtered = items.filter((it) => {
-    if (!q.trim()) return true;
-    const hay = `${it.title} ${it.flags.join(" ")} ${it.inputPreview ?? ""}`.toLowerCase();
-    return hay.includes(q.toLowerCase());
-  });
+  const onItemPress = (id: string) => {
+    if (inSelectMode) return toggle(id);
+    setEditId(id); // open view/edit
+  };
 
-  return (
-    <View style={[styles.container, bg]}>
-      <TextInput
-        value={q}
-        onChangeText={setQ}
-        placeholder="Search title / flags / preview"
-        placeholderTextColor="#9aa0a6"
-        style={[styles.search, card, { borderColor: colors.border }]}
-      />
+  const onDelete = async () => {
+    try {
+      if (ids.length === 1) await api.remove(ids[0]);
+      else await api.bulkDelete(ids);
+      setSelected({});
+      refetch();
+    } catch (e: any) {
+      Alert.alert("Delete failed", e?.message ?? "Unknown error");
+    }
+  };
 
-      {filtered.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={[styles.emptyText, text]}>No saved analyses yet.</Text>
-          <Pressable
-            onPress={() => goToAddContent(navigation)}
-            style={[styles.cta, { backgroundColor: colors.primary }]}
-          >
-            <Text style={styles.ctaText}>Add content</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(it) => it.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => navigation.navigate("ReportDetail", { id: item.id })}
-              style={[styles.row, card, { borderColor: colors.border }]}
-            >
-              <Text style={[styles.rowTitle, text]} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={[styles.rowSub, text]} numberOfLines={1}>
-                {item.verdict} · {item.score}
-              </Text>
-            </Pressable>
-          )}
-        />
-      )}
+  const onSaveEdit = async (data: EditPayload) => {
+    try {
+      if (!editId) return;
+      await api.update(editId, data);
+      setEditId(null);
+      refetch();
+    } catch (e: any) {
+      Alert.alert("Save failed", e?.message ?? "Unknown error");
+    }
+  };
 
+  const onSaveCreate = async (data: EditPayload) => {
+    try {
+      await api.create({
+        title: data.title!,
+        company: data.company!,
+        risk: data.risk,
+        score: data.score,
+        url: data.url ?? null,
+        email: data.email ?? null,
+        source: data.source ?? null,
+        notes: data.notes ?? null,
+        images: [],
+      });
+      setShowCreate(false);
+      refetch();
+    } catch (e: any) {
+      Alert.alert("Add failed", e?.message ?? "Unknown error");
+    }
+  };
+
+  const ActionBar = () => (
+    <View style={{ flexDirection: "row", gap: 12, padding: 12, borderTopWidth: 1, borderColor: "#eee", backgroundColor: "#fff" }}>
+      <Pressable onPress={() => ids.length === 1 && setEditId(ids[0])} disabled={ids.length !== 1} style={{ opacity: ids.length === 1 ? 1 : 0.4 }}>
+        <Text style={{ fontWeight: "600" }}>Edit</Text>
+      </Pressable>
       <Pressable
-        onPress={() => goToAddContent(navigation)}
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-        accessibilityLabel="Add to Database"
+        onPress={() =>
+          Alert.alert("Delete", `Delete ${ids.length} item(s)?`, [
+            { text: "Cancel", style: "cancel" },
+            { text: "Delete", style: "destructive", onPress: onDelete },
+          ])
+        }
       >
-        <Text style={styles.fabPlus}>＋</Text>
+        <Text style={{ color: "#d00", fontWeight: "600" }}>Delete</Text>
+      </Pressable>
+      <Pressable onPress={() => setSelected({})} style={{ marginLeft: "auto" }}>
+        <Text>Cancel</Text>
       </Pressable>
     </View>
   );
-}
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  search: { margin: 16, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10 },
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  emptyText: { fontSize: 18 },
-  cta: { paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10 },
-  ctaText: { color: "white", fontWeight: "700" },
-  row: { padding: 12, borderWidth: 1, borderRadius: 12, marginBottom: 12 },
-  rowTitle: { fontSize: 16, fontWeight: "700" },
-  rowSub: { fontSize: 12, opacity: 0.8 },
-  fab: {
-    position: "absolute",
-    right: 20,
-    bottom: 28,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 6,
-  },
-  fabPlus: { color: "white", fontSize: 30, lineHeight: 30, fontWeight: "700" },
-});
+  return (
+    <View style={{ flex: 1 }}>
+      <FilterBar risk={risk} setRisk={setRisk} search={search} setSearch={setSearch} onRefresh={refetch} />
+
+      {!!error && (
+        <View style={{ padding: 12 }}>
+          <Text style={{ color: "red" }}>{error}</Text>
+        </View>
+      )}
+
+      <FlatList
+        data={items}
+        keyExtractor={(it) => it.id}
+        contentContainerStyle={{ padding: 12, gap: 8, paddingBottom: 96 }}
+        refreshing={loading}
+        onRefresh={refetch}
+        renderItem={({ item }) => {
+          const isSel = !!selected[item.id];
+          return (
+            <Pressable
+              onLongPress={() => onLongPress(item.id)}
+              onPress={() => onItemPress(item.id)}
+              style={{
+                backgroundColor: isSel ? "#eaf0ff" : "white",
+                borderRadius: 10,
+                padding: 12,
+                borderWidth: 1,
+                borderColor: isSel ? "#2f6fed" : "#eee",
+              }}
+            >
+              <Text style={{ fontWeight: "700" }}>{item.title}</Text>
+              <Text>{item.company}</Text>
+              <Text style={{ marginTop: 4, fontSize: 12, opacity: 0.7 }}>
+                Risk: {item.risk} • Score: {item.score}
+              </Text>
+              {inSelectMode && (
+                <Text style={{ position: "absolute", right: 12, top: 12 }}>
+                  {isSel ? "☑︎" : "☐"}
+                </Text>
+              )}
+            </Pressable>
+          );
+        }}
+        ListEmptyComponent={
+          !loading ? (
+            <View style={{ padding: 24, alignItems: "center" }}>
+              <Text>No {risk !== "ALL" ? `${risk} ` : ""}items</Text>
+            </View>
+          ) : null
+        }
+      />
+
+      {/* Add floating button */}
+      <Pressable
+        onPress={() => setShowCreate(true)}
+        style={{
+          position: "absolute", right: 20, bottom: 20,
+          backgroundColor: "#2f6fed", borderRadius: 28, paddingHorizontal: 20, paddingVertical: 14,
+          shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }
+        }}
+      >
+        <Text style={{ color: "white", fontWeight: "700" }}>Add</Text>
+      </Pressable>
+
+      {inSelectMode && <ActionBar />}
+
+      {/* View/Edit modal */}
+      <EditJobModal
+        visible={!!editId}
+        job={items.find((j) => j.id === editId)}
+        onClose={() => setEditId(null)}
+        onSave={onSaveEdit}
+      />
+
+      {/* Create modal */}
+      <EditJobModal
+        visible={showCreate}
+        mode="create"
+        onClose={() => setShowCreate(false)}
+        onSave={onSaveCreate}
+      />
+    </View>
+  );
+}

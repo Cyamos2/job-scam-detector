@@ -1,4 +1,5 @@
-import React from "react";
+// src/screens/AddContentScreen.tsx
+import * as React from "react";
 import {
   View,
   Text,
@@ -14,12 +15,10 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 
-import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
 import { useSettings } from "../SettingsProvider";
 import { useColors } from "../theme/useColors";
 import { analyzeTextLocal, type AnalysisResult } from "../lib/analyzer";
-
-type Props = { navigation: any };
+import { api } from "../lib/api";
 
 /** tiny debounce helper to avoid spam taps */
 function useDebounced<T extends (...a: any[]) => any>(fn: T, ms = 300) {
@@ -33,10 +32,11 @@ function useDebounced<T extends (...a: any[]) => any>(fn: T, ms = 300) {
   );
 }
 
+type Props = { navigation: any };
+
 export default function AddContentScreen({ navigation }: Props) {
   const { colors, bg, card, text, muted } = useColors();
   const { autoSave, sensitivity } = useSettings();
-  const { add } = useSavedItems();
 
   const [input, setInput] = React.useState("");
   const [imageUri, setImageUri] = React.useState<string | null>(null);
@@ -70,27 +70,15 @@ export default function AddContentScreen({ navigation }: Props) {
     });
   }, [navigation, colors.primary]);
 
-  const saveEntry = (a: AnalysisResult) => {
-    const entry: SavedAnalysis = {
-      id: String(Date.now()) + "-" + Math.floor(Math.random() * 1e6),
-      title: imageUri ? "Screenshot analysis" : titleFrom(input),
-      source: imageUri ? "image" : "text",
-      inputPreview: previewOf(input),
-      imageUri,
-      score: a.score,
-      verdict: a.verdict,
-      flags: a.flags,
-      createdAt: Date.now(),
-    };
-    add(entry);
-  };
-
+  // ---------- Analyze ----------
   const runAnalyzeText = React.useCallback(() => {
     const raw = input.trim();
     if (!raw) return Alert.alert("Nothing to analyze", "Paste a job post or link first.");
     const a = analyzeTextLocal(raw, sensitivity);
     setResult(a);
-    if (autoSave) saveEntry(a);
+    if (autoSave) {
+      // optional auto API save if you want; for now we just show result
+    }
   }, [input, sensitivity, autoSave]);
 
   const onAnalyzeText = useDebounced(runAnalyzeText, 250);
@@ -121,21 +109,62 @@ export default function AddContentScreen({ navigation }: Props) {
         "contact us via whatsapp and pay for training with gift cards. paid daily guaranteed monthly income.";
       const a = analyzeTextLocal(`${stubOCR} ${input ?? ""}`, sensitivity);
       setResult(a);
-      if (autoSave) saveEntry(a);
     } finally {
       setBusy(false);
     }
   };
 
-  const saveManually = async () => {
-    if (!result) return;
+  // ---------- Save to API ----------
+  function extractUrl(t: string): string | null {
+    const m = (t || "").match(/https?:\/\/\S+/i);
+    return m ? m[0] : null;
+  }
+  function extractEmail(t: string): string | null {
+    const m = (t || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    return m ? m[0] : null;
+  }
+  function titleFrom(text: string) {
+    const t = (text || "").trim().replace(/\s+/g, " ");
+    const s = t.length > 40 ? t.slice(0, 40) + "…" : t;
+    return s || (imageUri ? "Screenshot analysis" : "Text analysis");
+  }
+
+  const saveToDatabase = async () => {
+    if (!result) return Alert.alert("No analysis", "Analyze text or screenshot first.");
     try {
       setSaving(true);
-      saveEntry(result);
+
+      const title = titleFrom(input);
+      const company = "Unknown"; // You can add extraction later
+      const score = Number(result.score ?? 0);
+      const risk = score >= 70 ? "HIGH" : score >= 40 ? "MEDIUM" : "LOW";
+      const url = extractUrl(input);
+      const email = extractEmail(input);
+      const source = imageUri ? "Image" : "Text Message";
+      const notes = result.flags.length ? result.flags.join(", ") : null;
+
+      await api.create({
+        title,
+        company,
+        score,
+        risk,
+        source,
+        url,
+        email,
+        notes,
+        images: [], // not uploading local images yet
+      });
+
+      Alert.alert("Saved", "Added to database.");
+      // optional: navigate to Database
+      // navigation.getParent()?.navigate("DatabaseTab" as never);
+
+      // clear form
       setInput("");
       setImageUri(null);
       setResult(null);
-      Alert.alert("Saved", "Analysis added to your Database.");
+    } catch (e: any) {
+      Alert.alert("Save failed", e?.message ?? "Unknown error");
     } finally {
       setSaving(false);
     }
@@ -143,7 +172,7 @@ export default function AddContentScreen({ navigation }: Props) {
 
   const canAnalyzeText = input.trim().length > 0 && !busy;
   const canAnalyzeShot = !!imageUri && !busy;
-  const canManualSave = !!result && !autoSave && !saving;
+  const canSave = !!result && !saving;
 
   return (
     <KeyboardAvoidingView
@@ -222,22 +251,18 @@ export default function AddContentScreen({ navigation }: Props) {
               Flags: {result.flags.length ? result.flags.join(", ") : "none"}
             </Text>
 
-            {!autoSave && (
-              <Pressable
-                onPress={saveManually}
-                disabled={!canManualSave}
-                style={[
-                  styles.saveBtn,
-                  { backgroundColor: canManualSave ? colors.primary : "#9aa0a6" },
-                ]}
-              >
-                <Text style={styles.btnPrimaryText}>Save to Database</Text>
-              </Pressable>
-            )}
-
-            {autoSave && (
-              <Text style={[styles.autoNote, { color: colors.primary }]}>Saved automatically ✓</Text>
-            )}
+            <Pressable
+              onPress={saveToDatabase}
+              disabled={!canSave}
+              style={[
+                styles.saveBtn,
+                { backgroundColor: canSave ? colors.primary : "#9aa0a6" },
+              ]}
+            >
+              <Text style={styles.btnPrimaryText}>
+                {saving ? "Saving…" : "Save to Database"}
+              </Text>
+            </Pressable>
           </View>
         )}
 
@@ -245,16 +270,6 @@ export default function AddContentScreen({ navigation }: Props) {
       </ScrollView>
     </KeyboardAvoidingView>
   );
-}
-
-/* ---------- helpers ---------- */
-function previewOf(text: string, n: number = 160) {
-  const t = (text || "").trim().replace(/\s+/g, " ");
-  return t.length > n ? t.slice(0, n) + "…" : t;
-}
-function titleFrom(text: string) {
-  const t = previewOf(text, 40);
-  return t || "Text analysis";
 }
 
 /* ---------- styles ---------- */
@@ -284,6 +299,5 @@ const styles = StyleSheet.create({
   cardInfo: { fontSize: 14, fontWeight: "600" },
   cardFlags: { fontSize: 12 },
   saveBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, marginTop: 6 },
-  autoNote: { fontSize: 12, marginTop: 6 },
   tip: { fontSize: 12 },
 });
