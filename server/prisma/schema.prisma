@@ -1,0 +1,39 @@
+// ---------------------------
+// Prisma Schema (Scamicide)
+// ---------------------------
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Risk {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Job {
+  id        String   @id @default(cuid())
+  title     String
+  company   String
+  url       String?
+  email     String?
+  source    String?     // e.g. LinkedIn, Indeed
+  risk      Risk        @default(LOW)
+  score     Int         @default(0) // normalized 0–100
+  createdAt DateTime    @default(now())
+  images    Image[]
+  notes     String?
+}
+
+model Image {
+  id    String @id @default(cuid())
+  jobId String
+  uri   String                // local or remote image
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
