@@ -1,274 +1,186 @@
+// src/screens/DatabaseScreen.tsx
 import * as React from "react";
-import { View, FlatList, Text, Pressable, Alert, Image } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+} from "react-native";
+import Screen from "../components/Screen";
 import { useJobs } from "../hooks/useJobs";
-import { FilterBar } from "../components/FilterBar";
-import EditJobModal from "../components/EditJobModal";
-import ImageViewer from "../components/ImageViewer";
-import { api } from "../lib/api";
-import * as FileSystem from "expo-file-system";
+import { goToAddContent } from "../navigation/goTo";
+import { useNavigation } from "@react-navigation/native";
+import type { NavigationProp } from "@react-navigation/native";
+import type { RootTabParamList } from "../navigation/types";
 
-export type EditPayload = {
-  title?: string;
-  company?: string;
-  risk: "LOW" | "MEDIUM" | "HIGH";
-  score: number;
-  url?: string | null;
-  email?: string | null;
-  source?: string | null;
-  notes?: string | null;
-};
-
-function EmptyState({ risk, onAdd }: { risk: string; onAdd: () => void }) {
-  return (
-    <View style={{ padding: 28, alignItems: "center", gap: 12 }}>
-      <Text style={{ fontSize: 16, fontWeight: "700" }}>
-        {risk !== "ALL" ? `No ${risk} items` : "No items"}
-      </Text>
-      <Pressable
-        onPress={onAdd}
-        style={{
-          backgroundColor: "#2f6fed",
-          paddingHorizontal: 18,
-          paddingVertical: 12,
-          borderRadius: 999,
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "700" }}>Add content</Text>
-      </Pressable>
-    </View>
-  );
-}
+type RiskFilter = "all" | "low" | "medium" | "high";
+const colors = { primary: "#FF5733" };
 
 export default function DatabaseScreen() {
-  const { items, loading, error, risk, setRisk, search, setSearch, refresh } = useJobs();
+  // ✅ Type the navigation so it matches goToAddContent
+  const navigation = useNavigation<NavigationProp<RootTabParamList>>();
 
-  const [selected, setSelected] = React.useState<Record<string, boolean>>({});
-  const ids = React.useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected]);
-  const inSelectMode = ids.length > 0;
+  const { items, loading, refresh } = useJobs();
+  const [filter, setFilter] = React.useState<RiskFilter>("all");
+  const [search, setSearch] = React.useState("");
 
-  const [editId, setEditId] = React.useState<string | null>(null);
-  const [showCreate, setShowCreate] = React.useState(false);
-  const [viewerUri, setViewerUri] = React.useState<string | null>(null);
-
-  const toggle = (id: string) => setSelected((s) => ({ ...s, [id]: !s[id] }));
-  const onLongPress = (id: string) => setSelected({ [id]: true });
-  const onItemPress = (id: string) => (inSelectMode ? toggle(id) : setEditId(id));
-
-  const onDelete = async () => {
-    try {
-      if (ids.length === 1) {
-        await api.remove(ids[0]);
-      } else {
-        // remove many without relying on api.bulkDelete typings
-        for (const id of ids) {
-          // eslint-disable-next-line no-await-in-loop
-          await api.remove(id);
-        }
-      }
-      setSelected({});
-      refresh();
-    } catch (e: any) {
-      Alert.alert("Delete failed", e?.message ?? "Unknown error");
+  const filtered = React.useMemo(() => {
+    let next = items ?? [];
+    if (filter !== "all") next = next.filter((j) => j.risk === filter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      next = next.filter(
+        (j) =>
+          j.title?.toLowerCase().includes(q) ||
+          j.company?.toLowerCase().includes(q)
+      );
     }
-  };
+    return next;
+  }, [items, filter, search]);
 
-  const onSaveEdit = async (data: EditPayload) => {
-    try {
-      if (!editId) return;
-      await api.update(editId, data);
-      setEditId(null);
-      refresh();
-    } catch (e: any) {
-      Alert.alert("Save failed", e?.message ?? "Unknown error");
-    }
-  };
-
-  const onSaveCreate = async (data: EditPayload) => {
-    try {
-      await api.create({
-        title: data.title!,
-        company: data.company!,
-        risk: data.risk,
-        score: data.score,
-        url: data.url ?? null,
-        email: data.email ?? null,
-        source: data.source ?? null,
-        notes: data.notes ?? null,
-        images: [],
-      });
-      setShowCreate(false);
-      refresh();
-    } catch (e: any) {
-      Alert.alert("Add failed", e?.message ?? "Unknown error");
-    }
-  };
-
-  const shareSelected = async () => {
-    try {
-      const picked = items.filter((j) => selected[j.id]);
-      if (!picked.length) return;
-
-      const text = picked
-        .map(
-          (j) =>
-            `${j.title} — ${j.company}\nRisk: ${j.risk}  Score: ${j.score}\n${j.url ?? ""}\n${j.notes ?? ""}\n`
-        )
-        .join("\n");
-
-      const path = FileSystem.cacheDirectory + "jobs.txt";
-      await FileSystem.writeAsStringAsync(path, text, { encoding: FileSystem.EncodingType.UTF8 });
-
-      // optional dependency
-      // @ts-ignore
-      const Sharing = await import("expo-sharing").catch(() => null as any);
-      if (Sharing?.isAvailableAsync && (await Sharing.isAvailableAsync())) {
-        await Sharing.shareAsync(path);
-      } else {
-        Alert.alert("Shared file", `Saved to: ${path}`);
-      }
-    } catch (e: any) {
-      Alert.alert("Share failed", e?.message ?? "Unknown error");
-    }
-  };
-
-  return (
-    <View style={{ flex: 1 }}>
-      <FilterBar risk={risk} setRisk={setRisk} search={search} setSearch={setSearch} onRefresh={refresh} />
-
-      {!!error && (
-        <View style={{ padding: 12 }}>
-          <Text style={{ color: "red" }}>{error}</Text>
-        </View>
-      )}
-
-      <FlatList
-        data={items}
-        keyExtractor={(it) => it.id}
-        contentContainerStyle={{ padding: 12, gap: 8, paddingBottom: 96 }}
-        refreshing={loading}
-        onRefresh={refresh}
-        renderItem={({ item }) => {
-          const isSel = !!selected[item.id];
-          const thumb = item.images?.[0]?.uri;
-          return (
-            <Pressable
-              onLongPress={() => onLongPress(item.id)}
-              onPress={() => onItemPress(item.id)}
-              style={{
-                backgroundColor: isSel ? "#eaf0ff" : "white",
-                borderRadius: 10,
-                padding: 12,
-                borderWidth: 1,
-                borderColor: isSel ? "#2f6fed" : "#eee",
-              }}
-            >
-              <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-                {thumb ? (
-                  <Pressable onPress={() => setViewerUri(thumb)}>
-                    <Image
-                      source={{ uri: thumb }}
-                      style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: "#ddd" }}
-                    />
-                  </Pressable>
-                ) : null}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: "700" }} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <Text numberOfLines={1}>{item.company}</Text>
-                  <Text style={{ marginTop: 4, fontSize: 12, opacity: 0.7 }}>
-                    Risk: {item.risk} • Score: {item.score}
-                  </Text>
-                </View>
-              </View>
-
-              {inSelectMode && (
-                <Text style={{ position: "absolute", right: 12, top: 12 }}>{isSel ? "☑︎" : "☐"}</Text>
-              )}
-            </Pressable>
-          );
-        }}
-        ListEmptyComponent={!loading ? <EmptyState risk={risk} onAdd={() => setShowCreate(true)} /> : null}
-      />
-
-      {/* Floating Add button */}
-      <Pressable
-        onPress={() => setShowCreate(true)}
-        style={{
-          position: "absolute",
-          right: 20,
-          bottom: 20,
-          backgroundColor: "#2f6fed",
-          borderRadius: 28,
-          paddingHorizontal: 20,
-          paddingVertical: 14,
-          shadowColor: "#000",
-          shadowOpacity: 0.2,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 2 },
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "700" }}>Add</Text>
-      </Pressable>
-
-      {/* Selection action bar */}
-      {inSelectMode && (
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            flexDirection: "row",
-            gap: 12,
-            padding: 12,
-            borderTopWidth: 1,
-            borderColor: "#eee",
-            backgroundColor: "#fff",
-          }}
-        >
-          <Pressable
-            onPress={() => ids.length === 1 && setEditId(ids[0])}
-            disabled={ids.length !== 1}
-            style={{ opacity: ids.length === 1 ? 1 : 0.4 }}
-          >
-            <Text style={{ fontWeight: "600" }}>Edit</Text>
-          </Pressable>
-          <Pressable onPress={shareSelected} disabled={!ids.length} style={{ opacity: ids.length ? 1 : 0.4 }}>
-            <Text style={{ fontWeight: "600" }}>Share</Text>
-          </Pressable>
-          <Pressable
-            onPress={() =>
-              Alert.alert("Delete", `Delete ${ids.length} item(s)?`, [
-                { text: "Cancel", style: "cancel" },
-                { text: "Delete", style: "destructive", onPress: onDelete },
-              ])
-            }
-          >
-            <Text style={{ color: "#d00", fontWeight: "600" }}>Delete</Text>
-          </Pressable>
-          <Pressable onPress={() => setSelected({})} style={{ marginLeft: "auto" }}>
-            <Text>Cancel</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* View/Edit modal — use jobId, no `job` prop */}
-      <EditJobModal
-        visible={!!editId}
-        jobId={editId ?? undefined}
-        onClose={() => setEditId(null)}
-        onSave={onSaveEdit}
-      />
-
-      {/* Create modal — no `mode` prop required */}
-      <EditJobModal
-        visible={showCreate}
-        onClose={() => setShowCreate(false)}
-        onSave={onSaveCreate}
-      />
-
-      <ImageViewer uri={viewerUri ?? ""} visible={!!viewerUri} onClose={() => setViewerUri(null)} />
+  const renderItem = ({ item }: any) => (
+    <View style={styles.row}>
+      <Text style={styles.rowTitle}>{item.title}</Text>
+      <Text style={styles.rowMeta}>
+        {item.company} • {item.risk?.toUpperCase()}
+      </Text>
     </View>
   );
+
+  return (
+    <Screen>
+      <View style={styles.topBar}>
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search by company or role"
+          placeholderTextColor="#9aa0a6"
+          style={styles.search}
+          returnKeyType="search"
+        />
+
+        <View style={styles.chips}>
+          {(["all", "low", "medium", "high"] as const).map((r) => {
+            const active = filter === r;
+            return (
+              <Pressable
+                key={r}
+                onPress={() => setFilter(r)}
+                style={[styles.chip, active && styles.chipActive]}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                  {r.toUpperCase()}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Pressable onPress={refresh} style={styles.refresh}>
+            <Text style={styles.refreshText}>Refresh</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <FlatList
+        data={filtered}
+        keyExtractor={(it) => it.id}
+        renderItem={renderItem}
+        contentContainerStyle={[
+          styles.listContent,
+          filtered.length === 0 && { flex: 1, justifyContent: "center" },
+        ]}
+        refreshControl={
+          <RefreshControl refreshing={!!loading} onRefresh={refresh} />
+        }
+        ListEmptyComponent={
+          <View style={{ alignItems: "center" }}>
+            <Text style={styles.emptyTitle}>No items</Text>
+            <Pressable
+              onPress={() => goToAddContent(navigation)}
+              style={styles.addContentBtn}
+            >
+              <Text style={styles.addContentText}>Add content</Text>
+            </Pressable>
+          </View>
+        }
+      />
+
+      <Pressable
+        onPress={() => goToAddContent(navigation)}
+        style={styles.fab}
+      >
+        <Text style={styles.fabText}>Add</Text>
+      </Pressable>
+    </Screen>
+  );
 }
+
+const styles = StyleSheet.create({
+  topBar: { paddingHorizontal: 0, gap: 10 },
+  search: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+  },
+  chips: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 6,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
+  },
+  chipActive: { borderColor: colors.primary, backgroundColor: "#fff4f1" },
+  chipText: { color: "#111", fontWeight: "700" },
+  chipTextActive: { color: colors.primary },
+  refresh: { marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 6 },
+  refreshText: { color: "#6B7280", fontWeight: "600" },
+
+  listContent: { paddingVertical: 10, gap: 10 },
+  row: {
+    padding: 14,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  rowTitle: { fontWeight: "700", marginBottom: 4 },
+  rowMeta: { color: "#6B7280" },
+
+  emptyTitle: { fontSize: 18, fontWeight: "700", marginBottom: 14 },
+  addContentBtn: {
+    backgroundColor: "#1f6cff",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  addContentText: { color: "#fff", fontWeight: "700" },
+
+  fab: {
+    position: "absolute",
+    right: 16,
+    bottom: 28,
+    backgroundColor: "#1f6cff",
+    borderRadius: 999,
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  fabText: { color: "#fff", fontWeight: "800" },
+});

@@ -1,269 +1,163 @@
 import * as React from "react";
 import {
-  Alert,
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  TextInput,
+  StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+  Alert,
 } from "react-native";
-import { useNavigation, useTheme } from "@react-navigation/native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-import { api, type Risk, type JobInput } from "@/lib/api";
-import type { HomeStackParamList, SafeNav } from "@/navigation/types";
-
-// Use strong type if "AddContent" exists in HomeStackParamList; otherwise `any`.
-type Nav = SafeNav<HomeStackParamList, "AddContent">;
-
-const risks: Risk[] = ["low", "medium", "high"];
+import { useNavigation } from "@react-navigation/native";
+import Screen from "../components/Screen";
+import { api, type JobInput } from "@/lib/api";
+const colors = { primary: "#FF5733" }; // or inline your colors
 
 export default function AddContentScreen() {
-  const navigation = useNavigation<Nav>();
-  const { colors } = useTheme() as any;
-  const insets = useSafeAreaInsets();
-
+  const navigation = useNavigation();
   const [title, setTitle] = React.useState("");
   const [company, setCompany] = React.useState("");
   const [url, setUrl] = React.useState("");
   const [notes, setNotes] = React.useState("");
-  const [risk, setRisk] = React.useState<Risk>("low");
+  const [risk, setRisk] = React.useState<"LOW" | "MEDIUM" | "HIGH">("LOW");
   const [submitting, setSubmitting] = React.useState(false);
 
-  // Header & custom back
   React.useLayoutEffect(() => {
-    navigation.setOptions?.({
+    navigation.setOptions({
       title: "Add Content",
       headerBackVisible: false,
       headerLeft: () => (
-        <Pressable onPress={() => navigation.goBack?.()}>
-          <Text
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 8,
-              color: colors?.primary ?? "#ff5a2c",
-              fontWeight: "600",
-            }}
-          >
-            ‹ Home
-          </Text>
+        <Pressable onPress={() => navigation.goBack()}>
+          <Text style={styles.backLink}>‹ Home</Text>
         </Pressable>
       ),
-    } as any);
-  }, [navigation, colors?.primary]);
+    });
+  }, [navigation]);
 
-  const onSubmit = async () => {
-    if (!title.trim() || !company.trim()) {
-      Alert.alert("Missing info", "Please enter a Title and Company.");
-      return;
-    }
-    const input: JobInput = {
-      title: title.trim(),
-      company: company.trim(),
-      url: url.trim() || undefined,
-      notes: notes.trim() || undefined,
-      risk,
-    };
-
-    setSubmitting(true);
+  async function onSubmit() {
     try {
-      // Works with new and legacy api shapes
-      const creator =
-        api.createJob ?? (api as any).api?.create ?? (api as any).create;
-      if (!creator) throw new Error("Create endpoint not available.");
-      await creator(input);
-      Alert.alert("Added", "Job saved.");
-      navigation.goBack?.();
+      setSubmitting(true);
+      const payload: JobInput = {
+        title: title.trim(),
+        company: company.trim(),
+        url: url.trim() || undefined,
+        notes: notes.trim() || undefined,
+        // 🔽 Prisma expects lowercase: "low" | "medium" | "high"
+        risk: risk.toLowerCase() as "low" | "medium" | "high",
+      };
+      await api.createJob(payload);
+      navigation.goBack();
     } catch (e: any) {
-      console.error(e);
-      Alert.alert("Add failed", e?.message ?? "Unknown error");
+      Alert.alert("Add failed", String(e?.message ?? e));
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const pickScreenshot = async () => {
-    try {
-      const ImagePicker = await import("expo-image-picker");
-      const res = await ImagePicker.launchImageLibraryAsync({
-        quality: 0.85,
-        allowsMultipleSelection: false,
-      });
-      if (!res.canceled && res.assets?.length) {
-        Alert.alert("Picked", "Screenshot attached (placeholder).");
-        // Hook up OCR/parse here later.
-      }
-    } catch (e: any) {
-      Alert.alert("Image Picker", e?.message ?? "Unable to open gallery.");
-    }
-  };
+  }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.select({ ios: "padding", android: undefined })}
-      style={{ flex: 1, backgroundColor: "#fff" }}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
-    >
-      <ScrollView
-        contentContainerStyle={{
-          paddingTop: insets.top + 12,
-          paddingBottom: insets.bottom + 40,
-        }}
+    <Screen>
+      <KeyboardAvoidingView
         style={{ flex: 1 }}
-        keyboardShouldPersistTaps="handled"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={{ paddingHorizontal: 20 }}>
-          <Text style={{ fontSize: 22, fontWeight: "800", marginBottom: 12 }}>
-            Add Content
-          </Text>
+        <ScrollView contentContainerStyle={styles.container}>
+          <Text style={styles.label}>Title</Text>
+          <TextInput value={title} onChangeText={setTitle} style={styles.input} />
 
-          <Label>Title</Label>
-          <Field value={title} onChangeText={setTitle} placeholder="Job title" />
+          <Text style={styles.label}>Company</Text>
+          <TextInput value={company} onChangeText={setCompany} style={styles.input} />
 
-          <Label style={{ marginTop: 12 }}>Company</Label>
-          <Field value={company} onChangeText={setCompany} placeholder="Company name" />
-
-          <Label style={{ marginTop: 12 }}>URL</Label>
-          <Field
+          <Text style={styles.label}>URL</Text>
+          <TextInput
             value={url}
             onChangeText={setUrl}
-            placeholder="https://..."
+            placeholder="https://…"
             autoCapitalize="none"
             keyboardType="url"
+            style={styles.input}
           />
 
-          <Label style={{ marginTop: 16 }}>Risk</Label>
-          <View style={{ flexDirection: "row", gap: 10, marginBottom: 2 }}>
-            {risks.map((r) => (
-              <SegButton key={r} active={risk === r} label={r.toUpperCase()} onPress={() => setRisk(r)} />
-            ))}
+          <Text style={styles.label}>Risk</Text>
+          <View style={styles.pills}>
+            {(["LOW", "MEDIUM", "HIGH"] as const).map((r) => {
+              const active = r === risk;
+              return (
+                <Pressable
+                  key={r}
+                  onPress={() => setRisk(r)}
+                  style={[styles.pill, active && styles.pillActive]}
+                >
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{r}</Text>
+                </Pressable>
+              );
+            })}
           </View>
 
-          <Label style={{ marginTop: 16 }}>Notes</Label>
+          <Text style={styles.label}>Notes</Text>
           <TextInput
             value={notes}
             onChangeText={setNotes}
-            placeholder="Optional notes"
             multiline
-            textAlignVertical="top"
-            style={{
-              borderWidth: 1,
-              borderColor: "#E5E7EB",
-              borderRadius: 12,
-              paddingHorizontal: 12,
-              paddingVertical: 10,
-              minHeight: 110,
-            }}
+            style={[styles.input, { height: 120, textAlignVertical: "top" }]}
           />
 
-          <View style={{ height: 18 }} />
-
-          <View style={{ flexDirection: "row", gap: 12 }}>
-            <PrimaryButton label={submitting ? "Adding..." : "Add"} onPress={onSubmit} disabled={submitting} />
-            <SecondaryButton label="Pick Screenshot" onPress={pickScreenshot} />
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={{ height: 16 }} />
+          <Pressable
+            onPress={onSubmit}
+            disabled={submitting}
+            style={[styles.primaryBtn, submitting && { opacity: 0.6 }]}
+          >
+            <Text style={styles.primaryBtnText}>{submitting ? "Adding…" : "Add"}</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
-/* ---------- tiny UI helpers ---------- */
-
-function Label({ children, style }: { children: React.ReactNode; style?: any }) {
-  return <Text style={[{ fontSize: 13, color: "#6B7280", marginBottom: 6 }, style]}>{children}</Text>;
-}
-
-function Field(props: React.ComponentProps<typeof TextInput>) {
-  return (
-    <TextInput
-      {...props}
-      style={[
-        {
-          borderWidth: 1,
-          borderColor: "#E5E7EB",
-          borderRadius: 12,
-          paddingHorizontal: 12,
-          paddingVertical: 10,
-          backgroundColor: "#fff",
-        },
-        props.style,
-      ]}
-    />
-  );
-}
-
-function SegButton({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active?: boolean;
-  onPress?: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: active ? "#FF5A2C" : "#E5E7EB",
-        backgroundColor: active ? "rgba(255,90,44,0.08)" : "#fff",
-      }}
-    >
-      <Text style={{ fontWeight: "700", color: active ? "#FF5A2C" : "#111827" }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function PrimaryButton({
-  label,
-  onPress,
-  disabled,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={{
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 12,
-        borderRadius: 12,
-        backgroundColor: disabled ? "#F59E8B" : "#FF5A2C",
-      }}
-    >
-      <Text style={{ color: "#fff", fontWeight: "700" }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function SecondaryButton({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        flex: 1,
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: "#E5E7EB",
-        backgroundColor: "#fff",
-      }}
-    >
-      <Text style={{ fontWeight: "700" }}>{label}</Text>
-    </Pressable>
-  );
-}
+const styles = StyleSheet.create({
+  backLink: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: colors?.primary ?? "#ff5a3c",
+    fontWeight: "600",
+  },
+  container: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  label: { marginTop: 14, marginBottom: 6, fontWeight: "600" },
+  input: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+  },
+  pills: { flexDirection: "row", gap: 10 },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
+  },
+  pillActive: {
+    borderColor: "#ff5a3c",
+    backgroundColor: "#fff4f1",
+  },
+  pillText: { fontWeight: "600", color: "#111" },
+  pillTextActive: { color: "#ff5a3c" },
+  primaryBtn: {
+    alignSelf: "flex-start",
+    backgroundColor: "#1f6cff",
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  primaryBtnText: { color: "#fff", fontWeight: "700" },
+});

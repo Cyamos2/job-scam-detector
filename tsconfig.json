@@ -17,5 +17,5 @@
     "allowSyntheticDefaultImports": true,
     "types": ["react", "react-native", "expo"]
   },
-  "include": ["src", "App.tsx", "declarations.d.ts"]
+  "include": ["src", "App.tsx", "declarations.d.ts", "server/src/seed"]
 }

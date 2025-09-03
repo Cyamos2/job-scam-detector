@@ -1,17 +1,29 @@
 // App.tsx
-import 'react-native-gesture-handler';
-import React from 'react';
-import { DefaultTheme, DarkTheme, NavigationContainer } from '@react-navigation/native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import RootNavigator from './src/navigation/RootNavigator';
-import { SettingsProvider, useSettings, resolveThemeName } from './src/SettingsProvider';
+import React from "react";
+import { useColorScheme } from "react-native";
+import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import {
+  NavigationContainer,
+  DarkTheme as NavDarkTheme,
+  DefaultTheme as NavDefaultTheme,
+} from "@react-navigation/native";
+
+import RootNavigator from "./src/navigation/RootNavigator";
+import { SettingsProvider, useSettings } from "./src/SettingsProvider";
 
 function AppInner() {
-  const { settings } = useSettings();
-  const mode = resolveThemeName(settings.theme);
-  const theme = mode === 'dark' ? DarkTheme : DefaultTheme;
+  const { settings } = useSettings(); // settings.theme: "system" | "light" | "dark"
+  const systemScheme = useColorScheme(); // "light" | "dark" | null
+
+  const mode =
+    settings.theme === "system" ? (systemScheme ?? "light") : settings.theme;
+
+  const theme = mode === "dark" ? NavDarkTheme : NavDefaultTheme;
+
   return (
     <NavigationContainer theme={theme}>
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
       <RootNavigator />
     </NavigationContainer>
   );

@@ -2,26 +2,19 @@
   "expo": {
     "name": "Job Scam Detector",
     "slug": "job-scam-detector",
-    "version": "1.0.0",
+    "scheme": "scamicide",
     "orientation": "portrait",
-    "icon": "./assets/scamicide-logo.png",
-    "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/scamicide-logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": ["**/*"],
-    "ios": { "supportsTablet": true },
-    "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/scamicide-logo.png",
-        "backgroundColor": "#ffffff"
+    "icon": "./assets/icon.png",
+    "splash": { "image": "./assets/scamicide-logo.png", "resizeMode": "contain", "backgroundColor": "#ffffff" },
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSAppTransportSecurity": { "NSAllowsArbitraryLoads": true }
       }
     },
-    "web": { "favicon": "./assets/scamicide-logo.png" },
+    "android": { "permissions": [] },
     "extra": {
-      "API_URL": "http://YOUR-LAN-IP:3000"
+      "API_URL": "http://172.18.33.180:3000"
     }
   }
 }
