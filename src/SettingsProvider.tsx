@@ -1,158 +1,114 @@
-// SettingsProvider.tsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+// src/SettingsProvider.tsx
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Appearance } from 'react-native';
 
-type ThemeName = "light" | "dark";
-type RiskFilter = "all" | "high" | "medium" | "low";
-type SortMode = "newest" | "oldest" | "scoreHigh" | "scoreLow";
+export type ThemeName = 'system' | 'light' | 'dark';
+export type RiskFilter = 'all' | 'high' | 'medium' | 'low';
 
 type Settings = {
-  // existing
   theme: ThemeName;
-  setTheme: (t: ThemeName) => void;
+  riskFilter: RiskFilter;
+};
 
-  autoSave: boolean;
-  setAutoSave: (v: boolean) => void;
-
-  sensitivity: number;
-  setSensitivity: (n: number) => void;
-
-  reset: () => void;
-
-  // NEW – DB view prefs
-  dbSearch: string;
-  setDbSearch: (s: string) => void;
-
-  dbRisk: RiskFilter;
-  setDbRisk: (r: RiskFilter) => void;
-
-  dbSort: SortMode;
-  setDbSort: (s: SortMode) => void;
-
-  // hydration flag (optional, handy)
+type Ctx = {
   hydrated: boolean;
+  settings: Settings;
+  setTheme: (t: ThemeName) => void;
+  toggleTheme: () => void; // cycles: system → light → dark
+  setRiskFilter: (r: RiskFilter) => void;
 };
 
-const CTX = createContext<Settings | null>(null);
-
-const KEYS = {
-  theme: "settings.theme",
-  autoSave: "settings.autoSave",
-  sensitivity: "settings.sensitivity",
-  dbSearch: "settings.db.search",
-  dbRisk: "settings.db.risk",
-  dbSort: "settings.db.sort",
-} as const;
-
-const DEFAULTS = {
-  theme: "light" as ThemeName,
-  autoSave: false,
-  sensitivity: 50,
-  dbSearch: "",
-  dbRisk: "all" as RiskFilter,
-  dbSort: "newest" as SortMode,
+const STORAGE_KEY = '@jsd/settings:v1';
+const DEFAULT_SETTINGS: Settings = {
+  theme: 'system',
+  riskFilter: 'all',
 };
 
-export function SettingsProvider({ children }: { children: React.ReactNode }) {
+const SettingsContext = createContext<Ctx | undefined>(undefined);
+
+export const SettingsProvider: React.FC<React.PropsWithChildren> = ({
+  children,
+}) => {
+  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [hydrated, setHydrated] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [theme, setTheme] = useState<ThemeName>(DEFAULTS.theme);
-  const [autoSave, setAutoSave] = useState<boolean>(DEFAULTS.autoSave);
-  const [sensitivity, setSensitivity] = useState<number>(DEFAULTS.sensitivity);
-
-  const [dbSearch, setDbSearch] = useState<string>(DEFAULTS.dbSearch);
-  const [dbRisk, setDbRisk] = useState<RiskFilter>(DEFAULTS.dbRisk);
-  const [dbSort, setDbSort] = useState<SortMode>(DEFAULTS.dbSort);
-
-  // hydrate
+  // hydrate once
   useEffect(() => {
     (async () => {
       try {
-        const [
-          sTheme,
-          sAutoSave,
-          sSens,
-          sDbSearch,
-          sDbRisk,
-          sDbSort,
-        ] = await Promise.all([
-          AsyncStorage.getItem(KEYS.theme),
-          AsyncStorage.getItem(KEYS.autoSave),
-          AsyncStorage.getItem(KEYS.sensitivity),
-          AsyncStorage.getItem(KEYS.dbSearch),
-          AsyncStorage.getItem(KEYS.dbRisk),
-          AsyncStorage.getItem(KEYS.dbSort),
-        ]);
-
-        if (sTheme === "light" || sTheme === "dark") setTheme(sTheme);
-        if (sAutoSave != null) setAutoSave(sAutoSave === "1");
-        if (sSens != null && !Number.isNaN(+sSens)) setSensitivity(Math.max(0, Math.min(100, +sSens)));
-
-        if (typeof sDbSearch === "string") setDbSearch(sDbSearch);
-        if (sDbRisk === "all" || sDbRisk === "high" || sDbRisk === "medium" || sDbRisk === "low") setDbRisk(sDbRisk);
-        if (sDbSort === "newest" || sDbSort === "oldest" || sDbSort === "scoreHigh" || sDbSort === "scoreLow")
-          setDbSort(sDbSort);
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as Partial<Settings>;
+          setSettings((prev) => ({ ...prev, ...parsed }));
+        }
+      } catch (e) {
+        console.warn('Settings hydrate failed:', e);
       } finally {
         setHydrated(true);
       }
     })();
   }, []);
 
-  // persist
+  // persist with debounce after hydration
   useEffect(() => {
-    AsyncStorage.setItem(KEYS.theme, theme).catch(() => {});
-  }, [theme]);
-  useEffect(() => {
-    AsyncStorage.setItem(KEYS.autoSave, autoSave ? "1" : "0").catch(() => {});
-  }, [autoSave]);
-  useEffect(() => {
-    AsyncStorage.setItem(KEYS.sensitivity, String(sensitivity)).catch(() => {});
-  }, [sensitivity]);
+    if (!hydrated) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(settings)).catch((e) =>
+        console.warn('Settings save failed:', e)
+      );
+    }, 250);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [settings, hydrated]);
 
-  useEffect(() => {
-    AsyncStorage.setItem(KEYS.dbSearch, dbSearch).catch(() => {});
-  }, [dbSearch]);
-  useEffect(() => {
-    AsyncStorage.setItem(KEYS.dbRisk, dbRisk).catch(() => {});
-  }, [dbRisk]);
-  useEffect(() => {
-    AsyncStorage.setItem(KEYS.dbSort, dbSort).catch(() => {});
-  }, [dbSort]);
+  const setTheme = (t: ThemeName) =>
+    setSettings((s) => ({ ...s, theme: t }));
 
-  const reset = () => {
-    setTheme(DEFAULTS.theme);
-    setAutoSave(DEFAULTS.autoSave);
-    setSensitivity(DEFAULTS.sensitivity);
-    setDbSearch(DEFAULTS.dbSearch);
-    setDbRisk(DEFAULTS.dbRisk);
-    setDbSort(DEFAULTS.dbSort);
-  };
+  const toggleTheme = () =>
+    setSettings((s) => {
+      const order: ThemeName[] = ['system', 'light', 'dark'];
+      const idx = order.indexOf(s.theme);
+      const next = order[(idx + 1) % order.length];
+      return { ...s, theme: next };
+    });
 
-  const value = useMemo(
-    () => ({
-      theme,
-      setTheme,
-      autoSave,
-      setAutoSave,
-      sensitivity,
-      setSensitivity,
-      reset,
-      dbSearch,
-      setDbSearch,
-      dbRisk,
-      setDbRisk,
-      dbSort,
-      setDbSort,
-      hydrated,
-    }),
-    [theme, autoSave, sensitivity, dbSearch, dbRisk, dbSort, hydrated]
+  const setRiskFilter = (r: RiskFilter) =>
+    setSettings((s) => ({ ...s, riskFilter: r }));
+
+  const value = useMemo<Ctx>(
+    () => ({ hydrated, settings, setTheme, toggleTheme, setRiskFilter }),
+    [hydrated, settings]
   );
 
-  return <CTX.Provider value={value}>{children}</CTX.Provider>;
-}
+  return (
+    <SettingsContext.Provider value={value}>
+      {children}
+    </SettingsContext.Provider>
+  );
+};
 
 export function useSettings() {
-  const v = useContext(CTX);
-  if (!v) throw new Error("useSettings must be used within SettingsProvider");
-  return v;
+  const ctx = useContext(SettingsContext);
+  if (!ctx) throw new Error('useSettings must be used inside SettingsProvider');
+  return ctx;
+}
+
+/** Helper: resolve actual color scheme considering "system" */
+export function resolveThemeName(theme: ThemeName): 'light' | 'dark' {
+  if (theme === 'system') {
+    const sys = Appearance.getColorScheme();
+    return sys === 'dark' ? 'dark' : 'light';
+  }
+  return theme;
 }

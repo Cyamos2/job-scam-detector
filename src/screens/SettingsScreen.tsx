@@ -1,209 +1,112 @@
 // src/screens/SettingsScreen.tsx
-import React, { useEffect } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  ScrollView,
-  Switch,
-  Alert,
-} from "react-native";
-import * as Sharing from "expo-sharing";
-import * as FileSystem from "expo-file-system";
-import * as DocumentPicker from "expo-document-picker";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React from 'react';
+import { View, Text, Pressable, Switch } from 'react-native';
+import { useSettings } from '../SettingsProvider';
 
-import { useColors } from "../theme/useColors";
-import { useSettings } from "../SettingsProvider";
-import { useSavedItems, type SavedAnalysis } from "../store/savedItems";
+const Pill: React.FC<{
+  label: string;
+  active?: boolean;
+  onPress?: () => void;
+}> = ({ label, active, onPress }) => (
+  <Pressable
+    onPress={onPress}
+    style={{
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: active ? '#FF5733' : '#d0d0d0',
+      backgroundColor: active ? '#FFE7E1' : '#fff',
+      marginRight: 8,
+      marginBottom: 8,
+    }}
+  >
+    <Text style={{ color: active ? '#D43C18' : '#333', fontWeight: '600' }}>
+      {label}
+    </Text>
+  </Pressable>
+);
 
-export default function SettingsScreen({ navigation }: any) {
-  const insets = useSafeAreaInsets();
-
-  const { colors, text, card, bg } = useColors();
-  const {
-    theme,
-    setTheme,
-    autoSave,
-    setAutoSave,
-    sensitivity,
-    setSensitivity,
-    reset,
-  } = useSettings();
-  const { items, addMany } = useSavedItems();
-
-  useEffect(() => {
-    navigation.setOptions({ title: "Settings" });
-  }, [navigation]);
-
-  const bumpSensitivity = (delta: number) =>
-    setSensitivity(Math.max(0, Math.min(100, sensitivity + delta)));
-
-  const exportData = async () => {
-    try {
-      const path = FileSystem.documentDirectory + "scamicide-backup.json";
-      await FileSystem.writeAsStringAsync(path, JSON.stringify(items, null, 2));
-      await Sharing.shareAsync(path);
-    } catch (err) {
-      Alert.alert("Export failed", String(err));
-    }
-  };
-
-  const importData = async () => {
-    const res = await DocumentPicker.getDocumentAsync({ type: "application/json" });
-    if (res.canceled) return;
-    try {
-      const raw = await FileSystem.readAsStringAsync(res.assets[0].uri);
-      const parsed = JSON.parse(raw) as unknown;
-
-      if (!Array.isArray(parsed)) throw new Error("Invalid backup: not an array");
-      // Basic shape validation
-      const cleaned: SavedAnalysis[] = parsed.filter((x: any) =>
-        x &&
-        typeof x.id === "string" &&
-        typeof x.title === "string" &&
-        typeof x.score === "number" &&
-        typeof x.verdict === "string" &&
-        Array.isArray(x.flags) &&
-        typeof x.createdAt === "number"
-      );
-
-      if (!cleaned.length) throw new Error("No valid records found");
-
-      addMany(cleaned);
-      Alert.alert("Import complete", `${cleaned.length} analyses imported.`);
-    } catch (e) {
-      Alert.alert("Import failed", String(e));
-    }
-  };
+export default function SettingsScreen() {
+  const { hydrated, settings, setTheme, toggleTheme, setRiskFilter } = useSettings();
+  const loading = !hydrated;
 
   return (
-    <ScrollView
-      style={[{ flex: 1 }, bg]}
-      contentContainerStyle={[
-        styles.scroll,
-        { paddingTop: Math.max(12, insets.top + 8) },
-      ]}
-      contentInsetAdjustmentBehavior="automatic"
-    >
-      {/* Theme */}
-      <View style={[styles.card, card, { borderColor: colors.border }]}>
-        <Text style={[styles.h2, text]}>Theme</Text>
-        <View style={styles.row}>
+    <View style={{ flex: 1, padding: 20, gap: 24 }}>
+      <Text style={{ fontSize: 22, fontWeight: '700' }}>Appearance</Text>
+
+      <View style={{ gap: 12 }}>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: '#fff',
+            padding: 14,
+            borderRadius: 12,
+            shadowColor: '#000',
+            shadowOpacity: 0.06,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+          }}
+        >
+          <Text style={{ fontSize: 16 }}>Cycle Theme (system → light → dark)</Text>
           <Pressable
-            style={[
-              styles.chip,
-              card,
-              theme === "light" && {
-                backgroundColor: colors.primary,
-                borderColor: colors.primary,
-              },
-            ]}
-            onPress={() => setTheme("light")}
+            onPress={toggleTheme}
+            style={{
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              backgroundColor: '#FF5733',
+              borderRadius: 8,
+            }}
+            disabled={loading}
           >
-            <Text style={[styles.chipText, theme === "light" ? { color: "white" } : text]}>
-              Light
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[
-              styles.chip,
-              card,
-              theme === "dark" && {
-                backgroundColor: colors.primary,
-                borderColor: colors.primary,
-              },
-            ]}
-            onPress={() => setTheme("dark")}
-          >
-            <Text style={[styles.chipText, theme === "dark" ? { color: "white" } : text]}>
-              Dark
+            <Text style={{ color: '#fff', fontWeight: '700' }}>
+              {settings.theme.toUpperCase()}
             </Text>
           </Pressable>
         </View>
+
+        <View style={{ flexDirection: 'row' }}>
+          <Pill
+            label="System"
+            active={settings.theme === 'system'}
+            onPress={() => setTheme('system')}
+          />
+          <Pill
+            label="Light"
+            active={settings.theme === 'light'}
+            onPress={() => setTheme('light')}
+          />
+          <Pill
+            label="Dark"
+            active={settings.theme === 'dark'}
+            onPress={() => setTheme('dark')}
+          />
+        </View>
       </View>
 
-      {/* Auto-save */}
-      <View style={[styles.card, card, { borderColor: colors.border }]}>
-        <Text style={[styles.h2, text]}>Auto-save analyses</Text>
-        <Switch value={autoSave} onValueChange={setAutoSave} />
-      </View>
-
-      {/* Sensitivity */}
-      <View style={[styles.card, card, { borderColor: colors.border }]}>
-        <Text style={[styles.h2, text]}>Sensitivity: {sensitivity}</Text>
-        <View style={styles.row}>
-          {[-10, -1, +1, +10].map((d) => (
-            <Pressable key={d} style={[styles.chip, card]} onPress={() => bumpSensitivity(d)}>
-              <Text style={text}>{d > 0 ? `+${d}` : d}</Text>
-            </Pressable>
+      <View>
+        <Text style={{ fontSize: 22, fontWeight: '700', marginBottom: 10 }}>
+          Risk Filter (default list)
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+          {(['all', 'high', 'medium', 'low'] as const).map((r) => (
+            <Pill
+              key={r}
+              label={r[0].toUpperCase() + r.slice(1)}
+              active={settings.riskFilter === r}
+              onPress={() => setRiskFilter(r)}
+            />
           ))}
         </View>
-        <Text style={[styles.note, text]}>
-          Higher = stricter risk flagging (used by analyzers).
+      </View>
+
+      <View style={{ marginTop: 6, opacity: loading ? 0.6 : 1 }}>
+        <Text style={{ color: '#666' }}>
+          {loading ? 'Loading your saved settings…' : 'Settings are saved automatically.'}
         </Text>
       </View>
-
-      {/* Backups */}
-      <View style={[styles.card, card, { borderColor: colors.border }]}>
-        <Text style={[styles.h2, text]}>Backups</Text>
-        <View style={styles.row}>
-          <Pressable style={[styles.btn, { backgroundColor: colors.primary }]} onPress={exportData}>
-            <Text style={styles.btnText}>Export data</Text>
-          </Pressable>
-          <Pressable style={[styles.btn, card]} onPress={importData}>
-            <Text style={text}>Import data</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Reset */}
-      <Pressable
-        style={[styles.resetBtn, { backgroundColor: "#f55" }]}
-        onPress={() =>
-          Alert.alert("Confirm reset", "Restore settings to defaults?", [
-            { text: "Cancel", style: "cancel" },
-            { text: "Reset", style: "destructive", onPress: reset },
-          ])
-        }
-      >
-        <Text style={styles.resetText}>Reset to Defaults</Text>
-      </Pressable>
-    </ScrollView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: 16, paddingBottom: 32, gap: 16 },
-  h2: { fontSize: 18, fontWeight: "800", marginBottom: 8 },
-  row: { flexDirection: "row", gap: 12, flexWrap: "wrap", alignItems: "center" },
-
-  card: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-  },
-
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  chipText: { fontWeight: "700" },
-
-  note: { fontSize: 12, marginTop: 8 },
-
-  btn: { paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10 },
-  btnText: { color: "white", fontWeight: "700" },
-
-  resetBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 4,
-  },
-  resetText: { color: "white", fontWeight: "800", fontSize: 16 },
-});

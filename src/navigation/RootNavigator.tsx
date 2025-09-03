@@ -1,74 +1,82 @@
 // src/navigation/RootNavigator.tsx
-import React from "react";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createNativeStackNavigator, NativeStackNavigationOptions } from "@react-navigation/native-stack";
-import { useTheme } from "@react-navigation/native";
+import React from 'react';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 
-import HomeScreen from "../screens/HomeScreen";
-import DatabaseScreen from "../screens/DatabaseScreen";
-import ReportDetailScreen from "../screens/ReportDetailScreen";
-import AddContentScreen from "../screens/AddContentScreen";
-import SettingsScreen from "../screens/SettingsScreen";
+// Screens
+import HomeScreen from '../screens/HomeScreen';
+import ScanScreen from '../screens/ScanScreen';
+import VerifyScreen from '../screens/VerifyScreen';
+import DatabaseScreen from '../screens/DatabaseScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
-export type HomeStackParamList = {
-  HomeMain: undefined;
-  AddContent: undefined;
-  ReportDetail: { id: string };
-};
+const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-export type DatabaseStackParamList = {
-  DatabaseMain: undefined;
-  ReportDetail: { id: string };
-};
-
-export type RootTabsParamList = {
-  HomeTab: undefined;
-  DatabaseTab: undefined;
-  SettingsTab: undefined;
-};
-
-const HomeStack = createNativeStackNavigator<HomeStackParamList>();
-const DatabaseStack = createNativeStackNavigator<DatabaseStackParamList>();
-const Tabs = createBottomTabNavigator<RootTabsParamList>();
-
-function useThemedStackOptions(): NativeStackNavigationOptions {
-  const { colors } = useTheme();
-  return {
-    headerStyle: { backgroundColor: colors.card },
-    headerTitleStyle: { color: colors.text },
-    headerTintColor: colors.text,
-    headerShadowVisible: false,
-    headerBackVisible: true,
-  };
-}
-
-function HomeStackNav() {
-  const screenOptions = useThemedStackOptions();
+function HomeStack() {
   return (
-    <HomeStack.Navigator screenOptions={screenOptions}>
-      <HomeStack.Screen name="HomeMain" component={HomeScreen} options={{ title: "Home" }} />
-      <HomeStack.Screen name="AddContent" component={AddContentScreen} options={{ title: "Add Content" }} />
-      <HomeStack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: "Report" }} />
-    </HomeStack.Navigator>
+    <Stack.Navigator>
+      <Stack.Screen
+        name="HomeMain"
+        component={HomeScreen}
+        options={{ headerTitle: 'Job Scam Detector' }}
+      />
+    </Stack.Navigator>
   );
 }
 
-function DatabaseStackNav() {
-  const screenOptions = useThemedStackOptions();
+function ScanStack() {
   return (
-    <DatabaseStack.Navigator screenOptions={screenOptions}>
-      <DatabaseStack.Screen name="DatabaseMain" component={DatabaseScreen} options={{ title: "Database" }} />
-      <DatabaseStack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: "Report" }} />
-    </DatabaseStack.Navigator>
+    <Stack.Navigator>
+      <Stack.Screen
+        name="ScanMain"
+        component={ScanScreen}
+        options={{ headerTitle: 'Scan a Job Post' }}
+      />
+      <Stack.Screen
+        name="Verify"
+        component={VerifyScreen}
+        options={{ headerTitle: 'Verify Company' }}
+      />
+    </Stack.Navigator>
   );
 }
 
 export default function RootNavigator() {
   return (
-    <Tabs.Navigator screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="HomeTab" component={HomeStackNav} options={{ title: "Home" }} />
-      <Tabs.Screen name="DatabaseTab" component={DatabaseStackNav} options={{ title: "Database" }} />
-      <Tabs.Screen name="SettingsTab" component={SettingsScreen} options={{ title: "Settings" }} />
-    </Tabs.Navigator>
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: '#FF5733',
+        tabBarInactiveTintColor: 'gray',
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName: keyof typeof Ionicons.glyphMap;
+
+          switch (route.name) {
+            case 'Home':
+              iconName = focused ? 'home' : 'home-outline';
+              break;
+            case 'Scan':
+              iconName = focused ? 'camera' : 'camera-outline';
+              break;
+            case 'Database':
+              iconName = focused ? 'list' : 'list-outline';
+              break;
+            case 'Settings':
+              iconName = focused ? 'settings' : 'settings-outline';
+              break;
+            default:
+              iconName = 'ellipse';
+          }
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
+      <Tab.Screen name="Home" component={HomeStack} />
+      <Tab.Screen name="Scan" component={ScanStack} />
+      <Tab.Screen name="Database" component={DatabaseScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
+    </Tab.Navigator>
   );
 }
