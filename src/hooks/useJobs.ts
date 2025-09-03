@@ -1,63 +1,48 @@
+// src/hooks/useJobs.ts
 import * as React from "react";
-import { api, type Job, type JobInput } from "@/lib/api";
+import { api, type Job, type JobInput } from "../lib/api";
 
 export function useJobs() {
   const [items, setItems] = React.useState<Job[]>([]);
-  const [total, setTotal] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
 
-  const [risk, setRisk] = React.useState<"ALL" | "LOW" | "MEDIUM" | "HIGH">("ALL");
-  const [search, setSearch] = React.useState("");
-
-  const refresh = React.useCallback(async () => {
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
-      const q = { risk: risk === "ALL" ? undefined : risk, search };
-      const data = await api.list(q);
-      setItems(data.items);
-      setTotal(data.total);
-    } catch (e: any) {
-      setError(e?.message ?? "Network request failed");
+      const data = await api.listJobs(); // returns Job[]
+      setItems(data);
+    } catch (e) {
+      setError(e);
     } finally {
       setLoading(false);
     }
-  }, [risk, search]);
+  }, []);
 
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const refresh = load;
+
+  // convenience helpers (optional)
   const create = React.useCallback(async (input: JobInput) => {
-    const created = await api.create(input);
-    setItems((s) => [created, ...s]);
-    setTotal((t) => t + 1);
+    const created = await api.createJob(input);
+    setItems((prev) => [created, ...prev]);
+    return created;
   }, []);
 
   const update = React.useCallback(async (id: string, patch: Partial<JobInput>) => {
-    setItems((s) => s.map((j) => (j.id === id ? { ...j, ...patch } as any : j)));
-    try {
-      const saved = await api.update(id, patch);
-      setItems((s) => s.map((j) => (j.id === id ? saved : j)));
-    } catch (e) {
-      // refetch on failure
-      await refresh();
-      throw e;
-    }
-  }, [refresh]);
+    const updated = await api.updateJob(id, patch);
+    setItems((prev) => prev.map((j) => (j.id === id ? updated : j)));
+    return updated;
+  }, []);
 
   const remove = React.useCallback(async (id: string) => {
-    const prev = items;
-    setItems((s) => s.filter((j) => j.id !== id));
-    setTotal((t) => Math.max(0, t - 1));
-    try {
-      await api.remove(id);
-    } catch (e) {
-      // rollback
-      setItems(prev);
-      setTotal(prev.length);
-      throw e;
-    }
-  }, [items]);
+    await api.deleteJob(id);
+    setItems((prev) => prev.filter((j) => j.id !== id));
+  }, []);
 
-  React.useEffect(() => { refresh(); }, [refresh]);
-
-  return { items, total, loading, error, risk, setRisk, search, setSearch, refresh, create, update, remove };
+  return { items, loading, error, refresh, create, update, remove };
 }
