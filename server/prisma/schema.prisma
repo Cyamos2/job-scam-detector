@@ -7,23 +7,19 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model Job {
-  id         String   @id @default(cuid())
-  title      String
-  company    String
-  risk       String   @default("LOW") // keep string (SQLite friendly)
-  score      Int      @default(0)
-  source     String?
-  url        String?
-  email      String?
-  notes      String?
-  createdAt  DateTime @default(now())
-  images     Image[]
+enum Risk {
+  low    @map("LOW")
+  medium @map("MEDIUM")
+  high   @map("HIGH")
 }
 
-model Image {
-  id     String @id @default(cuid())
-  uri    String
-  jobId  String
-  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade) // <= important
+model Job {
+  id        String   @id @default(cuid())
+  title     String
+  company   String
+  url       String?
+  risk      Risk
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
 }

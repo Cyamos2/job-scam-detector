@@ -1,4 +1,3 @@
-// src/screens/HomeScreen.tsx
 import React from 'react';
 import {
   View,
@@ -8,6 +7,7 @@ import {
   Image,
   Platform,
   StyleSheet,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -15,8 +15,6 @@ import { useNavigation } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
 import type { RootTabParamList } from '@/navigation/types';
 import { goToAddContent } from '@/navigation/goTo';
-
-// Path from src/screens → ../../assets/...
 import Logo from '../../assets/scamicide-logo.png';
 
 const ORANGE = '#FF5733';
@@ -33,7 +31,7 @@ export default function HomeScreen() {
     if (Platform.OS !== 'web') {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        alert('We need photos permission to pick a screenshot.');
+        Alert.alert('Permission needed', 'We need Photos access to pick a screenshot.');
         return;
       }
     }
@@ -44,7 +42,6 @@ export default function HomeScreen() {
     });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
-      // If AddContent accepts a param, pass it here:
       navigation.getParent()?.navigate('Home', {
         screen: 'AddContent',
         params: { presetUri: result.assets[0].uri },
@@ -57,9 +54,7 @@ export default function HomeScreen() {
       <View style={styles.container}>
         <Image source={Logo} resizeMode="contain" style={styles.logo} />
         <Text style={styles.title}>Job Scam Detector</Text>
-        <Text style={styles.subtitle}>
-          Scan job posts, verify companies, and avoid scams.
-        </Text>
+        <Text style={styles.subtitle}>Scan job posts, verify companies, avoid scams.</Text>
 
         <TextInput
           value={query}
@@ -79,9 +74,7 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <Text style={styles.helper}>
-          Tip: You can also paste a job link inside Add Content.
-        </Text>
+        <Text style={styles.helper}>Tip: You can also paste a job link inside Add Content.</Text>
       </View>
     </SafeAreaView>
   );
@@ -89,12 +82,7 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#fff' },
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    alignItems: 'center',
-  },
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 8, alignItems: 'center' },
   logo: { width: 120, height: 120, marginTop: 8, marginBottom: 12 },
   title: { fontSize: 24, fontWeight: '800', color: '#222' },
   subtitle: { fontSize: 14, color: '#6b7280', marginTop: 4, textAlign: 'center' },

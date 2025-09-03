@@ -1,71 +1,79 @@
+import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "csv-parse/sync";
 import { prisma } from "../prisma";
 
-// Local Risk type (matches prisma schema enum)
-const RISK_VALUES = ["LOW", "MEDIUM", "HIGH"] as const;
-type Risk = (typeof RISK_VALUES)[number];
+type Risk = "low" | "medium" | "high";
 
-function coerceRisk(input: unknown): Risk {
-  const s = String(input ?? "").toUpperCase().trim();
-  return (RISK_VALUES as readonly string[]).includes(s) ? (s as Risk) : "LOW";
-}
+type Row = {
+  title: string;
+  company: string;
+  url?: string;
+  notes?: string;
+  risk?: string; // may be LOW/MEDIUM/HIGH — we’ll coerce
+  // legacy/ignored columns are safe to keep:
+  email?: string;
+  source?: string;
+  score?: string | number;
+  imageUris?: string;
+};
 
-async function clearAll() {
-  await prisma.image.deleteMany({});
-  await prisma.job.deleteMany({});
+function coerceRisk(input?: string): Risk {
+  const v = (input ?? "").trim().toLowerCase();
+  if (v === "high" || v === "medium" || v === "low") return v;
+  if (/^high$/i.test(input ?? "")) return "high";
+  if (/^medium$/i.test(input ?? "")) return "medium";
+  if (/^low$/i.test(input ?? "")) return "low";
+  return "low";
 }
 
 async function main() {
-  const filePath = path.resolve(process.cwd(), "data/seed.csv");
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Seed CSV not found at ${filePath}`);
+  const csvPath = path.resolve(process.cwd(), "data/seed.csv");
+  if (!fs.existsSync(csvPath)) {
+    console.log("No data/seed.csv found; skipping seed.");
+    return;
   }
 
-  const csv = fs.readFileSync(filePath, "utf-8");
-  const rows = parse(csv, { columns: true, skip_empty_lines: true });
+  const content = fs.readFileSync(csvPath, "utf8");
 
-  await clearAll();
+  // Some versions of csv-parse/sync type the result as unknown.
+  // Force a concrete type so `row` isn’t unknown in the loop.
+  const rows = (parse(content, {
+    columns: true,
+    skip_empty_lines: true,
+    trim: true,
+  }) as unknown) as Row[];
 
   let count = 0;
-  for (const row of rows) {
-    const images = String(row.imageUris || "")
-      .split(";")
-      .map((s: string) => s.trim())
-      .filter(Boolean);
 
-    const risk = coerceRisk(row.risk);
-    const scoreNum = Number(row.score);
-    const score = Number.isFinite(scoreNum) ? scoreNum : 0;
+  for (const row of rows) {
+    const title = (row.title ?? "").trim();
+    const company = (row.company ?? "").trim();
+    if (!title || !company) {
+      console.log("Skipping row without title/company:", row);
+      continue;
+    }
 
     await prisma.job.create({
       data: {
-        title: row.title,
-        company: row.company,
-        url: row.url || null,
-        email: row.email || null,
-        source: row.source || null,
-        risk,     // "LOW" | "MEDIUM" | "HIGH"
-        score,    // 0–100
-        notes: row.notes || null,
-        images: { create: images.map((uri) => ({ uri })) },
+        title,
+        company,
+        url: row.url?.trim() || null,
+        notes: row.notes?.trim() || null,
+        risk: coerceRisk(row.risk),
       },
     });
 
     count++;
   }
 
-  console.log(`✅ Seed complete: inserted ${count} jobs`);
+  console.log(`✅ Seeded ${count} job(s) from data/seed.csv`);
 }
 
 main()
-  .then(async () => {
-    await prisma.$disconnect();
-    process.exit(0);
-  })
-  .catch(async (e) => {
-    console.error("❌ Seed failed:", e);
-    await prisma.$disconnect();
+  .catch((e) => {
+    console.error("Seed failed:", e);
     process.exit(1);
-  });
+  })
+  .finally(() => prisma.$disconnect());

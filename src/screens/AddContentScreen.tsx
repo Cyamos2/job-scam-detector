@@ -1,211 +1,269 @@
-// src/screens/AddContentScreen.tsx
 import * as React from "react";
 import {
-  View, Text, StyleSheet, TextInput, Pressable, Image, ScrollView,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
-import { useSettings } from "../SettingsProvider";
-import { useColors } from "../theme/useColors";
-import { analyzeTextLocal, type AnalysisResult } from "../lib/analyzer";
-import { api } from "../lib/api";
+import { useNavigation, useTheme } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-function useDebounced<T extends (...a: any[]) => any>(fn: T, ms = 300) {
-  const ref = React.useRef<NodeJS.Timeout | null>(null);
-  return React.useCallback((...args: Parameters<T>) => {
-    if (ref.current) clearTimeout(ref.current);
-    ref.current = setTimeout(() => fn(...args), ms);
-  }, [fn, ms]);
-}
+import { api, type Risk, type JobInput } from "@/lib/api";
+import type { HomeStackParamList, SafeNav } from "@/navigation/types";
 
-type Props = { navigation: any };
+// Use strong type if "AddContent" exists in HomeStackParamList; otherwise `any`.
+type Nav = SafeNav<HomeStackParamList, "AddContent">;
 
-export default function AddContentScreen({ navigation }: Props) {
-  const { colors, bg, card, text, muted } = useColors();
-  const { sensitivity } = useSettings();
+const risks: Risk[] = ["low", "medium", "high"];
 
-  const [input, setInput] = React.useState("");
-  const [imageUri, setImageUri] = React.useState<string | null>(null);
-  const [busy, setBusy] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
-  const [result, setResult] = React.useState<AnalysisResult | null>(null);
+export default function AddContentScreen() {
+  const navigation = useNavigation<Nav>();
+  const { colors } = useTheme() as any;
+  const insets = useSafeAreaInsets();
 
+  const [title, setTitle] = React.useState("");
+  const [company, setCompany] = React.useState("");
+  const [url, setUrl] = React.useState("");
+  const [notes, setNotes] = React.useState("");
+  const [risk, setRisk] = React.useState<Risk>("low");
+  const [submitting, setSubmitting] = React.useState(false);
+
+  // Header & custom back
   React.useLayoutEffect(() => {
-    navigation.setOptions({
+    navigation.setOptions?.({
+      title: "Add Content",
       headerBackVisible: false,
       headerLeft: () => (
-        <Pressable onPress={() => navigation.getParent()?.navigate("HomeTab" as never)} hitSlop={10}
-          style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
-          <Text style={{ color: colors.primary, fontWeight: "700" }}>‹ Home</Text>
+        <Pressable onPress={() => navigation.goBack?.()}>
+          <Text
+            style={{
+              paddingHorizontal: 10,
+              paddingVertical: 8,
+              color: colors?.primary ?? "#ff5a2c",
+              fontWeight: "600",
+            }}
+          >
+            ‹ Home
+          </Text>
         </Pressable>
       ),
-      headerRight: () => (
-        <Pressable onPress={() => Alert.alert("Options", "More options coming soon.")}
-          style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
-          <Text style={{ color: colors.primary, fontWeight: "700" }}>Options</Text>
-        </Pressable>
-      ),
-    });
-  }, [navigation, colors.primary]);
+    } as any);
+  }, [navigation, colors?.primary]);
 
-  const runAnalyzeText = React.useCallback(() => {
-    const raw = input.trim();
-    if (!raw) return Alert.alert("Nothing to analyze", "Paste a job post or link first.");
-    const a = analyzeTextLocal(raw, sensitivity);
-    setResult(a);
-  }, [input, sensitivity]);
-  const onAnalyzeText = useDebounced(runAnalyzeText, 250);
+  const onSubmit = async () => {
+    if (!title.trim() || !company.trim()) {
+      Alert.alert("Missing info", "Please enter a Title and Company.");
+      return;
+    }
+    const input: JobInput = {
+      title: title.trim(),
+      company: company.trim(),
+      url: url.trim() || undefined,
+      notes: notes.trim() || undefined,
+      risk,
+    };
+
+    setSubmitting(true);
+    try {
+      // Works with new and legacy api shapes
+      const creator =
+        api.createJob ?? (api as any).api?.create ?? (api as any).create;
+      if (!creator) throw new Error("Create endpoint not available.");
+      await creator(input);
+      Alert.alert("Added", "Job saved.");
+      navigation.goBack?.();
+    } catch (e: any) {
+      console.error(e);
+      Alert.alert("Add failed", e?.message ?? "Unknown error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const pickScreenshot = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return Alert.alert("Permission needed", "Allow photo access to pick a screenshot.");
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 1, selectionLimit: 1,
-    });
-    if (res.canceled) return;
-    const asset = res.assets?.[0];
-    if (asset?.uri) {
-      setImageUri(asset.uri);
-      setResult(null);
-    }
-  };
-
-  const analyzeScreenshot = async () => {
-    if (!imageUri) return Alert.alert("No screenshot", "Pick a screenshot first.");
     try {
-      setBusy(true);
-      // stub OCR
-      await new Promise((r) => setTimeout(r, 200));
-      const stub =
-        "paid daily guaranteed monthly income 60 minutes training phone +123456789 whatsapp gift cards";
-      const a = analyzeTextLocal(`${stub} ${input}`, sensitivity);
-      setResult(a);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  function extractUrl(t: string): string | null {
-    const m = (t || "").match(/https?:\/\/\S+/i);
-    return m ? m[0] : null;
-  }
-  function extractEmail(t: string): string | null {
-    const m = (t || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-    return m ? m[0] : null;
-  }
-  function titleFrom(text: string) {
-    const t = (text || "").trim().replace(/\s+/g, " ");
-    return t.length > 40 ? t.slice(0, 40) + "…" : t || (imageUri ? "Screenshot analysis" : "Text analysis");
-  }
-
-  const saveToDatabase = async () => {
-    if (!result) return Alert.alert("No analysis", "Analyze text or screenshot first.");
-
-    try {
-      setSaving(true);
-      const title = titleFrom(input);
-      const company = "Unknown";
-      const score = Number(result.score ?? 0);
-      const risk = score >= 70 ? "HIGH" : score >= 40 ? "MEDIUM" : "LOW";
-      const url = extractUrl(input);
-      const email = extractEmail(input);
-      const source = imageUri ? "Image" : "Text Message";
-      const notes = result.flags.length ? result.flags.join(", ") : null;
-
-      await api.create({
-        title, company, score, risk, source, url, email, notes, images: [],
+      const ImagePicker = await import("expo-image-picker");
+      const res = await ImagePicker.launchImageLibraryAsync({
+        quality: 0.85,
+        allowsMultipleSelection: false,
       });
-
-      Alert.alert("Saved", "Added to database.");
-      setInput(""); setImageUri(null); setResult(null);
+      if (!res.canceled && res.assets?.length) {
+        Alert.alert("Picked", "Screenshot attached (placeholder).");
+        // Hook up OCR/parse here later.
+      }
     } catch (e: any) {
-      Alert.alert("Save failed", e?.message ?? "Unknown error");
-    } finally {
-      setSaving(false);
+      Alert.alert("Image Picker", e?.message ?? "Unable to open gallery.");
     }
   };
-
-  const canAnalyzeText = input.trim().length > 0 && !busy;
-  const canAnalyzeShot = !!imageUri && !busy;
-  const canSave = !!result && !saving;
 
   return (
-    <KeyboardAvoidingView style={[{ flex: 1 }, bg]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={[styles.h1, text]}>Add Content</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.select({ ios: "padding", android: undefined })}
+      style={{ flex: 1, backgroundColor: "#fff" }}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 80 : 0}
+    >
+      <ScrollView
+        contentContainerStyle={{
+          paddingTop: insets.top + 12,
+          paddingBottom: insets.bottom + 40,
+        }}
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={{ paddingHorizontal: 20 }}>
+          <Text style={{ fontSize: 22, fontWeight: "800", marginBottom: 12 }}>
+            Add Content
+          </Text>
 
-        <TextInput
-          style={[styles.input, card, { borderColor: colors.border }, text]}
-          placeholder="Paste job text or link (https://…)"
-          placeholderTextColor={muted.color as string}
-          value={input}
-          onChangeText={(t) => { setInput(t); setResult(null); }}
-          multiline
-          scrollEnabled
-        />
+          <Label>Title</Label>
+          <Field value={title} onChangeText={setTitle} placeholder="Job title" />
 
-        <View style={styles.row}>
-          <Pressable onPress={onAnalyzeText} disabled={!canAnalyzeText}
-            style={[styles.btn, { backgroundColor: canAnalyzeText ? colors.primary : "#9aa0a6" }]}>
-            <Text style={styles.btnPrimaryText}>Analyze Text/Link</Text>
-          </Pressable>
-          <Pressable onPress={pickScreenshot} disabled={busy}
-            style={[styles.btn, card, { borderColor: colors.border, opacity: busy ? 0.6 : 1 }]}>
-            <Text style={[styles.btnText, text]}>Pick Screenshot</Text>
-          </Pressable>
+          <Label style={{ marginTop: 12 }}>Company</Label>
+          <Field value={company} onChangeText={setCompany} placeholder="Company name" />
+
+          <Label style={{ marginTop: 12 }}>URL</Label>
+          <Field
+            value={url}
+            onChangeText={setUrl}
+            placeholder="https://..."
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+
+          <Label style={{ marginTop: 16 }}>Risk</Label>
+          <View style={{ flexDirection: "row", gap: 10, marginBottom: 2 }}>
+            {risks.map((r) => (
+              <SegButton key={r} active={risk === r} label={r.toUpperCase()} onPress={() => setRisk(r)} />
+            ))}
+          </View>
+
+          <Label style={{ marginTop: 16 }}>Notes</Label>
+          <TextInput
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Optional notes"
+            multiline
+            textAlignVertical="top"
+            style={{
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+              borderRadius: 12,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+              minHeight: 110,
+            }}
+          />
+
+          <View style={{ height: 18 }} />
+
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <PrimaryButton label={submitting ? "Adding..." : "Add"} onPress={onSubmit} disabled={submitting} />
+            <SecondaryButton label="Pick Screenshot" onPress={pickScreenshot} />
+          </View>
         </View>
-
-        {imageUri ? (
-          <View style={{ gap: 10 }}>
-            <Image source={{ uri: imageUri }} style={styles.preview} />
-            <View style={styles.row}>
-              <Pressable onPress={analyzeScreenshot} disabled={!canAnalyzeShot}
-                style={[styles.btn, { backgroundColor: canAnalyzeShot ? colors.primary : "#9aa0a6" }]}>
-                {busy ? <ActivityIndicator color="white" /> : <Text style={styles.btnPrimaryText}>Analyze Screenshot</Text>}
-              </Pressable>
-              <Pressable onPress={() => setImageUri(null)} style={styles.linkBtn}>
-                <Text style={{ color: "#c00", fontWeight: "600" }}>Remove screenshot</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
-
-        {result && (
-          <View style={[styles.panel, card, { borderColor: colors.border }]}>
-            <Text style={[styles.cardTitle, text]}>Analysis</Text>
-            <Text style={[styles.cardInfo, text]}>Score: {result.score} — {result.verdict} risk</Text>
-            <Text style={[styles.cardFlags, muted]}>
-              Flags: {result.flags.length ? result.flags.join(", ") : "none"}
-            </Text>
-            <Pressable onPress={saveToDatabase} disabled={!canSave}
-              style={[styles.saveBtn, { backgroundColor: canSave ? colors.primary : "#9aa0a6" }]}>
-              <Text style={styles.btnPrimaryText}>{saving ? "Saving…" : "Save to Database"}</Text>
-            </Pressable>
-          </View>
-        )}
-
-        <Text style={[styles.tip, muted]}>Tip: LinkedIn/Indeed URL or raw message text both work.</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  scroll: { padding: 16, gap: 16, paddingBottom: 32 },
-  h1: { fontSize: 18, fontWeight: "800" },
-  input: { height: 220, borderWidth: 1, borderRadius: 12, padding: 12, textAlignVertical: "top" },
-  row: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
-  btn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1 },
-  btnText: { fontWeight: "700" },
-  btnPrimaryText: { color: "white", fontWeight: "700" },
-  preview: { width: "100%", height: 220, borderRadius: 12, backgroundColor: "#ddd" },
-  linkBtn: { paddingHorizontal: 8, paddingVertical: 8 },
-  panel: { padding: 12, borderWidth: 1, borderRadius: 12, gap: 6 },
-  cardTitle: { fontSize: 16, fontWeight: "800" },
-  cardInfo: { fontSize: 14, fontWeight: "600" },
-  cardFlags: { fontSize: 12 },
-  saveBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, marginTop: 6 },
-  tip: { fontSize: 12 },
-});
+/* ---------- tiny UI helpers ---------- */
+
+function Label({ children, style }: { children: React.ReactNode; style?: any }) {
+  return <Text style={[{ fontSize: 13, color: "#6B7280", marginBottom: 6 }, style]}>{children}</Text>;
+}
+
+function Field(props: React.ComponentProps<typeof TextInput>) {
+  return (
+    <TextInput
+      {...props}
+      style={[
+        {
+          borderWidth: 1,
+          borderColor: "#E5E7EB",
+          borderRadius: 12,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          backgroundColor: "#fff",
+        },
+        props.style,
+      ]}
+    />
+  );
+}
+
+function SegButton({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 999,
+        borderWidth: 1,
+        borderColor: active ? "#FF5A2C" : "#E5E7EB",
+        backgroundColor: active ? "rgba(255,90,44,0.08)" : "#fff",
+      }}
+    >
+      <Text style={{ fontWeight: "700", color: active ? "#FF5A2C" : "#111827" }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function PrimaryButton({
+  label,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: disabled ? "#F59E8B" : "#FF5A2C",
+      }}
+    >
+      <Text style={{ color: "#fff", fontWeight: "700" }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function SecondaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#E5E7EB",
+        backgroundColor: "#fff",
+      }}
+    >
+      <Text style={{ fontWeight: "700" }}>{label}</Text>
+    </Pressable>
+  );
+}

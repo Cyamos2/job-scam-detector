@@ -5,11 +5,9 @@
     "module": "esnext",
     "lib": ["esnext"],
     "jsx": "react-native",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    },
+    "paths": { "@/*": ["src/*"] },
     "strict": true,
     "noEmit": true,
     "resolveJsonModule": true,
