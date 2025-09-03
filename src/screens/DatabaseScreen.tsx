@@ -1,4 +1,3 @@
-// src/screens/DatabaseScreen.tsx
 import * as React from "react";
 import {
   View,
@@ -9,19 +8,19 @@ import {
   RefreshControl,
   StyleSheet,
 } from "react-native";
+import { useTheme, useNavigation } from "@react-navigation/native";
+import type { NavigationProp } from "@react-navigation/native";
 import Screen from "../components/Screen";
 import { useJobs } from "../hooks/useJobs";
 import { goToAddContent } from "../navigation/goTo";
-import { useNavigation } from "@react-navigation/native";
-import type { NavigationProp } from "@react-navigation/native";
 import type { RootTabParamList } from "../navigation/types";
 
 type RiskFilter = "all" | "low" | "medium" | "high";
-const colors = { primary: "#FF5733" };
+const ORANGE = "#FF5733";
 
 export default function DatabaseScreen() {
-  // ✅ Type the navigation so it matches goToAddContent
   const navigation = useNavigation<NavigationProp<RootTabParamList>>();
+  const { colors, dark } = useTheme();
 
   const { items, loading, refresh } = useJobs();
   const [filter, setFilter] = React.useState<RiskFilter>("all");
@@ -42,9 +41,9 @@ export default function DatabaseScreen() {
   }, [items, filter, search]);
 
   const renderItem = ({ item }: any) => (
-    <View style={styles.row}>
-      <Text style={styles.rowTitle}>{item.title}</Text>
-      <Text style={styles.rowMeta}>
+    <View style={[styles.row, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <Text style={[styles.rowTitle, { color: colors.text }]}>{item.title}</Text>
+      <Text style={[styles.rowMeta, { color: dark ? "#cbd5e1" : "#6B7280" }]}>
         {item.company} • {item.risk?.toUpperCase()}
       </Text>
     </View>
@@ -57,8 +56,11 @@ export default function DatabaseScreen() {
           value={search}
           onChangeText={setSearch}
           placeholder="Search by company or role"
-          placeholderTextColor="#9aa0a6"
-          style={styles.search}
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.search,
+            { backgroundColor: colors.card, borderColor: colors.border, color: colors.text },
+          ]}
           returnKeyType="search"
         />
 
@@ -69,16 +71,31 @@ export default function DatabaseScreen() {
               <Pressable
                 key={r}
                 onPress={() => setFilter(r)}
-                style={[styles.chip, active && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                  active && {
+                    borderColor: ORANGE,
+                    backgroundColor: dark ? "#261512" : "#fff4f1",
+                  },
+                ]}
               >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                <Text
+                  style={[
+                    styles.chipText,
+                    { color: colors.text },
+                    active && { color: ORANGE },
+                  ]}
+                >
                   {r.toUpperCase()}
                 </Text>
               </Pressable>
             );
           })}
           <Pressable onPress={refresh} style={styles.refresh}>
-            <Text style={styles.refreshText}>Refresh</Text>
+            <Text style={[styles.refreshText, { color: dark ? "#cbd5e1" : "#6B7280" }]}>
+              Refresh
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -91,15 +108,13 @@ export default function DatabaseScreen() {
           styles.listContent,
           filtered.length === 0 && { flex: 1, justifyContent: "center" },
         ]}
-        refreshControl={
-          <RefreshControl refreshing={!!loading} onRefresh={refresh} />
-        }
+        refreshControl={<RefreshControl refreshing={!!loading} onRefresh={refresh} />}
         ListEmptyComponent={
           <View style={{ alignItems: "center" }}>
-            <Text style={styles.emptyTitle}>No items</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No items</Text>
             <Pressable
               onPress={() => goToAddContent(navigation)}
-              style={styles.addContentBtn}
+              style={[styles.addContentBtn, { backgroundColor: "#1f6cff" }]}
             >
               <Text style={styles.addContentText}>Add content</Text>
             </Pressable>
@@ -124,8 +139,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#fff",
   },
   chips: {
     flexDirection: "row",
@@ -139,33 +152,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#fff",
   },
-  chipActive: { borderColor: colors.primary, backgroundColor: "#fff4f1" },
-  chipText: { color: "#111", fontWeight: "700" },
-  chipTextActive: { color: colors.primary },
+  chipText: { fontWeight: "700" },
   refresh: { marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 6 },
-  refreshText: { color: "#6B7280", fontWeight: "600" },
+  refreshText: { fontWeight: "600" },
 
   listContent: { paddingVertical: 10, gap: 10 },
   row: {
     padding: 14,
-    backgroundColor: "#fff",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
   },
   rowTitle: { fontWeight: "700", marginBottom: 4 },
-  rowMeta: { color: "#6B7280" },
-
+  rowMeta: {},
   emptyTitle: { fontSize: 18, fontWeight: "700", marginBottom: 14 },
-  addContentBtn: {
-    backgroundColor: "#1f6cff",
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
+  addContentBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
   addContentText: { color: "#fff", fontWeight: "700" },
 
   fab: {

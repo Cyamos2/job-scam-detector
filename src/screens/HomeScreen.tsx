@@ -1,4 +1,3 @@
-// src/screens/HomeScreen.tsx
 import React from "react";
 import {
   View,
@@ -11,30 +10,27 @@ import {
   Alert,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useTheme } from "@react-navigation/native";
 import type { NavigationProp } from "@react-navigation/native";
 import type { RootTabParamList } from "../navigation/types";
 import { goToAddContent } from "../navigation/goTo";
-import Screen from "../components/Screen"; // ✅ wrapper to handle safe area
+import Screen from "../components/Screen";  // ✅
 import Logo from "../../assets/scamicide-logo.png";
 
 const ORANGE = "#FF5733";
 
 export default function HomeScreen() {
   const navigation = useNavigation<NavigationProp<RootTabParamList>>();
+  const { colors, dark } = useTheme();
   const [query, setQuery] = React.useState("");
 
   const onStart = () => goToAddContent(navigation);
 
   const onPickScreenshot = async () => {
     if (Platform.OS !== "web") {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
-          "Permission needed",
-          "We need Photos access to pick a screenshot."
-        );
+        Alert.alert("Permission needed", "We need Photos access to pick a screenshot.");
         return;
       }
     }
@@ -42,7 +38,6 @@ export default function HomeScreen() {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 1,
     });
-
     if (!result.canceled && result.assets?.[0]?.uri) {
       navigation.getParent()?.navigate("Home", {
         screen: "AddContent",
@@ -56,8 +51,8 @@ export default function HomeScreen() {
       <View style={styles.container}>
         <Image source={Logo} resizeMode="contain" style={styles.logo} />
 
-        <Text style={styles.title}>Job Scam Detector</Text>
-        <Text style={styles.subtitle}>
+        <Text style={[styles.title, { color: colors.text }]}>Job Scam Detector</Text>
+        <Text style={[styles.subtitle, { color: dark ? "#cbd5e1" : "#6b7280" }]}>
           Scan job posts, verify companies, avoid scams.
         </Text>
 
@@ -65,21 +60,27 @@ export default function HomeScreen() {
           value={query}
           onChangeText={setQuery}
           placeholder="Search by company or role"
-          placeholderTextColor="#9aa0a6"
-          style={styles.search}
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.search,
+            { backgroundColor: colors.card, borderColor: colors.border, color: colors.text },
+          ]}
           returnKeyType="search"
         />
 
         <View style={styles.actions}>
-          <Pressable onPress={onStart} style={styles.ctaPrimary}>
+          <Pressable onPress={onStart} style={[styles.ctaPrimary, { backgroundColor: ORANGE }]}>
             <Text style={styles.ctaPrimaryText}>Start</Text>
           </Pressable>
-          <Pressable onPress={onPickScreenshot} style={styles.ctaSecondary}>
-            <Text style={styles.ctaSecondaryText}>Pick Screenshot</Text>
+          <Pressable
+            onPress={onPickScreenshot}
+            style={[styles.ctaSecondary, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            <Text style={[styles.ctaSecondaryText, { color: colors.text }]}>Pick Screenshot</Text>
           </Pressable>
         </View>
 
-        <Text style={styles.helper}>
+        <Text style={[styles.helper, { color: dark ? "#94a3b8" : "#6b7280" }]}>
           Tip: You can also paste a job link inside Add Content.
         </Text>
       </View>
@@ -91,17 +92,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: "center",
-    paddingHorizontal: 20, // ✅ consistent horizontal padding
-    justifyContent: "center", // centers nicely in the middle
+    paddingHorizontal: 20,
+    justifyContent: "center",
   },
   logo: { width: 120, height: 120, marginBottom: 16 },
-  title: { fontSize: 24, fontWeight: "800", color: "#222" },
-  subtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginTop: 4,
-    textAlign: "center",
-  },
+  title: { fontSize: 24, fontWeight: "800" },
+  subtitle: { fontSize: 14, marginTop: 4, textAlign: "center" },
   search: {
     width: "100%",
     marginTop: 18,
@@ -109,8 +105,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#fff",
   },
   actions: {
     flexDirection: "row",
@@ -120,7 +114,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ctaPrimary: {
-    backgroundColor: ORANGE,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
@@ -132,13 +125,11 @@ const styles = StyleSheet.create({
   },
   ctaPrimaryText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   ctaSecondary: {
-    backgroundColor: "#fff",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
   },
-  ctaSecondaryText: { color: "#111827", fontWeight: "700", fontSize: 16 },
-  helper: { marginTop: 14, color: "#6b7280", textAlign: "center" },
+  ctaSecondaryText: { fontWeight: "700", fontSize: 16 },
+  helper: { marginTop: 14, textAlign: "center" },
 });

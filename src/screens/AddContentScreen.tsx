@@ -1,19 +1,10 @@
-import * as React from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  TextInput,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  Alert,
-} from "react-native";
+import React from "react";
+import { View, Text, TextInput, Pressable, StyleSheet, ScrollView, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import Screen from "../components/Screen";
-import { api, type JobInput } from "@/lib/api";
-const colors = { primary: "#FF5733" }; // or inline your colors
+import api, { type JobInput, type Risk } from "../lib/api";
+
+const ORANGE = "#FF5733";
 
 export default function AddContentScreen() {
   const navigation = useNavigation();
@@ -21,143 +12,81 @@ export default function AddContentScreen() {
   const [company, setCompany] = React.useState("");
   const [url, setUrl] = React.useState("");
   const [notes, setNotes] = React.useState("");
-  const [risk, setRisk] = React.useState<"LOW" | "MEDIUM" | "HIGH">("LOW");
-  const [submitting, setSubmitting] = React.useState(false);
+  // ✅ keep lowercase in state
+  const [risk, setRisk] = React.useState<Risk>("low");
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Add Content",
-      headerBackVisible: false,
-      headerLeft: () => (
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text style={styles.backLink}>‹ Home</Text>
-        </Pressable>
-      ),
-    });
-  }, [navigation]);
-
-  async function onSubmit() {
+  const onSubmit = async () => {
+    const payload: JobInput = {
+      title: title.trim(),
+      company: company.trim(),
+      url: url.trim() || undefined,
+      risk,               // <-- already lowercase
+      notes: notes.trim() || undefined,
+    };
     try {
-      setSubmitting(true);
-      const payload: JobInput = {
-        title: title.trim(),
-        company: company.trim(),
-        url: url.trim() || undefined,
-        notes: notes.trim() || undefined,
-        // 🔽 Prisma expects lowercase: "low" | "medium" | "high"
-        risk: risk.toLowerCase() as "low" | "medium" | "high",
-      };
-      await api.createJob(payload);
+      await api.createJob(payload);   // canonical method
       navigation.goBack();
     } catch (e: any) {
       Alert.alert("Add failed", String(e?.message ?? e));
-    } finally {
-      setSubmitting(false);
     }
-  }
+  };
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.container}>
-          <Text style={styles.label}>Title</Text>
-          <TextInput value={title} onChangeText={setTitle} style={styles.input} />
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Text style={styles.h1}>Add Job</Text>
 
-          <Text style={styles.label}>Company</Text>
-          <TextInput value={company} onChangeText={setCompany} style={styles.input} />
+        <TextInput style={styles.input} placeholder="Title" value={title} onChangeText={setTitle} />
+        <TextInput style={styles.input} placeholder="Company" value={company} onChangeText={setCompany} />
+        <TextInput style={styles.input} placeholder="URL" value={url} onChangeText={setUrl} autoCapitalize="none" />
 
-          <Text style={styles.label}>URL</Text>
-          <TextInput
-            value={url}
-            onChangeText={setUrl}
-            placeholder="https://…"
-            autoCapitalize="none"
-            keyboardType="url"
-            style={styles.input}
-          />
+        <Text style={styles.label}>Risk</Text>
+        <View style={styles.row}>
+          {(["low","medium","high"] as Risk[]).map(r => {
+            const active = risk === r;
+            return (
+              <Pressable key={r} onPress={() => setRisk(r)} style={[styles.chip, active && styles.chipActive]}>
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{r.toUpperCase()}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
-          <Text style={styles.label}>Risk</Text>
-          <View style={styles.pills}>
-            {(["LOW", "MEDIUM", "HIGH"] as const).map((r) => {
-              const active = r === risk;
-              return (
-                <Pressable
-                  key={r}
-                  onPress={() => setRisk(r)}
-                  style={[styles.pill, active && styles.pillActive]}
-                >
-                  <Text style={[styles.pillText, active && styles.pillTextActive]}>{r}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+        <TextInput
+          style={[styles.input, { height: 140, textAlignVertical: "top" }]}
+          placeholder="Notes"
+          multiline
+          value={notes}
+          onChangeText={setNotes}
+        />
 
-          <Text style={styles.label}>Notes</Text>
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            style={[styles.input, { height: 120, textAlignVertical: "top" }]}
-          />
-
-          <View style={{ height: 16 }} />
-          <Pressable
-            onPress={onSubmit}
-            disabled={submitting}
-            style={[styles.primaryBtn, submitting && { opacity: 0.6 }]}
-          >
-            <Text style={styles.primaryBtnText}>{submitting ? "Adding…" : "Add"}</Text>
-          </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <Pressable style={styles.submit} onPress={onSubmit}>
+          <Text style={styles.submitText}>Add</Text>
+        </Pressable>
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  backLink: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: colors?.primary ?? "#ff5a3c",
-    fontWeight: "600",
-  },
-  container: {
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-  },
-  label: { marginTop: 14, marginBottom: 6, fontWeight: "600" },
+  content: { paddingHorizontal: 16, paddingBottom: 24 },
+  h1: { fontSize: 20, fontWeight: "800", marginBottom: 12 },
+  label: { marginTop: 12, marginBottom: 6, fontWeight: "700", color: "#111" },
   input: {
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: "#fff",
+    borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 12, backgroundColor: "#fff", marginBottom: 10,
   },
-  pills: { flexDirection: "row", gap: 10 },
-  pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#fff",
+  row: { flexDirection: "row", gap: 10, marginBottom: 12, flexWrap: "wrap" },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+    borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#fff",
   },
-  pillActive: {
-    borderColor: "#ff5a3c",
-    backgroundColor: "#fff4f1",
+  chipActive: { borderColor: ORANGE + "AA", backgroundColor: "#fff4f1" },
+  chipText: { fontWeight: "700", color: "#111" },
+  chipTextActive: { color: ORANGE },
+  submit: {
+    marginTop: 8, backgroundColor: "#1f6cff", paddingVertical: 14,
+    borderRadius: 12, alignItems: "center",
   },
-  pillText: { fontWeight: "600", color: "#111" },
-  pillTextActive: { color: "#ff5a3c" },
-  primaryBtn: {
-    alignSelf: "flex-start",
-    backgroundColor: "#1f6cff",
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-  },
-  primaryBtnText: { color: "#fff", fontWeight: "700" },
+  submitText: { color: "#fff", fontWeight: "800", fontSize: 16 },
 });
