@@ -1,70 +1,63 @@
-import Constants from "expo-constants";
+// src/lib/api.ts
+import Constants from 'expo-constants';
 
-const BASE =
-  process.env.EXPO_PUBLIC_API_BASE ||
-  (Constants.expoConfig?.extra as any)?.EXPO_PUBLIC_API_BASE ||
-  "http://localhost:4000";
-
+export type Risk = 'low' | 'medium' | 'high';
 export type Job = {
   id: string;
   title: string;
   company: string;
-  risk: "LOW" | "MEDIUM" | "HIGH";
-  score: number;
-  source?: string | null;
-  url?: string | null;
-  email?: string | null;
-  notes?: string | null;
+  url?: string;
+  risk: Risk;
+  notes?: string;
   createdAt: string;
-  images: { id: string; uri: string; jobId: string }[];
+  updatedAt?: string;
 };
 
 export type JobInput = {
   title: string;
   company: string;
-  risk: "LOW" | "MEDIUM" | "HIGH";
-  score: number;
-  source?: string | null;
-  url?: string | null;
-  email?: string | null;
-  notes?: string | null;
-  images?: string[];
+  url?: string;
+  risk?: Risk;
+  notes?: string;
 };
 
-function qs(params: Record<string, any> = {}) {
-  const u = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null && v !== "") u.set(k, String(v));
-  const s = u.toString();
-  return s ? `?${s}` : "";
-}
+const BASE_URL =
+  (Constants?.expoConfig?.extra as any)?.API_URL ||
+  process.env.EXPO_PUBLIC_API_URL ||
+  'http://localhost:3000';
 
-async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `${res.status} ${res.statusText}`);
+    const body = await res.text().catch(() => '');
+    throw new Error(`API ${res.status} ${res.statusText}: ${body}`);
   }
-  return (await res.json().catch(() => ({}))) as T;
+  return res.json() as Promise<T>;
 }
 
 export const api = {
-  list: (p: { risk?: "LOW" | "MEDIUM" | "HIGH"; search?: string; limit?: number; offset?: number } = {}) =>
-    http<{ items: Job[]; total: number }>(`/jobs${qs(p)}`),
-
-  create: (input: JobInput) =>
-    http<Job>("/jobs", { method: "POST", body: JSON.stringify(input) }),
-
-  update: (id: string, input: Partial<JobInput>) =>
-    http<Job>(`/jobs/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
-
-  replace: (id: string, input: JobInput) =>
-    http<Job>(`/jobs/${id}`, { method: "PUT", body: JSON.stringify(input) }),
-
-  remove: (id: string) =>
-    fetch(`${BASE}/jobs/${id}`, { method: "DELETE" }).then((r) => {
-      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-    }),
+  listJobs(): Promise<Job[]> {
+    return request<Job[]>('/jobs');
+  },
+  // Back-compat alias (old code calls api.list())
+  list(): Promise<Job[]> {
+    return this.listJobs();
+  },
+  createJob(input: JobInput): Promise<Job> {
+    return request<Job>('/jobs', { method: 'POST', body: JSON.stringify(input) });
+  },
+  updateJob(id: string, patch: Partial<JobInput>): Promise<Job> {
+    return request<Job>(`/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  },
+  deleteJob(id: string): Promise<{ ok: true }> {
+    return request<{ ok: true }>(`/jobs/${id}`, { method: 'DELETE' });
+  },
+  verifyCompany(target: string) {
+    return request(`/verify?target=${encodeURIComponent(target)}`);
+  },
 };
+
+export default api;

@@ -3,18 +3,28 @@
     "name": "Job Scam Detector",
     "slug": "job-scam-detector",
     "version": "1.0.0",
-    "scheme": "jobs",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/scamicide-logo.png",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/scamicide-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "ios": { "supportsTablet": true, "bundleIdentifier": "com.yourco.jobscamdetector" },
-    "android": { "package": "com.yourco.jobscamdetector" },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/scamicide-logo.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./assets/scamicide-logo.png"
+    },
     "extra": {
-      "EXPO_PUBLIC_API_BASE": "http://localhost:4000"
+      "API_URL": "http://localhost:3000"
     }
   }
 }

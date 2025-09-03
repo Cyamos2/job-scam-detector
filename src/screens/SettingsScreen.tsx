@@ -1,13 +1,8 @@
-// src/screens/SettingsScreen.tsx
 import React from 'react';
-import { View, Text, Pressable, Switch } from 'react-native';
-import { useSettings } from '../SettingsProvider';
+import { View, Text, Pressable } from 'react-native';
+import { useSettings } from '@/SettingsProvider';
 
-const Pill: React.FC<{
-  label: string;
-  active?: boolean;
-  onPress?: () => void;
-}> = ({ label, active, onPress }) => (
+const Pill = ({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) => (
   <Pressable
     onPress={onPress}
     style={{
@@ -21,9 +16,7 @@ const Pill: React.FC<{
       marginBottom: 8,
     }}
   >
-    <Text style={{ color: active ? '#D43C18' : '#333', fontWeight: '600' }}>
-      {label}
-    </Text>
+    <Text style={{ color: active ? '#D43C18' : '#333', fontWeight: '600' }}>{label}</Text>
   </Pressable>
 );
 
@@ -36,76 +29,35 @@ export default function SettingsScreen() {
       <Text style={{ fontSize: 22, fontWeight: '700' }}>Appearance</Text>
 
       <View style={{ gap: 12 }}>
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            backgroundColor: '#fff',
-            padding: 14,
-            borderRadius: 12,
-            shadowColor: '#000',
-            shadowOpacity: 0.06,
-            shadowRadius: 6,
-            shadowOffset: { width: 0, height: 2 },
-          }}
-        >
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          backgroundColor: '#fff', padding: 14, borderRadius: 12,
+          shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+        }}>
           <Text style={{ fontSize: 16 }}>Cycle Theme (system → light → dark)</Text>
-          <Pressable
-            onPress={toggleTheme}
-            style={{
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              backgroundColor: '#FF5733',
-              borderRadius: 8,
-            }}
-            disabled={loading}
-          >
-            <Text style={{ color: '#fff', fontWeight: '700' }}>
-              {settings.theme.toUpperCase()}
-            </Text>
+          <Pressable onPress={toggleTheme} style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#FF5733', borderRadius: 8 }} disabled={loading}>
+            <Text style={{ color: '#fff', fontWeight: '700' }}>{settings.theme.toUpperCase()}</Text>
           </Pressable>
         </View>
 
         <View style={{ flexDirection: 'row' }}>
-          <Pill
-            label="System"
-            active={settings.theme === 'system'}
-            onPress={() => setTheme('system')}
-          />
-          <Pill
-            label="Light"
-            active={settings.theme === 'light'}
-            onPress={() => setTheme('light')}
-          />
-          <Pill
-            label="Dark"
-            active={settings.theme === 'dark'}
-            onPress={() => setTheme('dark')}
-          />
+          <Pill label="System" active={settings.theme === 'system'} onPress={() => setTheme('system')} />
+          <Pill label="Light" active={settings.theme === 'light'} onPress={() => setTheme('light')} />
+          <Pill label="Dark" active={settings.theme === 'dark'} onPress={() => setTheme('dark')} />
         </View>
       </View>
 
       <View>
-        <Text style={{ fontSize: 22, fontWeight: '700', marginBottom: 10 }}>
-          Risk Filter (default list)
-        </Text>
+        <Text style={{ fontSize: 22, fontWeight: '700', marginBottom: 10 }}>Risk Filter (default list)</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
           {(['all', 'high', 'medium', 'low'] as const).map((r) => (
-            <Pill
-              key={r}
-              label={r[0].toUpperCase() + r.slice(1)}
-              active={settings.riskFilter === r}
-              onPress={() => setRiskFilter(r)}
-            />
+            <Pill key={r} label={r[0].toUpperCase() + r.slice(1)} active={settings.riskFilter === r} onPress={() => setRiskFilter(r)} />
           ))}
         </View>
       </View>
 
       <View style={{ marginTop: 6, opacity: loading ? 0.6 : 1 }}>
-        <Text style={{ color: '#666' }}>
-          {loading ? 'Loading your saved settings…' : 'Settings are saved automatically.'}
-        </Text>
+        <Text style={{ color: '#666' }}>{loading ? 'Loading your saved settings…' : 'Settings are saved automatically.'}</Text>
       </View>
     </View>
   );

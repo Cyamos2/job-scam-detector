@@ -2,6 +2,7 @@
 import 'react-native-gesture-handler';
 import React from 'react';
 import { DefaultTheme, DarkTheme, NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import RootNavigator from './src/navigation/RootNavigator';
 import { SettingsProvider, useSettings, resolveThemeName } from './src/SettingsProvider';
 
@@ -18,8 +19,10 @@ function AppInner() {
 
 export default function App() {
   return (
-    <SettingsProvider>
-      <AppInner />
-    </SettingsProvider>
+    <SafeAreaProvider>
+      <SettingsProvider>
+        <AppInner />
+      </SettingsProvider>
+    </SafeAreaProvider>
   );
 }
