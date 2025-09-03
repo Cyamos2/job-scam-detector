@@ -1,143 +1,134 @@
 // src/screens/HomeScreen.tsx
-import React from "react";
+import React from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   Pressable,
-  ScrollView,
-  SafeAreaView,
-} from "react-native";
-import { useColors } from "../theme/useColors";
-import { goToAddContent } from "../navigation/goTo";
+  TextInput,
+  Image,
+  Platform,
+  StyleSheet,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import { useNavigation } from '@react-navigation/native';
+import type { NavigationProp } from '@react-navigation/native';
+import type { RootTabParamList } from '@/navigation/types';
+import { goToAddContent } from '@/navigation/goTo';
 
-type Props = { navigation: any };
+// Path from src/screens → ../../assets/...
+import Logo from '../../assets/scamicide-logo.png';
 
-export default function HomeScreen({ navigation }: Props) {
-  const { colors, bg, card, text, muted } = useColors();
+const ORANGE = '#FF5733';
 
-  React.useLayoutEffect(() => {
-    navigation.setOptions({ title: "Home" });
-  }, [navigation]);
+export default function HomeScreen() {
+  const navigation = useNavigation<NavigationProp<RootTabParamList>>();
+  const [query, setQuery] = React.useState('');
+
+  const onStart = () => {
+    goToAddContent(navigation);
+  };
+
+  const onPickScreenshot = async () => {
+    if (Platform.OS !== 'web') {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        alert('We need photos permission to pick a screenshot.');
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+      allowsEditing: false,
+    });
+
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      // If AddContent accepts a param, pass it here:
+      navigation.getParent()?.navigate('Home', {
+        screen: 'AddContent',
+        params: { presetUri: result.assets[0].uri },
+      });
+    }
+  };
 
   return (
-    <SafeAreaView style={[styles.safe, bg]}>
-      <ScrollView
-        contentContainerStyle={[styles.container]}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Hero Card */}
-        <View style={[styles.hero, card, { borderColor: colors.border }]}>
-          <Text style={[styles.appTitle, text]}>Scamicide</Text>
-          <Text style={[styles.subtitle, muted]}>
-            Paste job text or pick a screenshot to analyze.
-          </Text>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <View style={styles.container}>
+        <Image source={Logo} resizeMode="contain" style={styles.logo} />
+        <Text style={styles.title}>Job Scam Detector</Text>
+        <Text style={styles.subtitle}>
+          Scan job posts, verify companies, and avoid scams.
+        </Text>
 
-          <Pressable
-            onPress={() => goToAddContent(navigation)}
-            style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-          >
-            <Text style={styles.primaryBtnText}>Start</Text>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search by company or role"
+          placeholderTextColor="#9aa0a6"
+          style={styles.search}
+          returnKeyType="search"
+        />
+
+        <View style={styles.actions}>
+          <Pressable onPress={onStart} style={styles.ctaPrimary}>
+            <Text style={styles.ctaPrimaryText}>Start</Text>
+          </Pressable>
+          <Pressable onPress={onPickScreenshot} style={styles.ctaSecondary}>
+            <Text style={styles.ctaSecondaryText}>Pick Screenshot</Text>
           </Pressable>
         </View>
 
-        {/* Quick actions */}
-        <View style={styles.actionsRow}>
-          <Pressable
-            onPress={() => goToAddContent(navigation)}
-            style={[styles.action, card, { borderColor: colors.border }]}
-          >
-            <Text style={[styles.actionTitle, text]}>Analyze Text</Text>
-            <Text style={[styles.actionHint, muted]}>Paste a post or message</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => goToAddContent(navigation)}
-            style={[styles.action, card, { borderColor: colors.border }]}
-          >
-            <Text style={[styles.actionTitle, text]}>Pick Screenshot</Text>
-            <Text style={[styles.actionHint, muted]}>Scan image content</Text>
-          </Pressable>
-        </View>
-
-        {/* Tips */}
-        <View style={[styles.tipCard, card, { borderColor: colors.border }]}>
-          <Text style={[styles.tipTitle, text]}>Tips</Text>
-          <Text style={[styles.tipItem, muted]}>
-            • Links work: paste a LinkedIn/Indeed URL.
-          </Text>
-          <Text style={[styles.tipItem, muted]}>
-            • Sensitivity is adjustable in Settings.
-          </Text>
-          <Text style={[styles.tipItem, muted]}>
-            • Saved results live in the Database tab.
-          </Text>
-        </View>
-      </ScrollView>
+        <Text style={styles.helper}>
+          Tip: You can also paste a job link inside Add Content.
+        </Text>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1 },
+  safe: { flex: 1, backgroundColor: '#fff' },
   container: {
-    padding: 16,
-    paddingBottom: 32,
-    gap: 16,
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    alignItems: 'center',
   },
-
-  hero: {
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 20,
-    gap: 12,
-  },
-  appTitle: {
-    fontSize: 32,
-    fontWeight: "800",
-    letterSpacing: 0.3,
-  },
-  subtitle: {
-    fontSize: 15,
-  },
-  primaryBtn: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 18,
+  logo: { width: 120, height: 120, marginTop: 8, marginBottom: 12 },
+  title: { fontSize: 24, fontWeight: '800', color: '#222' },
+  subtitle: { fontSize: 14, color: '#6b7280', marginTop: 4, textAlign: 'center' },
+  search: {
+    width: '100%',
+    marginTop: 18,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 12,
-    marginTop: 4,
-  },
-  primaryBtnText: {
-    color: "white",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-
-  actionsRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  action: {
-    flex: 1,
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    gap: 4,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
   },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+  actions: { flexDirection: 'row', gap: 12, marginTop: 18 },
+  ctaPrimary: {
+    backgroundColor: ORANGE,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  actionHint: {
-    fontSize: 12,
-  },
-
-  tipCard: {
+  ctaPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  ctaSecondary: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    gap: 6,
+    borderColor: '#e5e7eb',
   },
-  tipTitle: { fontSize: 14, fontWeight: "800" },
-  tipItem: { fontSize: 13, lineHeight: 18 },
+  ctaSecondaryText: { color: '#111827', fontWeight: '700', fontSize: 16 },
+  helper: { marginTop: 14, color: '#6b7280' },
 });

@@ -1,10 +1,20 @@
 // src/navigation/goTo.ts
-export function goToAddContent(navigation: any) {
-  navigation.getParent()?.navigate("HomeTab", { screen: "AddContent" } as any);
+import type { NavigationProp } from '@react-navigation/native';
+import type { RootTabParamList } from './types';
+
+/** Open AddContent inside the Home stack. Works from any tab/screen. */
+export function goToAddContent(navigation: NavigationProp<RootTabParamList>) {
+  // If we are already in Home stack, this will succeed:
+  // @ts-ignore best-effort direct stack nav
+  try { navigation.navigate('AddContent' as never); return; } catch {}
+
+  // Otherwise, ask the parent (the tab navigator) to switch to Home and show AddContent.
+  navigation.getParent<NavigationProp<RootTabParamList>>()
+    ?.navigate('Home', { screen: 'AddContent' });
 }
-export function goHomeTab(navigation: any) {
-  navigation.getParent()?.navigate("HomeTab" as any);
-}
-export function goDatabaseTab(navigation: any) {
-  navigation.getParent()?.navigate("DatabaseTab" as any);
+
+/** Jump to Home (root of Home stack). */
+export function goHomeTab(navigation: NavigationProp<RootTabParamList>) {
+  navigation.getParent<NavigationProp<RootTabParamList>>()
+    ?.navigate('Home', { screen: 'HomeMain' });
 }
