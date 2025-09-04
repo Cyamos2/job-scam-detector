@@ -11,29 +11,29 @@ import {
 } from "react-native";
 import { useTheme, useNavigation } from "@react-navigation/native";
 import type { NavigationProp } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+
 import Screen from "../components/Screen";
 import { useJobs } from "../hooks/useJobs";
 import { goToAddContent } from "../navigation/goTo";
-import type { RootTabParamList } from "../navigation/types";
-import type { Job } from "../lib/api"; // types for the editor
-import EditJobModal from "../components/EditJobModal";
+import type { RootTabParamList, RootStackParamList } from "../navigation/types";
+import ScoreBadge from "../components/ScoreBadge";
+import { scoreJob } from "../lib/scoring";
 
 type RiskFilter = "all" | "low" | "medium" | "high";
 const ORANGE = "#FF5733";
 
 export default function DatabaseScreen() {
-  const navigation = useNavigation<NavigationProp<RootTabParamList>>();
+  // Tab nav (for goToAddContent)
+  const tabNav = useNavigation<NavigationProp<RootTabParamList>>();
+  // Root stack nav (for pushing ReportDetail)
+  const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
   const { colors, dark } = useTheme();
+  const { items, loading, refresh } = useJobs();
 
-  const { items, loading, refresh, update, remove } = useJobs();
-
-  // local UI state
   const [filter, setFilter] = React.useState<RiskFilter>("all");
   const [search, setSearch] = React.useState("");
-  const [editor, setEditor] = React.useState<{ visible: boolean; job: Job | null }>({
-    visible: false,
-    job: null,
-  });
 
   const filtered = React.useMemo(() => {
     let next = items ?? [];
@@ -49,90 +49,38 @@ export default function DatabaseScreen() {
     return next;
   }, [items, filter, search]);
 
-  async function openEditor(job: Job) {
-    setEditor({ visible: true, job });
-  }
-
-  async function onSaved(patch: Partial<Job>) {
-    if (!editor.job) return;
-    await update(editor.job.id, {
-      title: patch.title ?? editor.job.title,
-      company: patch.company ?? editor.job.company,
-      url: patch.url ?? editor.job.url ?? undefined,
-      risk: (patch as any).risk ?? editor.job.risk,
-      notes: patch.notes ?? editor.job.notes ?? undefined,
-    });
-    await refresh();
-    setEditor({ visible: false, job: null });
-  }
-
-  async function onDelete(job: Job) {
-    await remove(job.id);
-    await refresh();
-  }
-
-  const renderItem = ({ item }: { item: Job }) => (
-    <Pressable onPress={() => openEditor(item)}>
-      <View
+  const renderItem = ({ item }: any) => {
+    const { score } = scoreJob(item);
+    return (
+      <Pressable
+        onPress={() => rootNav.navigate("ReportDetail", { id: item.id })}
         style={[
           styles.row,
           { backgroundColor: colors.card, borderColor: colors.border },
         ]}
       >
-        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-          <Text style={[styles.rowTitle, { color: colors.text }]}>{item.title}</Text>
-          {/* simple risk badge */}
-          <View
-            style={[
-              styles.badge,
-              {
-                borderColor:
-                  item.risk === "high"
-                    ? "#ef4444"
-                    : item.risk === "medium"
-                    ? "#f59e0b"
-                    : "#10b981",
-                backgroundColor:
-                  item.risk === "high"
-                    ? (dark ? "#3b0f10" : "#fee2e2")
-                    : item.risk === "medium"
-                    ? (dark ? "#3b2a10" : "#fef3c7")
-                    : (dark ? "#0f2f26" : "#dcfce7"),
-              },
-            ]}
+        <View style={{ flex: 1, paddingRight: 12 }}>
+          <Text
+            style={[styles.rowTitle, { color: colors.text }]}
+            numberOfLines={1}
           >
-            <Text
-              style={{
-                color:
-                  item.risk === "high"
-                    ? "#b91c1c"
-                    : item.risk === "medium"
-                    ? "#b45309"
-                    : "#047857",
-                fontWeight: "700",
-                fontSize: 12,
-              }}
-            >
-              {item.risk.toUpperCase()}
-            </Text>
-          </View>
+            {item.title}
+          </Text>
+          <Text
+            style={[
+              styles.rowMeta,
+              { color: dark ? "#cbd5e1" : "#6B7280" },
+            ]}
+            numberOfLines={1}
+          >
+            {item.company} {item.url ? `• ${item.url}` : ""} •{" "}
+            {item.risk?.toUpperCase()}
+          </Text>
         </View>
-        <Text style={[styles.rowMeta, { color: dark ? "#cbd5e1" : "#6B7280" }]}>
-          {item.company} {item.url ? `• ${item.url}` : ""}
-        </Text>
-
-        {/* inline row actions */}
-        <View style={styles.rowActions}>
-          <Pressable onPress={() => openEditor(item)} style={styles.rowBtn}>
-            <Text style={styles.rowBtnText}>Edit</Text>
-          </Pressable>
-          <Pressable onPress={() => onDelete(item)} style={[styles.rowBtn, { backgroundColor: "#fee2e2", borderColor: "#fecaca" }]}>
-            <Text style={[styles.rowBtnText, { color: "#b91c1c" }]}>Delete</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Pressable>
-  );
+        <ScoreBadge score={score} />
+      </Pressable>
+    );
+  };
 
   return (
     <Screen>
@@ -211,7 +159,7 @@ export default function DatabaseScreen() {
               No items
             </Text>
             <Pressable
-              onPress={() => goToAddContent(navigation)}
+              onPress={() => goToAddContent(tabNav)}
               style={[styles.addContentBtn, { backgroundColor: "#1f6cff" }]}
             >
               <Text style={styles.addContentText}>Add content</Text>
@@ -220,20 +168,9 @@ export default function DatabaseScreen() {
         }
       />
 
-      <Pressable
-        onPress={() => goToAddContent(navigation)}
-        style={styles.fab}
-      >
+      <Pressable onPress={() => goToAddContent(tabNav)} style={styles.fab}>
         <Text style={styles.fabText}>Add</Text>
       </Pressable>
-
-      {/* EDITOR MODAL */}
-      <EditJobModal
-        visible={editor.visible}
-        job={editor.job}
-        onClose={() => setEditor({ visible: false, job: null })}
-        onSaved={onSaved} // ✅ correct prop name
-      />
     </Screen>
   );
 }
@@ -268,21 +205,11 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 6,
+    flexDirection: "row",
+    alignItems: "center",
   },
-  rowTitle: { fontWeight: "700" },
+  rowTitle: { fontWeight: "700", marginBottom: 4 },
   rowMeta: {},
-  rowActions: { flexDirection: "row", gap: 10, marginTop: 6 },
-  rowBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#dbeafe",
-    backgroundColor: "#eff6ff",
-  },
-  rowBtnText: { color: "#1d4ed8", fontWeight: "700" },
-
   emptyTitle: { fontSize: 18, fontWeight: "700", marginBottom: 14 },
   addContentBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
   addContentText: { color: "#fff", fontWeight: "700" },
@@ -302,12 +229,4 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   fabText: { color: "#fff", fontWeight: "800" },
-
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignSelf: "flex-start",
-  },
 });

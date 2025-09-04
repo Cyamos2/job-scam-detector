@@ -1,84 +1,81 @@
 // src/screens/ReportDetailScreen.tsx
 import * as React from "react";
-import { View, Text, StyleSheet } from "react-native";
-import { useTheme, useRoute, type RouteProp } from "@react-navigation/native";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { useRoute } from "@react-navigation/native";
+import type { RouteProp } from "@react-navigation/native";
+import type { RootStackParamList } from "../navigation/types";
 import Screen from "../components/Screen";
-import { useJobs } from "../hooks/useJobs";
+import { api, type Job } from "../lib/api";
+import ScoreBadge from "../components/ScoreBadge";
+import { scoreJob } from "../lib/scoring";
 
-// If your navigator uses a different route name, change "ReportDetail" here.
-// This is only for typing and won't affect runtime.
-type ParamList = { ReportDetail: { id: string } | undefined };
+type ReportDetailRoute = RouteProp<RootStackParamList, "ReportDetail">;
 
 export default function ReportDetailScreen() {
-  const { colors, dark } = useTheme();
-  const route = useRoute<RouteProp<ParamList, "ReportDetail">>();
-  const id = route.params?.id;
+  const { params } = useRoute<ReportDetailRoute>();
+  const { id } = params;
 
-  const { items } = useJobs();
-  const item = id ? items.find((j) => j.id === id) : undefined;
+  const [job, setJob] = React.useState<Job | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [err, setErr] = React.useState<string | null>(null);
 
-  if (!id || !item) {
+  React.useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        // simplest: load all and find one (swap to api.getJob(id) if you add it)
+        const list = await api.listJobs();
+        const found = list.find((j) => j.id === id) ?? null;
+        if (isMounted) setJob(found);
+      } catch (e: any) {
+        if (isMounted) setErr(String(e?.message ?? e));
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [id]);
+
+  if (loading) {
     return (
       <Screen>
-        <View style={[styles.center, { padding: 16 }]}>
-          <Text style={{ color: colors.text, fontSize: 16 }}>
-            This report no longer exists.
-          </Text>
+        <View style={styles.center}>
+          <ActivityIndicator />
         </View>
       </Screen>
     );
   }
 
+  if (err || !job) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <Text style={styles.error}>Unable to load report.</Text>
+          {!!err && <Text style={styles.muted}>{err}</Text>}
+        </View>
+      </Screen>
+    );
+  }
+
+  const score = scoreJob(job);
+
   return (
     <Screen>
-      <View
-        style={[
-          styles.card,
-          { backgroundColor: colors.card, borderColor: colors.border },
-        ]}
-      >
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
-          {item.title}
+      <View style={styles.card}>
+        <View style={{ alignSelf: "flex-end" }}>
+          <ScoreBadge score={score.score} />
+        </View>
+
+        <Text style={styles.title}>{job.title}</Text>
+        <Text style={styles.meta}>
+          {job.company}{job.url ? ` • ${job.url}` : ""}
         </Text>
 
-        <View style={styles.row}>
-          <Text style={[styles.label, { color: dark ? "#cbd5e1" : "#6b7280" }]}>
-            Company
-          </Text>
-          <Text style={[styles.value, { color: colors.text }]}>
-            {item.company}
-          </Text>
-        </View>
-
-        {!!item.url && (
-          <View style={styles.row}>
-            <Text
-              style={[styles.label, { color: dark ? "#cbd5e1" : "#6b7280" }]}
-            >
-              URL
-            </Text>
-            <Text style={[styles.value, { color: colors.text }]}>{item.url}</Text>
-          </View>
-        )}
-
-        <View style={styles.row}>
-          <Text style={[styles.label, { color: dark ? "#cbd5e1" : "#6b7280" }]}>
-            Risk
-          </Text>
-          <Text style={[styles.value, { color: colors.text }]}>
-            {item.risk.toUpperCase()}
-          </Text>
-        </View>
-
-        {!!item.notes && (
-          <View style={styles.row}>
-            <Text
-              style={[styles.label, { color: dark ? "#cbd5e1" : "#6b7280" }]}
-            >
-              Notes
-            </Text>
-            <Text style={[styles.value, { color: colors.text }]}>{item.notes}</Text>
-          </View>
+        {!!job.notes && (
+          <>
+            <Text style={styles.h2}>Notes</Text>
+            <Text style={styles.body}>{job.notes}</Text>
+          </>
         )}
       </View>
     </Screen>
@@ -86,16 +83,20 @@ export default function ReportDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  error: { fontWeight: "700", marginBottom: 6, color: "#B91C1C" },
+  muted: { color: "#6B7280", textAlign: "center" },
+
   card: {
-    margin: 16,
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 10,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
+    gap: 8,
   },
-  title: { fontSize: 20, fontWeight: "800", marginBottom: 6 },
-  row: { marginTop: 8 },
-  label: { fontSize: 13, fontWeight: "700" },
-  value: { fontSize: 15, marginTop: 2 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 18, fontWeight: "800", color: "#111" },
+  meta: { color: "#6B7280" },
+  h2: { marginTop: 12, fontWeight: "800", color: "#111" },
+  body: { color: "#111" },
 });

@@ -1,68 +1,82 @@
 // src/lib/scoring.ts
-// Tiny heuristic scorer you can replace with a real model later.
+import type { Job } from "../lib/api";
 
-export const SCAM_KEYWORDS = [
-  "gift card","crypto","bitcoin","wire transfer","zelle","telegram",
-  "upfront fee","training fee","equipment fee","verification code",
-  "western union","moneygram","cashapp","venmo","walmart",
-  "whatsapp","urgent hire","quick money","no experience",
-  "text me","commission only","daily payout","bonus daily",
-  "work from home","part time evening"
-].map((s) => s.toLowerCase());
+/** Keywords grouped by strength. Tune freely. */
+const STRONG = [
+  "wire transfer", "gift card", "crypto", "bitcoin",
+  "cashapp", "zelle", "upfront fee", "processing fee",
+  "send money", "pay to apply", "equipment fee",
+  "telegram only", "whatsapp only",
+];
 
-/** Return integer 0..100 based on keyword hits in title/company/notes/url/source. */
-export function scoreJob(job: {
-  title?: string; company?: string; notes?: string; url?: string | null; source?: string;
-  risk?: "low" | "medium" | "high";
-}): number {
-  const haystack = [
-    job.title ?? "",
-    job.company ?? "",
-    job.notes ?? "",
-    job.url ?? "",
-    job.source ?? "",
-  ]
-    .join(" ")
-    .toLowerCase();
+const MEDIUM = [
+  "work from home", "remote only", "urgent hire", "immediate start",
+  "no experience", "high pay", "weekly payout", "training provided",
+  "part time 1–2h", "quick task", "social media evaluator",
+];
 
-  let hits = 0;
-  for (const k of SCAM_KEYWORDS) {
-    if (haystack.includes(k)) hits++;
+const WEAK = [
+  "flexible hours", "bonus", "earn", "commission", "sign-on bonus",
+];
+
+/** Normalize text once. */
+function textOf(job: Job): string {
+  const parts = [job.title ?? "", job.company ?? "", job.url ?? "", job.notes ?? ""];
+  return parts.join(" ").toLowerCase();
+}
+
+/** Returns score 0–100 and reasons found. */
+export function scoreJob(job: Job): { score: number; reasons: string[] } {
+  const t = textOf(job);
+  let score = 0;
+  const reasons: string[] = [];
+
+  const add = (arr: string[], pts: number) => {
+    for (const kw of arr) {
+      if (t.includes(kw)) {
+        score += pts;
+        reasons.push(kw);
+      }
+    }
+  };
+
+  add(STRONG, 20);
+  add(MEDIUM, 10);
+  add(WEAK, 5);
+
+  // Heuristics
+  if (/\b(\$|usd)\s?\d{3,}/.test(t)) score += 8; // lots of money talk
+  if (/https?:\/\/(bit\.|tinyurl|t\.co|goo\.gl)/.test(t)) score += 8; // link shorteners
+  if (/@gmail\.com|@outlook\.com|@yahoo\.com/.test(t) && /(inc|ltd|llc)/i.test(job.company ?? "")) {
+    score += 10; // “company” but free email
+    reasons.push("free email domain");
   }
 
-  // base score: 10 points per hit (clamped)
-  let score = Math.min(100, hits * 10);
-
-  // nudge based on declared risk (optional)
-  if (job.risk === "medium") score = Math.min(100, score + 15);
-  if (job.risk === "high") score = Math.min(100, score + 30);
-
-  return score;
+  // Clamp
+  score = Math.max(0, Math.min(100, score));
+  return { score, reasons: Array.from(new Set(reasons)) };
 }
 
-/** List which keywords matched, for “why” explanations. */
-export function explainScore(job: {
-  title?: string; company?: string; notes?: string; url?: string | null; source?: string;
-}): string[] {
-  const hay = [
-    job.title ?? "",
-    job.company ?? "",
-    job.notes ?? "",
-    job.url ?? "",
-    job.source ?? "",
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  return SCAM_KEYWORDS.filter((k) => hay.includes(k));
+/** Buckets for UI badge/colors */
+export function bucket(score: number): "low" | "medium" | "high" {
+  if (score >= 61) return "high";
+  if (score >= 31) return "medium";
+  return "low";
 }
 
-/** Map a 0..100 score to a green→yellow→red color. */
+/* ---------------- Back-compat helpers (optional) ---------------- */
+
+/** Old API: return only the list of matched keywords. */
+export function explainScore(job: Job): string[] {
+  return scoreJob(job).reasons;
+}
+
+/** Old API: map a 0..100 score to a green→yellow→red color. */
 export function colorForScore(score: number): string {
   const t = Math.max(0, Math.min(100, score)) / 100; // 0..1
   const mid = 0.5;
-
   let r: number, g: number, b: number;
+
   if (t <= mid) {
     // green(46,204,113) -> yellow(255,200,0)
     const u = t / mid;

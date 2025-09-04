@@ -1,47 +1,34 @@
 // src/components/ScoreBadge.tsx
-import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
-import { colorForScore } from "../lib/scoring";
+import * as React from "react";
+import { View, Text } from "react-native";
+import { useTheme } from "@react-navigation/native";
+import { bucket } from "../lib/scoring";
 
-type Props = {
-  score: number;
-  onPress?: () => void; // optional: show “why” hits
-};
+export default function ScoreBadge({ score }: { score: number }) {
+  // theme is available if you later want to tweak colors for dark mode
+  useTheme();
 
-export default function ScoreBadge({ score, onPress }: Props) {
-  const bg = colorForScore(score);
-  const Comp = onPress ? Pressable : View;
+  const b = bucket(score);
+  const palette = {
+    low:    { bg: "#E7F8ED", text: "#047857", border: "#C7F0D6" },
+    medium: { bg: "#FFF4E6", text: "#B45309", border: "#FFE6C7" },
+    high:   { bg: "#FDE8E8", text: "#B91C1C", border: "#F8C8C8" },
+  }[b];
+
   return (
-    <Comp
-      {...(onPress ? { onPress } : {})}
-      style={[styles.wrap, { borderColor: bg }]}
-      accessibilityRole={onPress ? "button" : undefined}
-      accessibilityLabel={`Risk score ${score}`}
+    <View
+      style={{
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: palette.bg,
+        borderWidth: 1,
+        borderColor: palette.border,
+        minWidth: 56,
+        alignItems: "center",
+      }}
     >
-      <View style={[styles.dot, { backgroundColor: bg }]} />
-      <Text style={styles.text}>{score}</Text>
-    </Comp>
+      <Text style={{ fontWeight: "700", color: palette.text }}>{score}</Text>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  wrap: {
-    position: "absolute",
-    right: 12,
-    top: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: "#fff",
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    marginRight: 6,
-  },
-  text: { fontWeight: "800", color: "#111" },
-});
