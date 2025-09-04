@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+// src/components/EditJobModal.tsx
+import * as React from "react";
 import {
   Modal,
   View,
@@ -8,60 +9,80 @@ import {
   StyleSheet,
   Alert,
 } from "react-native";
-import { api, type Job } from "../lib/api";
+import { useTheme } from "@react-navigation/native";
+import type { Job, Risk } from "../lib/api";
 
 type Props = {
   visible: boolean;
   job: Job | null;
   onClose: () => void;
-  onSaved: () => void;    // refresh list after save
-  onDeleted: () => void;  // refresh list after delete
+  /** will receive only the changed fields */
+  onSaved: (patch: Partial<Job>) => void | Promise<void>;
+  /** optional delete handler */
+  onDelete?: (job: Job) => void | Promise<void>;
 };
+
+const ORANGE = "#FF5733";
+const RISKS: Risk[] = ["low", "medium", "high"];
 
 export default function EditJobModal({
   visible,
   job,
   onClose,
   onSaved,
-  onDeleted,
+  onDelete,
 }: Props) {
-  const [title, setTitle] = useState("");
-  const [company, setCompany] = useState("");
-  const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState(false);
+  const { colors, dark } = useTheme();
 
-  useEffect(() => {
-    if (job) {
-      setTitle(job.title);
-      setCompany(job.company);
-      setNotes(job.notes ?? "");
-    } else {
-      setTitle("");
-      setCompany("");
-      setNotes("");
-    }
+  // form state mirrors the selected job
+  const [title, setTitle] = React.useState("");
+  const [company, setCompany] = React.useState("");
+  const [url, setUrl] = React.useState<string | undefined>(undefined);
+  const [risk, setRisk] = React.useState<Risk>("low");
+  const [notes, setNotes] = React.useState<string | undefined>(undefined);
+  const [saving, setSaving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!job) return;
+    setTitle(job.title ?? "");
+    setCompany(job.company ?? "");
+    setUrl(job.url ?? undefined);
+    setRisk(job.risk ?? "low");
+    setNotes(job.notes ?? undefined);
   }, [job]);
 
-  const save = async () => {
-    if (!job) return;
-    try {
-      setBusy(true);
-      await api.updateJob(job.id, { title, company, notes });
-      onSaved();
-      onClose();
-    } catch (e: any) {
-      console.error(e);
-      Alert.alert("Save failed", e?.message ?? "Unknown error");
-    } finally {
-      setBusy(false);
-    }
-  };
+  function buildPatch(): Partial<Job> {
+    if (!job) return {};
+    const patch: Partial<Job> = {};
+    if (title !== job.title) patch.title = title;
+    if (company !== job.company) patch.company = company;
+    if ((url ?? null) !== (job.url ?? null)) patch.url = url ?? null;
+    if (risk !== job.risk) patch.risk = risk;
+    if ((notes ?? null) !== (job.notes ?? null)) patch.notes = notes ?? null;
+    return patch;
+  }
 
-  const confirmDelete = () => {
+  async function handleSave() {
     if (!job) return;
+    const patch = buildPatch();
+    // nothing changed, just close
+    if (Object.keys(patch).length === 0) {
+      onClose();
+      return;
+    }
+    try {
+      setSaving(true);
+      await onSaved(patch);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!job || !onDelete) return;
     Alert.alert(
-      "Delete job",
-      `Remove “${job.title}”?`,
+      "Delete entry",
+      `Delete “${job.title}” at ${job.company}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -69,75 +90,131 @@ export default function EditJobModal({
           style: "destructive",
           onPress: async () => {
             try {
-              setBusy(true);
-              await api.deleteJob(job.id);
-              onDeleted();
-              onClose();
-            } catch (e: any) {
-              console.error(e);
-              Alert.alert("Delete failed", e?.message ?? "Unknown error");
+              setSaving(true);
+              await onDelete(job);
             } finally {
-              setBusy(false);
+              setSaving(false);
             }
           },
         },
       ],
       { cancelable: true }
     );
-  };
+  }
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.card}>
-          <Text style={styles.h1}>Edit Job</Text>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.backdrop} />
+      <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.header, { color: colors.text }]}>
+          {job ? "Edit Entry" : "Edit"}
+        </Text>
 
-          <TextInput
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Job title"
-            style={styles.input}
-          />
-          <TextInput
-            value={company}
-            onChangeText={setCompany}
-            placeholder="Company"
-            style={styles.input}
-          />
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Notes"
-            multiline
-            style={[styles.input, { height: 92 }]}
-          />
+        <Text style={[styles.label, { color: dark ? "#cbd5e1" : "#6b7280" }]}>Title</Text>
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          placeholder="Job title"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.input,
+            { color: colors.text, borderColor: colors.border, backgroundColor: colors.background },
+          ]}
+        />
 
-          <View style={styles.actionsRow}>
+        <Text style={[styles.label, { color: dark ? "#cbd5e1" : "#6b7280" }]}>Company</Text>
+        <TextInput
+          value={company}
+          onChangeText={setCompany}
+          placeholder="Company"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.input,
+            { color: colors.text, borderColor: colors.border, backgroundColor: colors.background },
+          ]}
+        />
+
+        <Text style={[styles.label, { color: dark ? "#cbd5e1" : "#6b7280" }]}>URL</Text>
+        <TextInput
+          value={url ?? ""}
+          onChangeText={(v) => setUrl(v || undefined)}
+          placeholder="https://example.com"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          autoCapitalize="none"
+          keyboardType="url"
+          style={[
+            styles.input,
+            { color: colors.text, borderColor: colors.border, backgroundColor: colors.background },
+          ]}
+        />
+
+        <Text style={[styles.label, { color: dark ? "#cbd5e1" : "#6b7280" }]}>Risk</Text>
+        <View style={styles.riskRow}>
+          {RISKS.map((r) => {
+            const active = r === risk;
+            return (
+              <Pressable
+                key={r}
+                onPress={() => setRisk(r)}
+                style={[
+                  styles.riskChip,
+                  {
+                    borderColor: active ? ORANGE : colors.border,
+                    backgroundColor: active
+                      ? (dark ? "#261512" : "#fff4f1")
+                      : colors.card,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.riskText,
+                    { color: active ? ORANGE : colors.text },
+                  ]}
+                >
+                  {r.toUpperCase()}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={[styles.label, { color: dark ? "#cbd5e1" : "#6b7280" }]}>Notes</Text>
+        <TextInput
+          value={notes ?? ""}
+          onChangeText={(v) => setNotes(v || undefined)}
+          placeholder="Optional notes"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          multiline
+          style={[
+            styles.notes,
+            { color: colors.text, borderColor: colors.border, backgroundColor: colors.background },
+          ]}
+        />
+
+        <View style={styles.actions}>
+          {onDelete && (
             <Pressable
-              disabled={busy}
-              onPress={confirmDelete}
-              style={[styles.btn, styles.delete]}
+              onPress={handleDelete}
+              disabled={saving}
+              style={[styles.btn, styles.btnDanger]}
             >
-              <Text style={[styles.btnText, { color: "#fff" }]}>Delete</Text>
+              <Text style={styles.btnDangerText}>Delete</Text>
             </Pressable>
-
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <Pressable
-                disabled={busy}
-                onPress={onClose}
-                style={[styles.btn, styles.cancel]}
-              >
-                <Text style={styles.btnText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                disabled={busy}
-                onPress={save}
-                style={[styles.btn, styles.save]}
-              >
-                <Text style={[styles.btnText, { color: "#fff" }]}>Save</Text>
-              </Pressable>
-            </View>
-          </View>
+          )}
+          <View style={{ flex: 1 }} />
+          <Pressable onPress={onClose} disabled={saving} style={[styles.btn, styles.btnGhost]}>
+            <Text style={[styles.btnGhostText, { color: dark ? "#e5e7eb" : "#111827" }]}>
+              Cancel
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={handleSave}
+            disabled={saving}
+            style={[styles.btn, styles.btnPrimary]}
+          >
+            <Text style={styles.btnPrimaryText}>{saving ? "Saving…" : "Save"}</Text>
+          </Pressable>
         </View>
       </View>
     </Modal>
@@ -145,38 +222,60 @@ export default function EditJobModal({
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
+    backgroundColor: "#00000077",
   },
-  card: {
-    width: "100%",
-    backgroundColor: "#fff",
-    borderRadius: 14,
+  sheet: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     padding: 16,
-  },
-  h1: { fontSize: 18, fontWeight: "800", marginBottom: 12, color: "#111" },
-  input: {
-    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+  },
+  header: { fontSize: 20, fontWeight: "800", marginBottom: 12 },
+  label: { fontSize: 12, fontWeight: "700", marginTop: 8, marginBottom: 6 },
+  input: {
+    borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    marginBottom: 10,
   },
-  actionsRow: {
-    marginTop: 8,
+  notes: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  riskRow: { flexDirection: "row", gap: 8 },
+  riskChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  riskText: { fontWeight: "700", fontSize: 12 },
+  actions: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 10,
+    marginTop: 14,
   },
-  btn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
-  cancel: { backgroundColor: "#f3f4f6" },
-  save: { backgroundColor: "#1f6cff" },
-  delete: { backgroundColor: "#ef4444" },
-  btnText: { fontWeight: "800", color: "#111" },
+  btn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  btnPrimary: { backgroundColor: ORANGE, borderColor: ORANGE },
+  btnPrimaryText: { color: "#fff", fontWeight: "800" },
+  btnGhost: { backgroundColor: "transparent" },
+  btnGhostText: { fontWeight: "700" },
+  btnDanger: { backgroundColor: "#fee2e2", borderColor: "#fecaca" },
+  btnDangerText: { color: "#b91c1c", fontWeight: "800" },
 });

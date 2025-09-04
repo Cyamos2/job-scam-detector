@@ -2,12 +2,14 @@
 import React from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   NavigationContainer,
   DefaultTheme as NavLight,
   DarkTheme as NavDark,
   Theme,
 } from "@react-navigation/native";
+
 import RootNavigator from "./src/navigation/RootNavigator";
 import {
   SettingsProvider,
@@ -15,10 +17,10 @@ import {
   resolveThemeName,
 } from "./src/SettingsProvider";
 
-// optional: keep your brand color in theme.primary
+// Brand color
 const ORANGE = "#FF5733";
 
-// make colors a little nicer for both modes
+// Light/Dark themes with nicer defaults
 const LightTheme: Theme = {
   ...NavLight,
   colors: {
@@ -28,6 +30,7 @@ const LightTheme: Theme = {
     card: "#ffffff",
     text: "#111111",
     border: "#E5E7EB",
+    notification: NavLight.colors.notification,
   },
 };
 
@@ -36,17 +39,18 @@ const DarkTheme: Theme = {
   colors: {
     ...NavDark.colors,
     primary: ORANGE,
-    background: "#0B0B0B", // full-screen background
-    card: "#141414",       // surfaces/cards/headers
+    background: "#0B0B0B",
+    card: "#141414",
     text: "#FFFFFF",
     border: "#27272A",
+    notification: NavDark.colors.notification,
   },
 };
 
-function AppShell() {
+function AppInner() {
   const { settings } = useSettings();
   const mode = resolveThemeName(settings.theme);
-  const theme = mode === "dark" ? DarkTheme : mode === "light" ? LightTheme : LightTheme; // system->light fallback (Expo 53)
+  const theme = mode === "dark" ? DarkTheme : LightTheme; // (system -> Light fallback is fine in Expo 53)
   const barStyle = mode === "dark" ? "light" : "dark";
 
   return (
@@ -59,10 +63,12 @@ function AppShell() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <SettingsProvider>
-        <AppShell />
-      </SettingsProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <SettingsProvider>
+          <AppInner />
+        </SettingsProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
