@@ -34,7 +34,7 @@ The app scans job descriptions, links, and even screenshots to flag risky signal
 ---
 
 ## 📱 Screenshots
-> *(Add screenshots from your iOS simulator or Expo Go app here)*
+
 
 - Home Screen  
 - Verify Job Posting  
