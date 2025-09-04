@@ -1,3 +1,4 @@
+// src/screens/DatabaseScreen.tsx
 import * as React from "react";
 import {
   View,
@@ -7,6 +8,7 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
+  Alert,
 } from "react-native";
 import { useTheme, useNavigation } from "@react-navigation/native";
 import type { NavigationProp } from "@react-navigation/native";
@@ -14,6 +16,8 @@ import Screen from "../components/Screen";
 import { useJobs } from "../hooks/useJobs";
 import { goToAddContent } from "../navigation/goTo";
 import type { RootTabParamList } from "../navigation/types";
+import ScoreBadge from "../components/ScoreBadge";
+import { scoreJob, explainScore } from "../lib/scoring";
 
 type RiskFilter = "all" | "low" | "medium" | "high";
 const ORANGE = "#FF5733";
@@ -40,14 +44,44 @@ export default function DatabaseScreen() {
     return next;
   }, [items, filter, search]);
 
-  const renderItem = ({ item }: any) => (
-    <View style={[styles.row, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <Text style={[styles.rowTitle, { color: colors.text }]}>{item.title}</Text>
-      <Text style={[styles.rowMeta, { color: dark ? "#cbd5e1" : "#6B7280" }]}>
-        {item.company} • {item.risk?.toUpperCase()}
-      </Text>
-    </View>
-  );
+  const onWhy = (item: any, score: number) => {
+    const hits = explainScore(item);
+    const body = hits.length
+      ? `Matched keywords:\n• ${hits.join("\n• ")}`
+      : "No known scam keywords detected. Score reflects current risk + heuristics.";
+    Alert.alert(`Risk score: ${score}`, body);
+  };
+
+  const renderItem = ({ item }: { item: any }) => {
+    const score = scoreJob(item);
+    return (
+      <Pressable onPress={() => openEdit(item)}>
+        <View
+          style={[
+            styles.row,
+            { backgroundColor: colors.card, borderColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.rowTitle, { color: colors.text }]}>
+            {item.title}
+          </Text>
+          <Text
+            style={[styles.rowMeta, { color: dark ? "#cbd5e1" : "#6B7280" }]}
+          >
+            {item.company} • {item.risk?.toUpperCase()}
+          </Text>
+
+          <ScoreBadge score={score} onPress={() => onWhy(item, score)} />
+        </View>
+      </Pressable>
+    );
+  };
+
+  // keep your existing edit navigator call (wired to your modal/screen)
+  function openEdit(item: any) {
+    // If you already have a modal, call it here; otherwise leave tap as no-op.
+    // Example: navigation.navigate("Database", { screen: "EditJob", params: { jobId: item.id }});
+  }
 
   return (
     <Screen>
@@ -59,7 +93,11 @@ export default function DatabaseScreen() {
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.search,
-            { backgroundColor: colors.card, borderColor: colors.border, color: colors.text },
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              color: colors.text,
+            },
           ]}
           returnKeyType="search"
         />
@@ -93,7 +131,12 @@ export default function DatabaseScreen() {
             );
           })}
           <Pressable onPress={refresh} style={styles.refresh}>
-            <Text style={[styles.refreshText, { color: dark ? "#cbd5e1" : "#6B7280" }]}>
+            <Text
+              style={[
+                styles.refreshText,
+                { color: dark ? "#cbd5e1" : "#6B7280" },
+              ]}
+            >
               Refresh
             </Text>
           </Pressable>
@@ -108,10 +151,14 @@ export default function DatabaseScreen() {
           styles.listContent,
           filtered.length === 0 && { flex: 1, justifyContent: "center" },
         ]}
-        refreshControl={<RefreshControl refreshing={!!loading} onRefresh={refresh} />}
+        refreshControl={
+          <RefreshControl refreshing={!!loading} onRefresh={refresh} />
+        }
         ListEmptyComponent={
           <View style={{ alignItems: "center" }}>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No items</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              No items
+            </Text>
             <Pressable
               onPress={() => goToAddContent(navigation)}
               style={[styles.addContentBtn, { backgroundColor: "#1f6cff" }]}
@@ -122,10 +169,7 @@ export default function DatabaseScreen() {
         }
       />
 
-      <Pressable
-        onPress={() => goToAddContent(navigation)}
-        style={styles.fab}
-      >
+      <Pressable onPress={() => goToAddContent(navigation)} style={styles.fab}>
         <Text style={styles.fabText}>Add</Text>
       </Pressable>
     </Screen>
@@ -159,6 +203,7 @@ const styles = StyleSheet.create({
 
   listContent: { paddingVertical: 10, gap: 10 },
   row: {
+    position: "relative", // for the badge
     padding: 14,
     borderRadius: 12,
     borderWidth: 1,

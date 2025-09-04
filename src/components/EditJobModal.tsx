@@ -1,194 +1,182 @@
-// src/components/EditJobModal.tsx
-import * as React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Modal,
   View,
   Text,
   TextInput,
   Pressable,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
+  StyleSheet,
+  Alert,
 } from "react-native";
-
-export type EditPayload = {
-  title?: string;
-  company?: string;
-  risk: "LOW" | "MEDIUM" | "HIGH";
-  score: number;
-  url?: string | null;
-  email?: string | null;
-  source?: string | null;
-  notes?: string | null;
-};
+import { api, type Job } from "../lib/api";
 
 type Props = {
-  /** Show/hide the modal */
   visible: boolean;
-  /** When provided, we’re in “edit” mode */
-  jobId?: string;
-  /** Initial values to prefill the form (useful for edit) */
-  initial?: Partial<EditPayload> & { title?: string; company?: string };
-  /** Close the modal (no save) */
+  job: Job | null;
   onClose: () => void;
-  /** Called with the payload when user taps Save */
-  onSave: (data: EditPayload) => Promise<void> | void;
+  onSaved: () => void;    // refresh list after save
+  onDeleted: () => void;  // refresh list after delete
 };
 
 export default function EditJobModal({
   visible,
-  jobId,
-  initial,
+  job,
   onClose,
-  onSave,
+  onSaved,
+  onDeleted,
 }: Props) {
-  const isEdit = !!jobId;
+  const [title, setTitle] = useState("");
+  const [company, setCompany] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const [title, setTitle] = React.useState(initial?.title ?? "");
-  const [company, setCompany] = React.useState(initial?.company ?? "");
-  const [risk, setRisk] = React.useState<"LOW" | "MEDIUM" | "HIGH">(initial?.risk ?? "LOW");
-  const [score, setScore] = React.useState(String(initial?.score ?? 0));
-  const [url, setUrl] = React.useState(initial?.url ?? "");
-  const [email, setEmail] = React.useState(initial?.email ?? "");
-  const [source, setSource] = React.useState(initial?.source ?? "");
-  const [notes, setNotes] = React.useState(initial?.notes ?? "");
+  useEffect(() => {
+    if (job) {
+      setTitle(job.title);
+      setCompany(job.company);
+      setNotes(job.notes ?? "");
+    } else {
+      setTitle("");
+      setCompany("");
+      setNotes("");
+    }
+  }, [job]);
 
-  // Reset fields whenever modal opens or initial changes
-  React.useEffect(() => {
-    if (!visible) return;
-    setTitle(initial?.title ?? "");
-    setCompany(initial?.company ?? "");
-    setRisk((initial?.risk as any) ?? "LOW");
-    setScore(String(initial?.score ?? 0));
-    setUrl((initial?.url as string) ?? "");
-    setEmail((initial?.email as string) ?? "");
-    setSource((initial?.source as string) ?? "");
-    setNotes((initial?.notes as string) ?? "");
-  }, [visible, jobId, initial?.title, initial?.company, initial?.risk, initial?.score, initial?.url, initial?.email, initial?.source, initial?.notes]);
-
-  const disabled = !title.trim() || !company.trim();
-
-  const handleSave = async () => {
-    const payload: EditPayload = {
-      title: title.trim(),
-      company: company.trim(),
-      risk,
-      score: Number.isFinite(Number(score)) ? Number(score) : 0,
-      url: url.trim() ? url.trim() : null,
-      email: email.trim() ? email.trim() : null,
-      source: source.trim() ? source.trim() : null,
-      notes: notes.trim() ? notes.trim() : null,
-    };
-    await onSave(payload);
+  const save = async () => {
+    if (!job) return;
+    try {
+      setBusy(true);
+      await api.updateJob(job.id, { title, company, notes });
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      console.error(e);
+      Alert.alert("Save failed", e?.message ?? "Unknown error");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const RiskChip = ({ v }: { v: "LOW" | "MEDIUM" | "HIGH" }) => (
-    <Pressable
-      onPress={() => setRisk(v)}
-      style={{
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 999,
-        borderWidth: 1,
-        borderColor: risk === v ? "#2f6fed" : "#ddd",
-        backgroundColor: risk === v ? "#eaf0ff" : "white",
-      }}
-    >
-      <Text style={{ fontWeight: "700" }}>{v}</Text>
-    </Pressable>
-  );
+  const confirmDelete = () => {
+    if (!job) return;
+    Alert.alert(
+      "Delete job",
+      `Remove “${job.title}”?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setBusy(true);
+              await api.deleteJob(job.id);
+              onDeleted();
+              onClose();
+            } catch (e: any) {
+              console.error(e);
+              Alert.alert("Delete failed", e?.message ?? "Unknown error");
+            } finally {
+              setBusy(false);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.25)", justifyContent: "flex-end" }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <View
-          style={{
-            maxHeight: "85%",
-            padding: 16,
-            paddingBottom: 24,
-            backgroundColor: "white",
-            borderTopLeftRadius: 16,
-            borderTopRightRadius: 16,
-          }}
-        >
-          <Text style={{ fontSize: 18, fontWeight: "800", marginBottom: 12 }}>
-            {isEdit ? "Edit Job" : "Add Job"}
-          </Text>
+    <Modal visible={visible} transparent animationType="fade">
+      <View style={styles.overlay}>
+        <View style={styles.card}>
+          <Text style={styles.h1}>Edit Job</Text>
 
-          <ScrollView contentContainerStyle={{ gap: 10 }}>
-            <TextInput
-              placeholder="Title"
-              value={title}
-              onChangeText={setTitle}
-              style={styles.input}
-            />
-            <TextInput
-              placeholder="Company"
-              value={company}
-              onChangeText={setCompany}
-              style={styles.input}
-            />
+          <TextInput
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Job title"
+            style={styles.input}
+          />
+          <TextInput
+            value={company}
+            onChangeText={setCompany}
+            placeholder="Company"
+            style={styles.input}
+          />
+          <TextInput
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Notes"
+            multiline
+            style={[styles.input, { height: 92 }]}
+          />
+
+          <View style={styles.actionsRow}>
+            <Pressable
+              disabled={busy}
+              onPress={confirmDelete}
+              style={[styles.btn, styles.delete]}
+            >
+              <Text style={[styles.btnText, { color: "#fff" }]}>Delete</Text>
+            </Pressable>
 
             <View style={{ flexDirection: "row", gap: 10 }}>
-              <RiskChip v="LOW" />
-              <RiskChip v="MEDIUM" />
-              <RiskChip v="HIGH" />
+              <Pressable
+                disabled={busy}
+                onPress={onClose}
+                style={[styles.btn, styles.cancel]}
+              >
+                <Text style={styles.btnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={busy}
+                onPress={save}
+                style={[styles.btn, styles.save]}
+              >
+                <Text style={[styles.btnText, { color: "#fff" }]}>Save</Text>
+              </Pressable>
             </View>
-
-            <TextInput
-              placeholder="Score"
-              keyboardType="number-pad"
-              value={score}
-              onChangeText={setScore}
-              style={styles.input}
-            />
-            <TextInput placeholder="URL" value={url ?? ""} onChangeText={setUrl} style={styles.input} />
-            <TextInput placeholder="Email" value={email ?? ""} onChangeText={setEmail} style={styles.input} />
-            <TextInput placeholder="Source" value={source ?? ""} onChangeText={setSource} style={styles.input} />
-            <TextInput
-              placeholder="Notes"
-              value={notes ?? ""}
-              onChangeText={setNotes}
-              style={[styles.input, { height: 90, textAlignVertical: "top" }]}
-              multiline
-            />
-          </ScrollView>
-
-          <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
-            <Pressable
-              onPress={onClose}
-              style={{ paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1, borderColor: "#ddd" }}
-            >
-              <Text>Cancel</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleSave}
-              disabled={disabled}
-              style={{
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-                borderRadius: 10,
-                backgroundColor: disabled ? "#9aa0a6" : "#2f6fed",
-              }}
-            >
-              <Text style={{ color: "white", fontWeight: "700" }}>{isEdit ? "Save" : "Add"}</Text>
-            </Pressable>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
 
-const styles = {
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  card: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 16,
+  },
+  h1: { fontSize: 18, fontWeight: "800", marginBottom: 12, color: "#111" },
   input: {
+    backgroundColor: "#fff",
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
-  } as const,
-};
+    marginBottom: 10,
+  },
+  actionsRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  btn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
+  cancel: { backgroundColor: "#f3f4f6" },
+  save: { backgroundColor: "#1f6cff" },
+  delete: { backgroundColor: "#ef4444" },
+  btnText: { fontWeight: "800", color: "#111" },
+});
