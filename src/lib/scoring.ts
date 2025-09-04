@@ -1,164 +1,132 @@
 // src/lib/scoring.ts
-import type { Job } from "./api";
+// Heuristic scam scorer with human-friendly “reason” explanations.
 
-/** Heuristic keywords grouped by strength. */
-const STRONG = [
-  "wire transfer",
-  "gift card",
-  "crypto",
-  "bitcoin",
-  "cashapp",
-  "zelle",
-  "moneygram",
-  "western union",
-  "upfront fee",
-  "processing fee",
-  "equipment fee",
-  "pay to apply",
-  "telegram only",
-  "whatsapp only",
-  "verification code",
+import type { Job } from "../lib/api";
+
+/** Weighted term buckets (tune freely). */
+const STRONG_TERMS: Array<[key: string, needle: RegExp, points: number]> = [
+  ["gift cards", /\bgift\s*card(s)?\b/i, 25],
+  ["upfront fee", /\b(upfront|processing|application|equipment|training)\s+fee(s)?\b/i, 25],
+  ["crypto payment", /\b(crypto|bitcoin|btc)\b/i, 25],
+  ["IM contact", /\b(telegram|whatsapp)\b/i, 20],
+  ["verification code", /\bverification\s*code\b/i, 18],
 ];
 
-const MEDIUM = [
-  "urgent hire",
-  "immediate start",
-  "no experience",
-  "weekly payout",
-  "training provided",
-  "quick money",
-  "commission only",
-  "remote only",
-  "work from home",
-  "social media evaluator",
-  "data entry (remote)",
+const MEDIUM_TERMS: Array<[key: string, needle: RegExp, points: number]> = [
+  ["urgent hire", /\burgent\s+hire\b/i, 14],
+  ["immediate start", /\b(immediate|start\s+immediately)\b/i, 12],
+  ["no experience", /\bno\s+experience\b/i, 12],
+  ["high pay", /\b(high\s+pay|earn\s+\$\d{3,}|\$\d{3,}\s+per\s+(day|hour|week))\b/i, 12],
+  ["weekly payout", /\b(weekly\s+payout|daily\s+payout|paid\s+daily)\b/i, 10],
+  ["quick task", /\b(quick\s+task|90\s*minutes|easy\s+work)\b/i, 10],
+  ["commission only", /\bcommission\s+only\b/i, 10],
+  ["work from home", /\bwork\s+from\s+home\b/i, 8],
+  ["remote only", /\b(remote\s+only)\b/i, 8],
 ];
 
-const WEAK = [
-  "flexible hours",
-  "bonus",
-  "earn",
-  "sign-on bonus",
-  "high pay",
-  "part time",
+const WEAK_TERMS: Array<[key: string, needle: RegExp, points: number]> = [
+  ["flexible hours", /\bflexible\s+hours?\b/i, 5],
+  ["bonus", /\bbonus(es)?\b/i, 4],
+  ["sign-on bonus", /\bsign[- ]on\s+bonus\b/i, 5],
+  ["limited slots", /\b(limited\s+slots|only\s+\d+\s+positions?)\b/i, 4],
 ];
 
-/** Suspicious TLDs often used by scam landing pages. */
-const SUSPICIOUS_TLDS = [
-  ".top",
-  ".xyz",
-  ".site",
-  ".click",
-  ".link",
-  ".rest",
-  ".club",
-  ".work",
-  ".live",
-  ".casa",
-];
+/** Help text for each reason. */
+const REASON_HELP: Record<string, string> = {
+  "gift cards": "Scammers often request gift cards as payment—unrecoverable and untraceable.",
+  "upfront fee": "Legit employers don’t ask you to pay to apply, train, or get equipment.",
+  "crypto payment": "Requests to pay via crypto are a classic scam red flag.",
+  "IM contact": "Moving to Telegram/WhatsApp hides identities and evades platforms.",
+  "verification code": "Verification-code requests are commonly used for account takeovers.",
+  "urgent hire": "Pressure to act quickly limits your time to verify legitimacy.",
+  "immediate start": "Rushing start dates is another pressure tactic.",
+  "no experience": "Promises of high pay with no experience are classic bait.",
+  "high pay": "Unusually high or fast pay for easy work is suspicious.",
+  "weekly payout": "Fast payouts are a lure used by many scams.",
+  "quick task": "Very short tasks with big payouts are common in scams.",
+  "commission only": "Can be legit, but used in many bait-and-switch scams.",
+  "work from home": "Fine alone—paired with other red flags increases risk.",
+  "remote only": "Absolute remote-only across every step can be suspicious.",
+  "flexible hours": "Harmless alone; consider only with other flags.",
+  "bonus": "Over-promised perks are a lure.",
+  "sign-on bonus": "Unusually large sign-on bonuses can be fake.",
+  "limited slots": "Artificial scarcity to push quick decisions.",
+  "money talk": "Heavy emphasis on money is a common lure.",
+  "link shortener": "Short links hide real destinations (often phishing).",
+  "suspicious domain": "Odd/throwaway TLDs (e.g., .top, .xyz) are common in scams.",
+  "free email domain": "Corporate jobs should use company email, not free email.",
+  "excess punctuation": "Overuse of !!!/??? appears frequently in scam pitches.",
+};
 
-/** Normalize all text fields once. */
+/** Utility: join all job text once (lowercased). */
 function textOf(job: Job): string {
-  const parts = [
+  return [
     job.title ?? "",
     job.company ?? "",
     job.url ?? "",
     job.notes ?? "",
-  ];
-  return parts.join(" ").toLowerCase();
+  ]
+    .join(" ")
+    .toLowerCase();
 }
 
-/** Pull TLD from a URL string. */
-function tldOf(url?: string | null): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    const host = u.hostname.toLowerCase();
-    const idx = host.lastIndexOf(".");
-    return idx >= 0 ? host.slice(idx) : null;
-  } catch {
-    return null;
-  }
+/** Map reason key -> nicer label. */
+export function reasonLabel(key: string): string {
+  return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-/** Score + reasons (0–100). */
+/** One-liner explanation for a reason key. */
+export function reasonHelp(key: string): string {
+  return REASON_HELP[key] ?? "Potential risk indicator based on text analysis.";
+}
+
+/** Score and reasons (0–100). */
 export function scoreJob(job: Job): { score: number; reasons: string[] } {
   const t = textOf(job);
-  const reasons: string[] = [];
   let score = 0;
+  const reasons: Set<string> = new Set();
 
-  // 1) Base from declared risk (makes your manual label meaningful)
-  const baseByRisk: Record<Job["risk"], number> = {
-    low: 10,
-    medium: 35,
-    high: 60,
-  };
-  score += baseByRisk[job.risk ?? "low"];
-
-  // 2) Keyword weights
-  const addFrom = (arr: string[], pts: number) => {
-    for (const kw of arr) {
-      if (t.includes(kw)) {
+  const apply = (rules: Array<[string, RegExp, number]>) => {
+    for (const [label, needle, pts] of rules) {
+      if (needle.test(t)) {
         score += pts;
-        reasons.push(kw);
+        reasons.add(label);
       }
     }
   };
-  addFrom(STRONG, 25);
-  addFrom(MEDIUM, 12);
-  addFrom(WEAK, 6);
 
-  // 3) Heuristics
-  // Big money talk
-  if (/\b(\$|usd)\s?\d{3,}/.test(t)) {
-    score += 10;
-    reasons.push("big money mention");
-  }
-  // URL shorteners
-  if (/https?:\/\/(bit\.ly|tinyurl\.|t\.co|goo\.gl|is\.gd|cutt\.ly)/.test(t)) {
-    score += 12;
-    reasons.push("link shortener");
-  }
-  // Free mail domain while pretending to be a company
-  if (
-    /@gmail\.com|@outlook\.com|@yahoo\.com|@icloud\.com/.test(t) &&
-    /(inc|ltd|llc|corp|company)/.test(job.company ?? "")
-  ) {
-    score += 12;
-    reasons.push("free email with company");
-  }
-  // Phone / chat handles often used in “text me on …” scams
-  if (/\b(whatsapp|telegram|text me|dm me)\b/.test(t)) {
-    score += 10;
-    reasons.push("messaging-app contact");
-  }
-  // Suspicious TLD
-  const tld = tldOf(job.url);
-  if (tld && SUSPICIOUS_TLDS.includes(tld)) {
-    score += 10;
-    reasons.push(`suspicious tld ${tld}`);
-  }
-  // Lots of exclamations feels spammy
-  const exclaims = (job.notes ?? "").split("!").length - 1;
-  if (exclaims >= 3) {
-    score += 6;
-    reasons.push("excessive exclamation");
-  }
-  // Super short descriptions w/ big promises
-  const notesLen = (job.notes ?? "").trim().length;
-  if (notesLen > 0 && notesLen < 40 && /\b(high pay|earn|bonus)\b/.test(t)) {
+  apply(STRONG_TERMS);
+  apply(MEDIUM_TERMS);
+  apply(WEAK_TERMS);
+
+  // Heuristics
+  if (/\b(\$|usd)\s?\d{3,}/i.test(t)) {
     score += 8;
-    reasons.push("short + promise");
+    reasons.add("money talk");
+  }
+  if (/https?:\/\/(bit\.ly|tinyurl|t\.co|goo\.gl|linktr\.ee)/i.test(t)) {
+    score += 8;
+    reasons.add("link shortener");
+  }
+  if (/\.(top|xyz|click|monster|win|info|bid|loan)(\/|$)/i.test(job.url ?? "")) {
+    score += 12;
+    reasons.add("suspicious domain");
+  }
+  if (/@(gmail|outlook|yahoo)\.com/i.test(t) && /(inc|ltd|llc)\b/i.test(job.company ?? "")) {
+    score += 10;
+    reasons.add("free email domain");
+  }
+  if (/[!?]{3,}/.test(t)) {
+    score += 5;
+    reasons.add("excess punctuation");
   }
 
-  // 4) Clamp & unique reasons
+  // Clamp to 0..100
   score = Math.max(0, Math.min(100, score));
-  const uniqueReasons = Array.from(new Set(reasons));
-
-  return { score, reasons: uniqueReasons };
+  return { score, reasons: Array.from(reasons) };
 }
 
-/** Buckets for UI colors */
+/** Simple buckets for UI tinting. */
 export function bucket(score: number): "low" | "medium" | "high" {
   if (score >= 61) return "high";
   if (score >= 31) return "medium";

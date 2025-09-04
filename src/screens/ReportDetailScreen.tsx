@@ -19,10 +19,11 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import Screen from "../components/Screen";
 import ScoreBadge from "../components/ScoreBadge";
-import { scoreJob } from "../lib/scoring";
+import { scoreJob, reasonLabel, reasonHelp } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
 import type { RootStackParamList } from "../navigation/types";
 import EditJobModal from "../components/EditJobModal";
+import type { JobInput } from "../lib/api";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ReportDetail">;
 type Rt = RouteProp<RootStackParamList, "ReportDetail">;
@@ -37,6 +38,7 @@ export default function ReportDetailScreen() {
   const job = items.find((j) => j.id === id);
 
   const [editing, setEditing] = React.useState(false);
+  const [showWhy, setShowWhy] = React.useState(true);
 
   const onShare = async () => {
     if (!job) return;
@@ -49,7 +51,7 @@ export default function ReportDetailScreen() {
     try {
       await Share.share({ message: body });
     } catch {
-      // no-op
+      /* no-op */
     }
   };
 
@@ -89,7 +91,7 @@ export default function ReportDetailScreen() {
     );
   }
 
-  const { score } = scoreJob(job);
+  const { score, reasons } = scoreJob(job);
 
   return (
     <Screen>
@@ -110,8 +112,54 @@ export default function ReportDetailScreen() {
                 {job.url ? ` • ${job.url}` : ""}
               </Text>
             </View>
-            <ScoreBadge score={score} />
+
+            <Pressable onPress={() => setShowWhy((s) => !s)} hitSlop={10}>
+              <ScoreBadge score={score} />
+            </Pressable>
           </View>
+
+          {/* Why this score */}
+          <View style={styles.whyHeaderRow}>
+            <Pressable onPress={() => setShowWhy((s) => !s)} style={{ paddingVertical: 6 }}>
+              <Text style={[styles.h2, { color: colors.text }]}>Why this score</Text>
+            </Pressable>
+            <Pressable onPress={() => setShowWhy((s) => !s)}>
+              <Text style={{ color: "#6B7280", fontWeight: "700" }}>
+                {showWhy ? "Hide" : "Show"}
+              </Text>
+            </Pressable>
+          </View>
+
+          {showWhy && (
+            <>
+              <View style={styles.reasonChips}>
+                {reasons.length === 0 ? (
+                  <Text style={{ color: "#6B7280" }}>
+                    No specific red flags detected.
+                  </Text>
+                ) : (
+                  reasons.map((r) => (
+                    <View key={r} style={styles.reasonChip}>
+                      <Text style={styles.reasonChipText}>{reasonLabel(r)}</Text>
+                    </View>
+                  ))
+                )}
+              </View>
+
+              {reasons.length > 0 && (
+                <View style={{ marginTop: 8, gap: 6 }}>
+                  {reasons.map((r) => (
+                    <View key={`${r}-help`} style={{ flexDirection: "row", gap: 8 }}>
+                      <View style={styles.bullet} />
+                      <Text style={{ color: colors.text, flex: 1 }}>
+                        {reasonHelp(r)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
 
           {!!job.notes && (
             <>
@@ -121,7 +169,10 @@ export default function ReportDetailScreen() {
           )}
 
           <View style={styles.actionsRow}>
-            <Pressable onPress={() => setEditing(true)} style={[styles.btn, styles.btnNeutral]}>
+            <Pressable
+              onPress={() => setEditing(true)}
+              style={[styles.btn, styles.btnNeutral]}
+            >
               <Text style={[styles.btnText, { color: colors.text }]}>Edit</Text>
             </Pressable>
 
@@ -136,20 +187,20 @@ export default function ReportDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* inline edit modal */}
+      {/* Edit modal */}
       <EditJobModal
         visible={editing}
         job={job}
         onClose={() => setEditing(false)}
         onSaved={async (patch) => {
           try {
-            // Map Partial<Job> -> Partial<JobInput> (coerce nulls)
-            const toPatch: Partial<import("../lib/api").JobInput> = {
+            // Map Partial<Job> -> Partial<JobInput> (strip nulls to undefined)
+            const toPatch: Partial<JobInput> = {
               title: patch.title,
               company: patch.company,
-              url: patch.url ?? undefined,    // null -> undefined
+              url: patch.url ?? undefined,
               risk: patch.risk,
-              notes: patch.notes ?? undefined // null -> undefined (fix)
+              notes: patch.notes ?? undefined,
             };
             await update(job.id, toPatch);
           } catch (e) {
@@ -173,8 +224,39 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center" },
   title: { fontSize: 22, fontWeight: "800", marginBottom: 4 },
   sub: { fontSize: 14 },
+
+  whyHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  reasonChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 6,
+  },
+  reasonChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#FFE6C7",
+    backgroundColor: "#FFF4E6",
+  },
+  reasonChipText: { fontWeight: "700", color: "#B45309" },
+  bullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    marginTop: 8,
+    backgroundColor: "#B45309",
+  },
+
   h2: { fontSize: 16, fontWeight: "700", marginTop: 16, marginBottom: 8 },
   notes: { fontSize: 15, lineHeight: 22 },
+
   actionsRow: {
     flexDirection: "row",
     gap: 10,
