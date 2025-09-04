@@ -8,15 +8,12 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
+  TouchableOpacity,
 } from "react-native";
 import { useTheme, useNavigation } from "@react-navigation/native";
-import type { NavigationProp } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-
 import Screen from "../components/Screen";
 import { useJobs } from "../hooks/useJobs";
-import { goToAddContent } from "../navigation/goTo";
-import type { RootTabParamList, RootStackParamList } from "../navigation/types";
+import { goToAddContent, goToReportDetail } from "../navigation/goTo";
 import ScoreBadge from "../components/ScoreBadge";
 import { scoreJob } from "../lib/scoring";
 
@@ -24,11 +21,8 @@ type RiskFilter = "all" | "low" | "medium" | "high";
 const ORANGE = "#FF5733";
 
 export default function DatabaseScreen() {
-  // Tab nav (for goToAddContent)
-  const tabNav = useNavigation<NavigationProp<RootTabParamList>>();
-  // Root stack nav (for pushing ReportDetail)
-  const rootNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-
+  // Use an untyped nav so helpers can climb to the parent (root stack) safely
+  const nav = useNavigation<any>();
   const { colors, dark } = useTheme();
   const { items, loading, refresh } = useJobs();
 
@@ -52,8 +46,9 @@ export default function DatabaseScreen() {
   const renderItem = ({ item }: any) => {
     const { score } = scoreJob(item);
     return (
-      <Pressable
-        onPress={() => rootNav.navigate("ReportDetail", { id: item.id })}
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => goToReportDetail(nav, item.id)}
         style={[
           styles.row,
           { backgroundColor: colors.card, borderColor: colors.border },
@@ -66,7 +61,7 @@ export default function DatabaseScreen() {
           >
             {item.title}
           </Text>
-          <Text
+        <Text
             style={[
               styles.rowMeta,
               { color: dark ? "#cbd5e1" : "#6B7280" },
@@ -78,7 +73,7 @@ export default function DatabaseScreen() {
           </Text>
         </View>
         <ScoreBadge score={score} />
-      </Pressable>
+      </TouchableOpacity>
     );
   };
 
@@ -159,7 +154,7 @@ export default function DatabaseScreen() {
               No items
             </Text>
             <Pressable
-              onPress={() => goToAddContent(tabNav)}
+              onPress={() => goToAddContent(nav)}
               style={[styles.addContentBtn, { backgroundColor: "#1f6cff" }]}
             >
               <Text style={styles.addContentText}>Add content</Text>
@@ -168,7 +163,7 @@ export default function DatabaseScreen() {
         }
       />
 
-      <Pressable onPress={() => goToAddContent(tabNav)} style={styles.fab}>
+      <Pressable onPress={() => goToAddContent(nav)} style={styles.fab}>
         <Text style={styles.fabText}>Add</Text>
       </Pressable>
     </Screen>
