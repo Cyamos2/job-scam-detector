@@ -4,311 +4,383 @@ import {
   View,
   Text,
   TextInput,
-  Pressable,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
+  Pressable,
   Alert,
+  Platform,
+  ToastAndroid,
+  Animated,
+  Easing,
 } from "react-native";
-import {
-  useNavigation,
-  useRoute,
-  type RouteProp,
-  useTheme,
-} from "@react-navigation/native";
+import { useNavigation, useTheme } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+
 import Screen from "../components/Screen";
+import ScoreBadge from "../components/ScoreBadge";
+import { scoreJob } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
-import type { Risk, JobInput } from "../lib/api";
-import { scoreJob, bucket } from "../lib/scoring";
-import { useSettings } from "../SettingsProvider";
 import type { RootStackParamList } from "../navigation/types";
 
-type Rt = RouteProp<RootStackParamList, "AddContent">;
+type Nav = NativeStackNavigationProp<RootStackParamList, any>;
+type Risk = "low" | "medium" | "high";
 
-const ORANGE = "#FF5733";
-
-const RISK_LABEL: Record<Risk, string> = {
-  low: "LOW",
-  medium: "MEDIUM",
-  high: "HIGH",
-};
-
-// quick URL detector
-const URL_RE = /^https?:\/\/[\w.-]+\.[a-z]{2,}.*$/i;
+const URL_RE = /^https?:\/\/[^\s]+$/i;
 
 export default function AddContentScreen() {
+  const navigation = useNavigation<Nav>();
   const { colors, dark } = useTheme();
-  const nav = useNavigation();
-  const route = useRoute<Rt>();
   const { create } = useJobs();
-  const { settings } = useSettings();
-
-  // default risk from Settings (fall back to "low" if "all")
-  const defaultRisk: Risk =
-    (["low", "medium", "high"] as const).includes(
-      settings.defaultRiskFilter as Risk
-    )
-      ? (settings.defaultRiskFilter as Risk)
-      : "low";
 
   const [title, setTitle] = React.useState("");
   const [company, setCompany] = React.useState("");
   const [url, setUrl] = React.useState("");
-  const [risk, setRisk] = React.useState<Risk>(defaultRisk);
+  const [risk, setRisk] = React.useState<Risk>("low");
   const [notes, setNotes] = React.useState("");
+  const [showErrors, setShowErrors] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const lastSubmitted = React.useRef<string | null>(null);
 
-  // Pre-fill from presetUri (if user picked a screenshot or link earlier)
-  React.useEffect(() => {
-    const u = route.params?.presetUri;
-    if (!u) return;
-    if (URL_RE.test(u)) setUrl(u);
-    else setNotes((prev) => (prev ? prev + "\n" + u : u));
-  }, [route.params?.presetUri]);
+  // --- Live score preview (reasons + score)
+  const preview = React.useMemo(() => {
+    const input = {
+      title,
+      company,
+      url: url.trim() ? url.trim() : undefined,
+      notes: notes.trim() ? notes.trim() : undefined,
+      risk,
+    };
+    return scoreJob(input);
+  }, [title, company, url, notes, risk]);
 
-  const urlOk = !url || URL_RE.test(url.trim());
-  const ready = title.trim().length > 0 && company.trim().length > 0 && urlOk;
-
-  // live score preview from current inputs
-  const previewScore = scoreJob({
-    title,
-    company,
-    url,
-    notes,
-    risk,
-  } as any).score;
-  const b = bucket(previewScore);
-
-  const onExtractUrl = () => {
-    if (!notes) return;
-    const match = notes.match(/https?:\/\/\S+/i);
-    if (match && !url) setUrl(match[0]);
-  };
-
-  const onSubmit = async () => {
-    if (!ready) {
-      Alert.alert("Missing info", "Title and company are required.");
+  // --- iOS toast/snackbar (Android uses ToastAndroid)
+  const snackY = React.useRef(new Animated.Value(-60)).current;
+  const [snackText, setSnackText] = React.useState("");
+  const showSnack = (msg: string) => {
+    if (Platform.OS === "android") {
+      ToastAndroid.show(msg, ToastAndroid.SHORT);
       return;
     }
-    const input: JobInput = {
-      title: title.trim(),
-      company: company.trim(),
-      url: url.trim() || undefined,
-      risk,
-      notes: notes.trim() || undefined,
-    };
+    setSnackText(msg);
+    Animated.sequence([
+      Animated.timing(snackY, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.delay(900),
+      Animated.timing(snackY, {
+        toValue: -60,
+        duration: 180,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  // --- Validation helpers
+  const errorTitle = showErrors && !title.trim();
+  const errorCompany = showErrors && !company.trim();
+  const errorUrl =
+    showErrors && !!url.trim() && !URL_RE.test(url.trim());
+
+  // --- Submit flow
+  const doCreate = async () => {
     try {
-      await create(input);
-      nav.goBack();
+      setSaving(true);
+
+      const payload = {
+        title: title.trim(),
+        company: company.trim(),
+        url: url.trim() ? url.trim() : undefined,
+        risk,
+        notes: notes.trim() ? notes.trim() : undefined,
+      };
+
+      // de-dupe accidental double taps
+      const fp = JSON.stringify(payload);
+      if (lastSubmitted.current === fp) {
+        setSaving(false);
+        return;
+      }
+      lastSubmitted.current = fp;
+
+      await create(payload);
+      showSnack("Added to database");
+
+      if (Platform.OS === "ios") {
+        setTimeout(() => navigation.goBack(), 600);
+      } else {
+        navigation.goBack();
+      }
     } catch (e) {
       Alert.alert("Add failed", String(e ?? "Unknown error"));
+    } finally {
+      setSaving(false);
     }
+  };
+
+  const onSubmit = () => {
+    if (
+      !title.trim() ||
+      !company.trim() ||
+      (url.trim() && !URL_RE.test(url.trim()))
+    ) {
+      setShowErrors(true);
+      return;
+    }
+    if (saving) return;
+
+    Alert.alert(
+      "Add this item?",
+      "Are you sure you want to add this to the database?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Add", onPress: doCreate },
+      ]
+    );
+  };
+
+  // risk chip helpers (no function styles inside StyleSheet -> avoids TS errors)
+  const riskBg: Record<Risk, string> = {
+    low: "#ECFDF5",
+    medium: "#FFF7ED",
+    high: "#FEF2F2",
+  };
+  const riskBorder: Record<Risk, string> = {
+    low: "#A7F3D0",
+    medium: "#FED7AA",
+    high: "#FCA5A5",
+  };
+  const riskText: Record<Risk, string> = {
+    low: "#047857",
+    medium: "#B45309",
+    high: "#B91C1C",
   };
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        behavior={Platform.select({ ios: "padding", android: undefined })}
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text style={[styles.h1, { color: colors.text }]}>Add Job</Text>
+      {/* iOS snackbar */}
+      {Platform.OS === "ios" && (
+        <Animated.View
+          style={[styles.snack, { transform: [{ translateY: snackY }] }]}
+        >
+          <Text style={styles.snackText}>{snackText}</Text>
+        </Animated.View>
+      )}
 
-          {/* Title */}
-          <TextInput
-            value={title}
-            onChangeText={setTitle}
-            placeholder="Job title (e.g., Payroll Assistant)"
-            placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.card,
-                borderColor: !title.trim() ? "#FCA5A5" : colors.border,
-                color: colors.text,
-              },
-            ]}
-            autoCapitalize="words"
-            returnKeyType="next"
-          />
+      {/* Header row with live score */}
+      <View style={styles.headerRow}>
+        <Text style={[styles.h1, { color: colors.text }]}>Add Content</Text>
+        <ScoreBadge score={preview.score} />
+      </View>
 
-          {/* Company */}
-          <TextInput
-            value={company}
-            onChangeText={setCompany}
-            placeholder="Company (e.g., Fakester Ltd)"
-            placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.card,
-                borderColor: !company.trim() ? "#FCA5A5" : colors.border,
-                color: colors.text,
-              },
-            ]}
-            autoCapitalize="words"
-            returnKeyType="next"
-          />
-
-          {/* URL */}
-          <View style={{ gap: 6 }}>
-            <TextInput
-              value={url}
-              onChangeText={setUrl}
-              placeholder="URL (optional)"
-              placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
-              keyboardType="url"
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.card,
-                  borderColor: urlOk ? colors.border : "#FCA5A5",
-                  color: colors.text,
-                },
-              ]}
-            />
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              <Pressable onPress={onExtractUrl} style={[styles.smallBtn, { borderColor: colors.border }]}>
-                <Text style={{ fontWeight: "700", color: colors.text }}>Extract URL from notes</Text>
-              </Pressable>
-              {!urlOk && (
-                <Text style={[styles.errorText]}>Enter a valid URL (https://…)</Text>
-              )}
-            </View>
-          </View>
-
-          {/* Risk selector + live score chip */}
-          <View style={styles.row}>
-            <Text style={[styles.label, { color: colors.text }]}>Risk</Text>
-            <View style={styles.chips}>
-              {(["low", "medium", "high"] as const).map((r) => {
-                const active = r === risk;
-                return (
-                  <Pressable
-                    key={r}
-                    onPress={() => setRisk(r)}
-                    style={[
-                      styles.chip,
-                      { borderColor: colors.border, backgroundColor: colors.card },
-                      active && {
-                        borderColor: ORANGE,
-                        backgroundColor: dark ? "#261512" : "#fff4f1",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        { color: colors.text },
-                        active && { color: ORANGE },
-                      ]}
-                    >
-                      {RISK_LABEL[r]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            <View
-              style={[
-                styles.scorePill,
-                b === "high"
-                  ? { backgroundColor: "#FDE8E8" }
-                  : b === "medium"
-                  ? { backgroundColor: "#FFF4E6" }
-                  : { backgroundColor: "#E7F8ED" },
-              ]}
-            >
-              <Text style={{ fontWeight: "800", color: "#111" }}>{previewScore}</Text>
-            </View>
-          </View>
-
-          {/* Notes */}
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Notes (paste the message/recruiter text, etc.)"
-            placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
-            multiline
-            textAlignVertical="top"
-            style={[
-              styles.textarea,
-              { backgroundColor: colors.card, borderColor: colors.border, color: colors.text },
-            ]}
-          />
-
-          {/* Submit */}
-          <Pressable
-            disabled={!ready}
-            onPress={onSubmit}
-            style={[
-              styles.submit,
-              { backgroundColor: ready ? "#1f6cff" : "#93c5fd" },
-            ]}
-          >
-            <Text style={styles.submitText}>Add</Text>
-          </Pressable>
-
-          {/* subtle helper */}
-          <Text style={[styles.helper, { color: dark ? "#94a3b8" : "#6B7280" }]}>
-            Tip: live score updates as you type. Higher = riskier.
+      {/* Top reason chip (if any) */}
+      {!!preview.reasons.length && (
+        <View style={styles.previewChip}>
+          <Text style={styles.previewChipText}>
+            {preview.reasons[0].label}
           </Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </View>
+      )}
+
+      <View style={styles.form}>
+        <Text style={styles.label}>Title *</Text>
+        <TextInput
+          value={title}
+          onChangeText={setTitle}
+          placeholder="e.g., Payroll Assistant"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.input,
+            {
+              borderColor: errorTitle ? "#ef4444" : "#E5E7EB",
+              color: colors.text,
+              backgroundColor: colors.card,
+            },
+          ]}
+        />
+
+        <Text style={styles.label}>Company *</Text>
+        <TextInput
+          value={company}
+          onChangeText={setCompany}
+          placeholder="e.g., Fakester Ltd"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.input,
+            {
+              borderColor: errorCompany ? "#ef4444" : "#E5E7EB",
+              color: colors.text,
+              backgroundColor: colors.card,
+            },
+          ]}
+        />
+
+        <Text style={styles.label}>URL (optional)</Text>
+        <TextInput
+          value={url}
+          onChangeText={setUrl}
+          placeholder="https://example.com"
+          autoCapitalize="none"
+          keyboardType="url"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.input,
+            {
+              borderColor: errorUrl ? "#ef4444" : "#E5E7EB",
+              color: colors.text,
+              backgroundColor: colors.card,
+            },
+          ]}
+        />
+        {errorUrl ? (
+          <Text style={styles.helperError}>Enter a valid http(s) URL</Text>
+        ) : null}
+
+        <Text style={styles.label}>Risk</Text>
+        <View style={styles.chipsRow}>
+          {(["low", "medium", "high"] as const).map((r) => {
+            const active = risk === r;
+            return (
+              <Pressable
+                key={r}
+                onPress={() => setRisk(r)}
+                style={[
+                  styles.riskChip,
+                  active && {
+                    borderColor: riskBorder[r],
+                    backgroundColor: riskBg[r],
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.riskChipText,
+                    active && { color: riskText[r] },
+                  ]}
+                >
+                  {r.toUpperCase()}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.label}>Notes</Text>
+        <TextInput
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Paste the message or any context here..."
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.textarea,
+            {
+              color: colors.text,
+              backgroundColor: colors.card,
+              borderColor: "#E5E7EB",
+            },
+          ]}
+          multiline
+        />
+
+        <Pressable
+          onPress={onSubmit}
+          disabled={saving}
+          style={[styles.addBtn, saving && { opacity: 0.6 }]}
+        >
+          <Text style={styles.addBtnText}>
+            {saving ? "Adding…" : "Add"}
+          </Text>
+        </Pressable>
+
+        {showErrors && (errorTitle || errorCompany || errorUrl) ? (
+          <Text style={styles.formError}>
+            Please complete required fields and fix the URL format.
+          </Text>
+        ) : null}
+      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, gap: 14 },
-  h1: { fontSize: 22, fontWeight: "900", marginBottom: 2 },
-  label: { fontWeight: "800", marginBottom: 6 },
-  input: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+  // snackbar
+  snack: {
+    position: "absolute",
+    top: 8,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 10,
   },
-  textarea: {
-    minHeight: 160,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    lineHeight: 20,
-  },
-  row: { gap: 8 },
-  chips: { flexDirection: "row", gap: 10 },
-  chip: {
+  snackText: {
+    backgroundColor: "#111",
+    color: "#fff",
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
-    borderWidth: 1,
+    overflow: "hidden",
+    fontWeight: "700",
   },
-  chipText: { fontWeight: "800" },
-  scorePill: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    marginTop: 2,
-  },
-  smallBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  errorText: { alignSelf: "center", fontWeight: "700", color: "#DC2626" },
-  submit: {
-    marginTop: 6,
-    paddingVertical: 14,
-    borderRadius: 12,
+
+  headerRow: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 6,
+    flexDirection: "row",
     alignItems: "center",
   },
-  submitText: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  helper: { textAlign: "center", marginTop: 4 },
+  h1: { fontSize: 24, fontWeight: "800", flex: 1 },
+
+  previewChip: {
+    marginLeft: 16,
+    marginBottom: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#FFF1E8",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  previewChipText: { color: "#B45309", fontWeight: "700" },
+
+  form: { paddingHorizontal: 16, paddingBottom: 24 },
+  label: { marginTop: 14, marginBottom: 6, fontWeight: "800", color: "#111" },
+  input: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  textarea: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    minHeight: 120,
+    textAlignVertical: "top",
+  },
+
+  helperError: { color: "#ef4444", marginTop: 6 },
+
+  chipsRow: { flexDirection: "row", gap: 10 },
+  riskChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
+  },
+  riskChipText: { fontWeight: "700", color: "#111" },
+
+  addBtn: {
+    marginTop: 18,
+    backgroundColor: "#1f6cff",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  addBtnText: { color: "#fff", fontWeight: "800" },
+  formError: { color: "#ef4444", marginTop: 12, fontWeight: "600" },
 });

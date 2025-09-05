@@ -1,172 +1,156 @@
 // src/lib/scoring.ts
-// Heuristic scam scorer that returns a score (0–100) *and* structured reasons.
+export type Severity = "low" | "medium" | "high";
 
-import type { Job } from "./api";
-
-/** Reason for the score that can be shown in the UI. */
 export type Reason = {
-  id: string;                              // stable key for UI
-  label: string;                           // short chip
-  explain: string;                         // sentence for bullets
-  severity: "low" | "medium" | "high";     // for color/grouping
-  points: number;                          // contribution to score
+  key: string;      // stable identifier
+  label: string;    // short chip label
+  severity: Severity;
+  explain: string;  // one-line explanation
 };
 
-/** Nicely bucket scores for badge colors. */
-export function bucket(score: number): "low" | "medium" | "high" {
-  if (score >= 61) return "high";
-  if (score >= 31) return "medium";
+export type ScoreResult = {
+  score: number;    // 0..100
+  reasons: Reason[];
+};
+
+export type ScoreInput = {
+  title?: string;
+  company?: string;
+  url?: string;       // use undefined (not null)
+  notes?: string;     // use undefined (not null)
+  risk?: Severity;    // user's declared risk bucket
+};
+
+/** Public: turn a DB row that may use nulls into ScoreInput */
+export function toScoreInput(job: {
+  title?: string | null;
+  company?: string | null;
+  url?: string | null;
+  notes?: string | null;
+  risk?: Severity | null;
+}): ScoreInput {
+  return {
+    title: job.title ?? "",
+    company: job.company ?? "",
+    url: job.url ?? undefined,
+    notes: job.notes ?? undefined,
+    risk: (job.risk ?? undefined) as Severity | undefined,
+  };
+}
+
+/** Public: map a numeric score to a bucket for badges/colors */
+export function bucket(score: number): Severity {
+  if (score >= 60) return "high";
+  if (score >= 25) return "medium";
   return "low";
 }
 
-// ---------- helpers ----------
-const URL_RE = /(https?:\/\/[^\s)]+)|(www\.[^\s)]+)/i;
+// --------- internal helpers ---------
 
-function norm(job: Job): string {
-  const parts = [job.title ?? "", job.company ?? "", job.url ?? "", job.notes ?? ""];
-  return parts.join(" ").toLowerCase();
-}
+const TLD_BAD = /\.(top|xyz|site|icu|click|cam|monster|gq|tk|ml|ga|cf)(?:\/|$)/i;
+const HIGH_PAY_RE =
+  /\b(\$|usd)?\s?(?:\d{2,3,})(?:\s?-\s?|\s?to\s?|\s?\/?\s?per\s?(?:day|week)|\s?\/?\s?day)\b/i;
+const IM_RE = /\b(telegram|whatsapp|signal)\b/i;
+const GIFT_RE = /\b(gift\s*card|zelle|wire\s*transfer)\b/i;
+const URGENT_RE = /\b(urgent(ly)?|immediate(ly)?|start\s*now)\b/i;
+const FREE_EMAIL_RE = /\b(@gmail\.com|@yahoo\.com|@outlook\.com|@hotmail\.com)\b/i;
 
-function getDomain(u?: string | null): string | null {
-  if (!u) return null;
-  try {
-    const url = u.startsWith("http") ? new URL(u) : new URL("http://" + u);
-    return url.hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-const FREE_MAIL = /@(gmail|outlook|yahoo|hotmail|icloud)\.com\b/i;
-const SHORTENERS = /(bit\.ly|t\.co|goo\.gl|tinyurl\.com|is\.gd|cutt\.ly|rb\.gy)\b/i;
-const SUSPICIOUS_TLDS = /\.(top|xyz|rest|shop|click|work|cam|monster|best|buzz|lol|icu|link|live|club|online|win|men|date|wang)\b/i;
-
-// ---------- rule set ----------
-// Each rule returns true if the signal is present.
-type Rule = Reason & { test: (t: string, job: Job) => boolean };
-
-const RULES: Rule[] = [
-  {
-    id: "pay-unusual",
-    label: "Unusual payment",
-    explain: "Requests for gift cards, Zelle, or wire transfers are classic scam tells.",
-    severity: "high",
-    points: 35,
-    test: (t) =>
-      /(gift ?card|zelle|western union|moneygram|wire transfer|cashapp|venmo)\b/.test(t),
-  },
-  {
-    id: "upfront-fee",
-    label: "Upfront fee",
-    explain: "Asking you to pay an application, processing, or equipment fee is a red flag.",
-    severity: "high",
-    points: 30,
-    test: (t) => /(upfront|processing|application|equipment)\s+fee/.test(t) || /pay to apply/.test(t),
-  },
-  {
-    id: "im-contact",
-    label: "IM contact",
-    explain: "Moving to Telegram or WhatsApp hides identities and evades platforms.",
-    severity: "high",
-    points: 25,
-    test: (t) => /(telegram|whatsapp)\b/.test(t),
-  },
-  {
-    id: "high-pay",
-    label: "High pay mention",
-    explain: "Excessive or flashy pay claims are commonly used as bait.",
-    severity: "medium",
-    points: 20,
-    test: (t) => {
-      if (/\$\s?\d{3,}/.test(t)) return true;                // any $xxx+ mention
-      // day-rate style: $300–$700/day, 300-700/day, etc.
-      return /\$?\d{3,}\s?(-|–|to)\s?\$?\d{3,}\s?\/?\s?(day|daily|week|weekly|hr|hour)/.test(t);
-    },
-  },
-  {
-    id: "link-shortener",
-    label: "Link shortener",
-    explain: "Link shorteners obscure final destinations and are common in scams.",
-    severity: "medium",
-    points: 15,
-    test: (t) => SHORTENERS.test(t),
-  },
-  {
-    id: "suspicious-domain",
-    label: "Suspicious domain",
-    explain: "Odd/throwaway TLDs (e.g., .top, .xyz) are common in scams.",
-    severity: "medium",
-    points: 18,
-    test: (_t, job) => {
-      const d = getDomain(job.url);
-      return !!(d && SUSPICIOUS_TLDS.test(d));
-    },
-  },
-  {
-    id: "free-email",
-    label: "Free email domain",
-    explain: "Company claims a corporate entity but uses a personal email domain.",
-    severity: "medium",
-    points: 18,
-    test: (t, job) =>
-      FREE_MAIL.test(t) && /\b(inc|ltd|llc|corp|corporation|company|co\.)\b/i.test(job.company ?? ""),
-  },
-  {
-    id: "urgent-noexp",
-    label: "Too easy / urgent",
-    explain: "“Urgent hire” or “no experience” paired with high pay is suspicious.",
-    severity: "low",
-    points: 10,
-    test: (t) =>
-      /(urgent hire|immediate start|start today|no experience|training provided|quick task)/.test(t),
-  },
-  {
-    id: "remote-only",
-    label: "Remote-only",
-    explain: "Strictly remote contact with no company context can be used to lure victims.",
-    severity: "low",
-    points: 8,
-    test: (t) => /(remote only|work from home|wfh)\b/.test(t),
-  },
-];
-
-// ---------- scorer ----------
-export function scoreJob(job: Job): { score: number; reasons: Reason[] } {
-  const t = norm(job);
-
-  // Base score nudged from declared risk (if present)
-  let score = 0;
-  if (job.risk === "medium") score += 10;
-  if (job.risk === "high") score += 25;
-
-  const hits: Reason[] = [];
-  for (const r of RULES) {
-    if (r.test(t, job)) {
-      // push a copy without the test fn
-      hits.push({ id: r.id, label: r.label, explain: r.explain, severity: r.severity, points: r.points });
-      score += r.points;
-    }
-  }
-
-  // Clamp and sort reasons by severity then points desc
-  score = Math.max(0, Math.min(100, score));
-
-  const order: Record<Reason["severity"], number> = { high: 0, medium: 1, low: 2 };
-  const unique = dedupeById(hits).sort((a, b) => {
-    const sev = order[a.severity] - order[b.severity];
-    return sev !== 0 ? sev : b.points - a.points;
-  });
-
-  return { score, reasons: unique };
-}
-
-function dedupeById(list: Reason[]): Reason[] {
+function uniqBy<T extends { key: string }>(arr: T[]): T[] {
   const seen = new Set<string>();
-  const out: Reason[] = [];
-  for (const r of list) {
-    if (seen.has(r.id)) continue;
-    seen.add(r.id);
-    out.push(r);
+  const out: T[] = [];
+  for (const a of arr) {
+    if (seen.has(a.key)) continue;
+    seen.add(a.key);
+    out.push(a);
   }
   return out;
+}
+
+// --------- MAIN: scoreJob ---------
+
+export function scoreJob(job: ScoreInput): ScoreResult {
+  const title = (job.title ?? "").toLowerCase();
+  const notes = (job.notes ?? "").toLowerCase();
+  const url = job.url ?? "";
+  const text = `${title}\n${notes}`;
+
+  const reasons: Reason[] = [];
+
+  // Suspicious domain (MED)
+  if (url && TLD_BAD.test(url)) {
+    reasons.push({
+      key: "suspicious-domain",
+      label: "Suspicious domain",
+      severity: "medium",
+      explain: "Odd/throwaway TLDs (e.g., .top, .xyz) are common in scams.",
+    });
+  }
+
+  // Free email domain (MED)
+  if (FREE_EMAIL_RE.test(text)) {
+    reasons.push({
+      key: "free-email",
+      label: "Free email domain",
+      severity: "medium",
+      explain:
+        "Company claims a corporate entity but uses a personal/non-corp email.",
+    });
+  }
+
+  // High pay bait (LOW)
+  if (HIGH_PAY_RE.test(text)) {
+    reasons.push({
+      key: "high-pay",
+      label: "High pay mention",
+      severity: "low",
+      explain: "Excessive/flashy pay claims are commonly used as bait.",
+    });
+  }
+
+  // IM / off-platform move (MED)
+  if (IM_RE.test(text)) {
+    reasons.push({
+      key: "im-contact",
+      label: "IM contact",
+      severity: "medium",
+      explain:
+        "Moving to Telegram/WhatsApp hides identities and evades platforms.",
+    });
+  }
+
+  // Unusual payment method (HIGH)
+  if (GIFT_RE.test(text)) {
+    reasons.push({
+      key: "unusual-payment",
+      label: "Unusual payment",
+      severity: "high",
+      explain:
+        "Requests for gift cards, Zelle, or wire transfers are classic tells.",
+    });
+  }
+
+  // Urgency pressure (LOW)
+  if (URGENT_RE.test(text)) {
+    reasons.push({
+      key: "urgency",
+      label: "Urgent hire",
+      severity: "low",
+      explain: "Artificial urgency pressures quick decisions.",
+    });
+  }
+
+  // Deduplicate by key
+  const unique = uniqBy(reasons);
+
+  // Weighting -> numeric score (cap 100)
+  const weights: Record<Severity, number> = { high: 28, medium: 18, low: 8 };
+  const base = unique.reduce((sum, r) => sum + weights[r.severity], 0);
+
+  // User provided risk nudge
+  const nudge =
+    job.risk === "high" ? 30 : job.risk === "medium" ? 15 : 0;
+
+  const score = Math.max(0, Math.min(100, base + nudge));
+
+  return { score, reasons: unique };
 }
