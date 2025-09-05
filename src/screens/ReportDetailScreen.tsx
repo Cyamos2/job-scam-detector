@@ -1,25 +1,11 @@
-// src/screens/ReportDetailScreen.tsx
 import * as React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Alert,
-  Share,
-} from "react-native";
-import {
-  useNavigation,
-  useRoute,
-  useTheme,
-  type RouteProp,
-} from "@react-navigation/native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Alert, Share } from "react-native";
+import { useNavigation, useRoute, useTheme, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import Screen from "../components/Screen";
 import ScoreBadge from "../components/ScoreBadge";
-import { scoreJob, toScoreInput, type Reason } from "../lib/scoring";
+import { scoreJob, type Reason } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
 import type { RootStackParamList } from "../navigation/types";
 import EditJobModal from "../components/EditJobModal";
@@ -33,50 +19,38 @@ export default function ReportDetailScreen() {
   const route = useRoute<Rt>();
   const { colors } = useTheme();
   const { id } = route.params;
-
   const { items, update, remove } = useJobs();
   const [editing, setEditing] = React.useState(false);
   const [showWhy, setShowWhy] = React.useState(true);
 
-  // find job (pure read, memoized)
-  const job = React.useMemo(() => items.find((j) => j.id === id), [items, id]);
+  // find job
+  const job = React.useMemo(() => items.find((j) => j.id === id) ?? null, [items, id]);
 
-  // early return is fine (no hooks after this are skipped conditionally)
-  if (!job) {
-    return (
-      <Screen>
-        <View
-          style={[
-            styles.card,
-            { borderColor: colors.border, backgroundColor: colors.card },
-          ]}
-        >
-          <Text style={[styles.title, { color: colors.text }]}>
-            This report no longer exists.
-          </Text>
-        </View>
-      </Screen>
-    );
-  }
+  // build safe input so hooks are NEVER conditional
+  const safeInput = React.useMemo(
+    () => ({
+      title: job?.title ?? "",
+      company: job?.company ?? "",
+      url: job?.url ?? undefined,
+      notes: job?.notes ?? undefined,
+      risk: job?.risk ?? "low",
+    }),
+    [job]
+  );
 
-  // compute score & reasons (normalize nulls -> undefined)
-  const scored = React.useMemo(() => {
-    return scoreJob(toScoreInput(job));
-  }, [job]);
+  // compute score & reasons (always runs)
+  const scored = React.useMemo(() => scoreJob(safeInput), [safeInput]);
 
-  // group reasons for display (not conditional)
+  // group reasons (always runs)
   const grouped = React.useMemo(() => {
-    const by: Record<"high" | "medium" | "low", Reason[]> = {
-      high: [],
-      medium: [],
-      low: [],
-    };
+    const by: Record<"high" | "medium" | "low", Reason[]> = { high: [], medium: [], low: [] };
     for (const r of scored.reasons) by[r.severity].push(r);
     return by;
   }, [scored.reasons]);
 
-  // ----- actions -----
+  // actions
   const onShare = React.useCallback(async () => {
+    if (!job) return;
     const body =
       `${job.title} — ${job.company}\n` +
       (job.url ? `${job.url}\n` : "") +
@@ -84,12 +58,11 @@ export default function ReportDetailScreen() {
       (job.notes ?? "");
     try {
       await Share.share({ message: body });
-    } catch {
-      /* no-op */
-    }
+    } catch {}
   }, [job, scored.score]);
 
   const onDelete = React.useCallback(() => {
+    if (!job) return;
     Alert.alert("Delete report", "This cannot be undone.", [
       { text: "Cancel", style: "cancel" },
       {
@@ -105,53 +78,40 @@ export default function ReportDetailScreen() {
         },
       },
     ]);
-  }, [job.id, navigation, remove]);
+  }, [job, navigation, remove]);
 
-  // ----- render -----
+  // ---- render ----
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {/* header */}
           <View style={styles.headerRow}>
             <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text
-                style={[styles.title, { color: colors.text }]}
-                numberOfLines={2}
-              >
-                {job.title}
+              <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
+                {job ? job.title : "This report no longer exists."}
               </Text>
-              <Text
-                style={[styles.sub, { color: "#6B7280" }]}
-                numberOfLines={2}
-              >
-                {job.company}
-                {job.url ? ` • ${job.url}` : ""}
-              </Text>
+              {job && (
+                <Text style={[styles.sub, { color: "#6B7280" }]} numberOfLines={2}>
+                  {job.company}
+                  {job.url ? ` • ${job.url}` : ""}
+                </Text>
+              )}
             </View>
             <ScoreBadge score={scored.score} />
           </View>
 
           {/* why this score */}
           <View style={styles.whyHeaderRow}>
-            <Text style={[styles.h2, { color: colors.text }]}>
-              Why this score
-            </Text>
+            <Text style={[styles.h2, { color: colors.text }]}>Why this score</Text>
             <Pressable onPress={() => setShowWhy((v) => !v)}>
-              <Text style={[styles.toggle, { color: "#6B7280" }]}>
-                {showWhy ? "Hide" : "Show"}
-              </Text>
+              <Text style={[styles.toggle, { color: "#6B7280" }]}>{showWhy ? "Hide" : "Show"}</Text>
             </Pressable>
           </View>
 
           {showWhy && (
             <>
-              {/* reason chips */}
+              {/* chips */}
               <View style={styles.chipsWrap}>
                 {scored.reasons.map((r, i) => (
                   <View key={`${r.key}-${i}`} style={styles.chip}>
@@ -163,15 +123,11 @@ export default function ReportDetailScreen() {
               {/* grouped bullets */}
               {(["high", "medium", "low"] as const).map((sev) =>
                 grouped[sev].length ? (
-                  <View key={sev} style={styles.bucketWrap}>
+                  <View key={`grp-${sev}`} style={styles.bucketWrap}>
                     <Text
                       style={[
                         styles.bucketTitle,
-                        sev === "high"
-                          ? styles.bucketHigh
-                          : sev === "medium"
-                          ? styles.bucketMedium
-                          : styles.bucketLow,
+                        sev === "high" ? styles.bucketHigh : sev === "medium" ? styles.bucketMedium : styles.bucketLow,
                       ]}
                     >
                       {sev.toUpperCase()}
@@ -179,9 +135,7 @@ export default function ReportDetailScreen() {
                     {grouped[sev].map((r, i) => (
                       <View key={`${r.key}-b-${i}`} style={styles.bulletRow}>
                         <View style={styles.bulletDot} />
-                        <Text style={[styles.bulletText, { color: colors.text }]}>
-                          {r.explain}
-                        </Text>
+                        <Text style={[styles.bulletText, { color: colors.text }]}>{r.explain}</Text>
                       </View>
                     ))}
                   </View>
@@ -190,35 +144,23 @@ export default function ReportDetailScreen() {
             </>
           )}
 
-          {!!job.notes && (
+          {/* notes */}
+          {job?.notes ? (
             <>
               <Text style={[styles.h2, { color: colors.text }]}>Notes</Text>
-              <Text style={[styles.notes, { color: colors.text }]}>
-                {job.notes}
-              </Text>
+              <Text style={[styles.notes, { color: colors.text }]}>{job.notes}</Text>
             </>
-          )}
+          ) : null}
 
           {/* actions */}
           <View style={styles.actionsRow}>
-            <Pressable
-              onPress={() => setEditing(true)}
-              style={[styles.btn, styles.btnNeutral]}
-            >
+            <Pressable onPress={() => job && setEditing(true)} style={[styles.btn, styles.btnNeutral]}>
               <Text style={[styles.btnText, { color: colors.text }]}>Edit</Text>
             </Pressable>
-
-            <Pressable
-              onPress={onShare}
-              style={[styles.btn, styles.btnNeutral]}
-            >
+            <Pressable onPress={onShare} style={[styles.btn, styles.btnNeutral]}>
               <Text style={[styles.btnText, { color: colors.text }]}>Share</Text>
             </Pressable>
-
-            <Pressable
-              onPress={onDelete}
-              style={[styles.btn, styles.btnDanger]}
-            >
+            <Pressable onPress={onDelete} style={[styles.btn, styles.btnDanger]} disabled={!job}>
               <Text style={[styles.btnText, { color: "#fff" }]}>Delete</Text>
             </Pressable>
           </View>
@@ -226,26 +168,28 @@ export default function ReportDetailScreen() {
       </ScrollView>
 
       {/* edit modal */}
-      <EditJobModal
-        visible={editing}
-        job={job}
-        onClose={() => setEditing(false)}
-        onSaved={async (patch) => {
-          try {
-            await update(job.id, {
-              title: patch.title,
-              company: patch.company,
-              url: patch.url ?? undefined,
-              risk: patch.risk,
-              notes: patch.notes ?? undefined,
-            });
-          } catch (e) {
-            Alert.alert("Save failed", String(e ?? "Unknown error"));
-          } finally {
-            setEditing(false);
-          }
-        }}
-      />
+      {job && (
+        <EditJobModal
+          visible={editing}
+          job={job}
+          onClose={() => setEditing(false)}
+          onSaved={async (patch) => {
+            try {
+              await update(job.id, {
+                title: patch.title,
+                company: patch.company,
+                url: patch.url ?? undefined,
+                risk: patch.risk,
+                notes: patch.notes ?? undefined,
+              });
+            } catch (e) {
+              Alert.alert("Save failed", String(e ?? "Unknown error"));
+            } finally {
+              setEditing(false);
+            }
+          }}
+        />
+      )}
     </Screen>
   );
 }
@@ -262,12 +206,7 @@ const styles = StyleSheet.create({
   toggle: { fontWeight: "700" },
 
   chipsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  chip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#FFF7ED",
-  },
+  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "#FFF7ED" },
   chipText: { color: "#B45309", fontWeight: "700" },
 
   bucketWrap: { marginTop: 12 },
@@ -276,29 +215,13 @@ const styles = StyleSheet.create({
   bucketMedium: { color: "#B45309" },
   bucketLow: { color: "#047857" },
 
-  bulletRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    marginBottom: 6,
-  },
-  bulletDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#A3A3A3",
-    marginTop: 7,
-  },
+  bulletRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 6 },
+  bulletDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#A3A3A3", marginTop: 7 },
   bulletText: { flex: 1, fontSize: 15, lineHeight: 22 },
 
   notes: { fontSize: 15, lineHeight: 22 },
 
-  actionsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 18,
-    justifyContent: "flex-end",
-  },
+  actionsRow: { flexDirection: "row", gap: 10, marginTop: 18, justifyContent: "flex-end" },
   btn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10 },
   btnNeutral: { backgroundColor: "#F3F4F6" },
   btnDanger: { backgroundColor: "#EF4444" },
