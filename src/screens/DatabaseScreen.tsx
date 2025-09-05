@@ -3,83 +3,120 @@ import * as React from "react";
 import {
   View,
   Text,
-  TextInput,
-  FlatList,
-  Pressable,
-  RefreshControl,
   StyleSheet,
-  TouchableOpacity,
+  TextInput,
+  Pressable,
+  FlatList,
+  Alert,
+  Platform,
+  ToastAndroid,
 } from "react-native";
-import { useTheme, useNavigation } from "@react-navigation/native";
-import Screen from "../components/Screen";
-import { useJobs } from "../hooks/useJobs";
-import { goToAddContent, goToReportDetail } from "../navigation/goTo";
-import ScoreBadge from "../components/ScoreBadge";
-import { scoreJob } from "../lib/scoring";
+import { useNavigation, useTheme } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
-type RiskFilter = "all" | "low" | "medium" | "high";
-const ORANGE = "#FF5733";
+import Screen from "../components/Screen";
+import ScoreBadge from "../components/ScoreBadge";
+import { scoreJob, type ScoreResult } from "../lib/scoring";
+import { useJobs } from "../hooks/useJobs";
+import type { RootStackParamList } from "../navigation/types";
+
+// ---------- types ----------
+type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Risk = "low" | "medium" | "high";
+
+// A single row in the list (job + computed score)
+type Row = {
+  j: ReturnType<typeof useJobs>["items"][number];
+  s: ScoreResult;
+};
+
+// ---------- helpers ----------
+const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
+  title: j.title,
+  company: j.company,
+  url: j.url ?? undefined,     // normalize null -> undefined
+  notes: j.notes ?? undefined, // normalize null -> undefined
+  risk: j.risk,
+});
 
 export default function DatabaseScreen() {
-  // Use an untyped nav so helpers can climb to the parent (root stack) safely
-  const nav = useNavigation<any>();
+  const nav = useNavigation<Nav>();
   const { colors, dark } = useTheme();
-  const { items, loading, refresh } = useJobs();
+  const { items, remove } = useJobs();
 
-  const [filter, setFilter] = React.useState<RiskFilter>("all");
   const [search, setSearch] = React.useState("");
+  const [filter, setFilter] = React.useState<"all" | Risk>("all");
 
-  const filtered = React.useMemo(() => {
-    let next = items ?? [];
-    if (filter !== "all") next = next.filter((j) => j.risk === filter);
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      next = next.filter(
-        (j) =>
-          j.title?.toLowerCase().includes(q) ||
-          j.company?.toLowerCase().includes(q)
-      );
-    }
-    return next;
-  }, [items, filter, search]);
+  // compute rows (score + filter + sort) with correct typing
+  const data: Row[] = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
 
-  const renderItem = ({ item }: any) => {
-    const { score } = scoreJob(item);
+    return items
+      .map((j) => ({ j, s: scoreJob(toScoreInput(j)) }))
+      .filter(({ j }) => (filter === "all" ? true : j.risk === filter))
+      .filter(({ j }) =>
+        q ? `${j.title} ${j.company}`.toLowerCase().includes(q) : true
+      )
+      // sort by score desc to surface riskiest first (tweak as you like)
+      .sort((a, b) => b.s.score - a.s.score);
+  }, [items, search, filter]);
+
+  const onDelete = React.useCallback(
+    (id: string) => {
+      Alert.alert("Delete", "Remove this entry?", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await remove(id);
+            if (Platform.OS === "android") {
+              ToastAndroid.show("Deleted", ToastAndroid.SHORT);
+            }
+          },
+        },
+      ]);
+    },
+    [remove]
+  );
+
+  // simple row renderer without changing your existing RowItem API
+  const renderItem = ({ item }: { item: Row }) => {
+    const { j, s } = item;
+
+    // subtle background tint by risk bucket
+    const tint =
+      j.risk === "high"
+        ? (dark ? "#3b1f1f" : "#FEF2F2")
+        : j.risk === "medium"
+        ? (dark ? "#3b2a1f" : "#FFF7ED")
+        : (dark ? "#10291f" : "#F0FDF4");
+
     return (
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => goToReportDetail(nav, item.id)}
-        style={[
-          styles.row,
-          { backgroundColor: colors.card, borderColor: colors.border },
-        ]}
+      <Pressable
+        onPress={() => nav.navigate("ReportDetail", { id: j.id })}
+        style={[styles.row, { backgroundColor: tint, borderColor: colors.border }]}
       >
-        <View style={{ flex: 1, paddingRight: 12 }}>
-          <Text
-            style={[styles.rowTitle, { color: colors.text }]}
-            numberOfLines={1}
-          >
-            {item.title}
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+            {j.title}
           </Text>
-        <Text
-            style={[
-              styles.rowMeta,
-              { color: dark ? "#cbd5e1" : "#6B7280" },
-            ]}
-            numberOfLines={1}
-          >
-            {item.company} {item.url ? `• ${item.url}` : ""} •{" "}
-            {item.risk?.toUpperCase()}
+          <Text style={styles.sub} numberOfLines={1}>
+            <Text style={{ color: "#6B7280" }}>{j.company}</Text>
+            <Text style={{ color: "#9CA3AF" }}>
+              {j.url ? ` • ${j.url}` : ""} • {j.risk.toUpperCase()}
+            </Text>
           </Text>
         </View>
-        <ScoreBadge score={score} />
-      </TouchableOpacity>
+        <ScoreBadge score={s.score} />
+      </Pressable>
     );
   };
 
   return (
     <Screen>
-      <View style={styles.topBar}>
+      {/* search */}
+      <View style={{ padding: 16, paddingBottom: 8 }}>
         <TextInput
           value={search}
           onChangeText={setSearch}
@@ -87,141 +124,84 @@ export default function DatabaseScreen() {
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.search,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              color: colors.text,
-            },
+            { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
           ]}
-          returnKeyType="search"
         />
-
-        <View style={styles.chips}>
-          {(["all", "low", "medium", "high"] as const).map((r) => {
-            const active = filter === r;
-            return (
-              <Pressable
-                key={r}
-                onPress={() => setFilter(r)}
-                style={[
-                  styles.chip,
-                  { backgroundColor: colors.card, borderColor: colors.border },
-                  active && {
-                    borderColor: ORANGE,
-                    backgroundColor: dark ? "#261512" : "#fff4f1",
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    { color: colors.text },
-                    active && { color: ORANGE },
-                  ]}
-                >
-                  {r.toUpperCase()}
-                </Text>
-              </Pressable>
-            );
-          })}
-          <Pressable onPress={refresh} style={styles.refresh}>
-            <Text
-              style={[
-                styles.refreshText,
-                { color: dark ? "#cbd5e1" : "#6B7280" },
-              ]}
-            >
-              Refresh
-            </Text>
-          </Pressable>
-        </View>
       </View>
 
-      <FlatList
-        data={filtered}
-        keyExtractor={(it) => it.id}
-        renderItem={renderItem}
-        contentContainerStyle={[
-          styles.listContent,
-          filtered.length === 0 && { flex: 1, justifyContent: "center" },
-        ]}
-        refreshControl={
-          <RefreshControl refreshing={!!loading} onRefresh={refresh} />
-        }
-        ListEmptyComponent={
-          <View style={{ alignItems: "center" }}>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              No items
-            </Text>
+      {/* filter pills */}
+      <View style={styles.filters}>
+        {(["all", "low", "medium", "high"] as const).map((f) => {
+          const active = filter === f;
+          return (
             <Pressable
-              onPress={() => goToAddContent(nav)}
-              style={[styles.addContentBtn, { backgroundColor: "#1f6cff" }]}
+              key={f}
+              onPress={() => setFilter(f)}
+              style={[
+                styles.pill,
+                active && styles.pillActive,
+                active && f === "low" && { borderColor: "#A7F3D0", backgroundColor: "#ECFDF5" },
+                active && f === "medium" && { borderColor: "#FED7AA", backgroundColor: "#FFF7ED" },
+                active && f === "high" && { borderColor: "#FCA5A5", backgroundColor: "#FEF2F2" },
+              ]}
             >
-              <Text style={styles.addContentText}>Add content</Text>
+              <Text style={[styles.pillText, active && { color: "#111827" }]}>
+                {String(f).toUpperCase()}
+              </Text>
             </Pressable>
-          </View>
-        }
-      />
+          );
+        })}
+        <Pressable onPress={() => setSearch("")}>
+          <Text style={{ color: "#6B7280", fontWeight: "700" }}>Refresh</Text>
+        </Pressable>
+      </View>
 
-      <Pressable onPress={() => goToAddContent(nav)} style={styles.fab}>
-        <Text style={styles.fabText}>Add</Text>
-      </Pressable>
+      {/* list */}
+      <FlatList<Row>
+        contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 12 }}
+        data={data}
+        keyExtractor={({ j }) => j.id}
+        renderItem={renderItem}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  topBar: { paddingHorizontal: 0, gap: 10 },
   search: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
     borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
-  chips: {
+  filters: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    flexWrap: "wrap",
-    marginTop: 6,
   },
-  chip: {
-    paddingHorizontal: 12,
+  pill: {
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
   },
-  chipText: { fontWeight: "700" },
-  refresh: { marginLeft: "auto", paddingHorizontal: 8, paddingVertical: 6 },
-  refreshText: { fontWeight: "600" },
+  pillActive: { borderWidth: 1.2 },
+  pillText: { fontWeight: "800", color: "#6B7280" },
 
-  listContent: { paddingVertical: 10, gap: 10 },
   row: {
-    padding: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
   },
-  rowTitle: { fontWeight: "700", marginBottom: 4 },
-  rowMeta: {},
-  emptyTitle: { fontSize: 18, fontWeight: "700", marginBottom: 14 },
-  addContentBtn: { paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
-  addContentText: { color: "#fff", fontWeight: "700" },
-
-  fab: {
-    position: "absolute",
-    right: 16,
-    bottom: 28,
-    backgroundColor: "#1f6cff",
-    borderRadius: 999,
-    paddingHorizontal: 22,
-    paddingVertical: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
-  },
-  fabText: { color: "#fff", fontWeight: "800" },
+  title: { fontSize: 16, fontWeight: "800", marginBottom: 2 },
+  sub: { fontSize: 13 },
 });

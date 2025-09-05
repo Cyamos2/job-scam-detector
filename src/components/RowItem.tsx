@@ -1,84 +1,134 @@
 // src/components/RowItem.tsx
 import * as React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Alert,
+} from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import { useTheme } from "@react-navigation/native";
-import type { Job } from "../lib/api";
+import ScoreBadge from "./ScoreBadge";
+import { bucket, type Severity } from "../lib/scoring";
 
-type Props = {
-  item: Job;
-  onPress?: (item: Job) => void;
-  onEdit?: (item: Job) => void;
-  onDelete?: (item: Job) => void;
+export type RowItemProps = {
+  id: string;
+  title: string;
+  company: string;
+  url?: string | null;
+  risk: Severity;
+  score: number;
+  onPress: (id: string) => void;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => Promise<void> | void;
 };
 
-export default function RowItem({ item, onPress, onEdit, onDelete }: Props) {
-  const { colors, dark } = useTheme();
+export default function RowItem({
+  id,
+  title,
+  company,
+  url,
+  risk,
+  score,
+  onPress,
+  onEdit,
+  onDelete,
+}: RowItemProps) {
+  const { colors } = useTheme();
+  const b = bucket(score);
+  const [swiping, setSwiping] = React.useState(false);
   const swipeRef = React.useRef<Swipeable>(null);
 
-  const close = () => swipeRef.current?.close();
+  const handleDelete = () => {
+    Alert.alert("Delete", "Remove this item?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await onDelete(id);
+          swipeRef.current?.close();
+        },
+      },
+    ]);
+  };
 
   const RightActions = () => (
-    <View style={styles.actionsWrap}>
-      <Pressable
-        onPress={() => { close(); onEdit?.(item); }}
-        style={[styles.actionBtn, { backgroundColor: "#2563eb" }]} // Edit (blue)
-      >
+    <View style={styles.actionsRow}>
+      <Pressable style={[styles.actionBtn, styles.edit]} onPress={() => { onEdit(id); swipeRef.current?.close(); }}>
         <Text style={styles.actionText}>Edit</Text>
       </Pressable>
-      <Pressable
-        onPress={() => { close(); onDelete?.(item); }}
-        style={[styles.actionBtn, { backgroundColor: "#dc2626" }]} // Delete (red)
-      >
-        <Text style={styles.actionText}>Delete</Text>
+      <Pressable style={[styles.actionBtn, styles.delete]} onPress={handleDelete}>
+        <Text style={[styles.actionText, { color: "#fff" }]}>Delete</Text>
       </Pressable>
     </View>
   );
 
   return (
-    <Swipeable ref={swipeRef} renderRightActions={RightActions} overshootRight={false}>
+    <Swipeable
+      ref={swipeRef}
+      friction={2}
+      renderRightActions={RightActions}
+      onSwipeableWillOpen={() => setSwiping(true)}
+      onSwipeableWillClose={() => setSwiping(false)}
+    >
       <Pressable
-        onPress={() => onPress?.(item)}
+        onPress={() => !swiping && onPress(id)}
         style={[
           styles.row,
-          { backgroundColor: colors.card, borderColor: colors.border },
+          { borderColor: colors.border, backgroundColor: colors.card },
+          tint(b),
         ]}
       >
-        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-          {item.title}
-        </Text>
-        <Text style={[styles.meta, { color: dark ? "#cbd5e1" : "#6B7280" }]} numberOfLines={1}>
-          {item.company} • {item.risk?.toUpperCase()}
-        </Text>
+        <View style={{ flex: 1, paddingRight: 12 }}>
+          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.sub} numberOfLines={1}>
+            {company}
+            {url ? ` · ${url}` : ""} · {risk.toUpperCase()}
+          </Text>
+        </View>
+        <ScoreBadge score={score} />
       </Pressable>
     </Swipeable>
   );
 }
 
+const tint = (b: ReturnType<typeof bucket>) => {
+  switch (b) {
+    case "high":   return { backgroundColor: "#FEF2F2" };
+    case "medium": return { backgroundColor: "#FFF7ED" };
+    default:       return { backgroundColor: "#F0FDF4" };
+  }
+};
+
 const styles = StyleSheet.create({
   row: {
-    padding: 14,
-    borderRadius: 12,
     borderWidth: 1,
-    marginBottom: 10,
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: "row",
+    alignItems: "center",
   },
-  title: { fontWeight: "700", marginBottom: 4 },
-  meta: {},
-  actionsWrap: {
+  title: { fontSize: 16, fontWeight: "800", marginBottom: 2 },
+  sub: { fontSize: 13, color: "#6B7280" },
+  actionsRow: {
     flexDirection: "row",
     alignItems: "center",
     height: "100%",
     gap: 8,
-    paddingRight: 10,
-    paddingLeft: 8,
+    paddingRight: 8,
   },
   actionBtn: {
-    minWidth: 78,
-    height: "70%",
+    height: "80%",
+    alignSelf: "center",
+    paddingHorizontal: 16,
     borderRadius: 12,
-    alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 10,
   },
-  actionText: { color: "#fff", fontWeight: "800" },
+  edit:   { backgroundColor: "#F3F4F6" },
+  delete: { backgroundColor: "#EF4444" },
+  actionText: { fontWeight: "800", color: "#111" },
 });
