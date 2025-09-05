@@ -7,32 +7,29 @@ import {
   TextInput,
   Pressable,
   FlatList,
-  Alert,
   Platform,
   ToastAndroid,
+  Alert,
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import Screen from "../components/Screen";
-import ScoreBadge from "../components/ScoreBadge";
+import JobRow from "../components/JobRow";
 import { scoreJob, type ScoreResult } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
 import type { RootStackParamList } from "../navigation/types";
+import type { Job } from "../lib/api";
 
 // ---------- types ----------
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Risk = "low" | "medium" | "high";
-type Job = ReturnType<typeof useJobs>["items"][number];
 
 // A single row in the list (job + computed score)
-type Row = {
-  j: ReturnType<typeof useJobs>["items"][number];
-  s: ScoreResult;
-};
+type Row = { j: Job; s: ScoreResult };
 
 // ---------- helpers ----------
-const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
+const toScoreInput = (j: Job) => ({
   title: j.title,
   company: j.company,
   url: j.url ?? undefined,     // normalize null -> undefined
@@ -48,18 +45,16 @@ export default function DatabaseScreen() {
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = React.useState<"all" | Risk>("all");
 
-  // compute rows (score + filter + sort) with correct typing
+  // compute rows (score + filter + sort)
   const data: Row[] = React.useMemo(() => {
     const q = search.trim().toLowerCase();
-
     return items
       .map((j) => ({ j, s: scoreJob(toScoreInput(j)) }))
       .filter(({ j }) => (filter === "all" ? true : j.risk === filter))
       .filter(({ j }) =>
         q ? `${j.title} ${j.company}`.toLowerCase().includes(q) : true
       )
-      // sort by score desc to surface riskiest first (tweak as you like)
-      .sort((a, b) => b.s.score - a.s.score);
+      .sort((a, b) => b.s.score - a.s.score); // riskiest first
   }, [items, search, filter]);
 
   const onDelete = React.useCallback(
@@ -81,36 +76,15 @@ export default function DatabaseScreen() {
     [remove]
   );
 
-  // simple row renderer without changing your existing RowItem API
   const renderItem = ({ item }: { item: Row }) => {
     const { j, s } = item;
-
-    // subtle background tint by risk bucket
-    const tint =
-      j.risk === "high"
-        ? (dark ? "#3b1f1f" : "#FEF2F2")
-        : j.risk === "medium"
-        ? (dark ? "#3b2a1f" : "#FFF7ED")
-        : (dark ? "#10291f" : "#F0FDF4");
-
     return (
-      <Pressable
+      <JobRow
+        job={j}
+        score={s.score}
         onPress={() => nav.navigate("ReportDetail", { id: j.id })}
-        style={[styles.row, { backgroundColor: tint, borderColor: colors.border }]}
-      >
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-            {j.title}
-          </Text>
-          <Text style={styles.sub} numberOfLines={1}>
-            <Text style={{ color: "#6B7280" }}>{j.company}</Text>
-            <Text style={{ color: "#9CA3AF" }}>
-              {j.url ? ` • ${j.url}` : ""} • {j.risk.toUpperCase()}
-            </Text>
-          </Text>
-        </View>
-        <ScoreBadge score={s.score} />
-      </Pressable>
+        onDelete={(id) => onDelete(id)}
+      />
     );
   };
 
@@ -125,7 +99,11 @@ export default function DatabaseScreen() {
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.search,
-            { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
+            {
+              color: colors.text,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
           ]}
         />
       </View>
@@ -141,9 +119,21 @@ export default function DatabaseScreen() {
               style={[
                 styles.pill,
                 active && styles.pillActive,
-                active && f === "low" && { borderColor: "#A7F3D0", backgroundColor: "#ECFDF5" },
-                active && f === "medium" && { borderColor: "#FED7AA", backgroundColor: "#FFF7ED" },
-                active && f === "high" && { borderColor: "#FCA5A5", backgroundColor: "#FEF2F2" },
+                active &&
+                  f === "low" && {
+                    borderColor: "#A7F3D0",
+                    backgroundColor: "#ECFDF5",
+                  },
+                active &&
+                  f === "medium" && {
+                    borderColor: "#FED7AA",
+                    backgroundColor: "#FFF7ED",
+                  },
+                active &&
+                  f === "high" && {
+                    borderColor: "#FCA5A5",
+                    backgroundColor: "#FEF2F2",
+                  },
               ]}
             >
               <Text style={[styles.pillText, active && { color: "#111827" }]}>
@@ -193,16 +183,4 @@ const styles = StyleSheet.create({
   },
   pillActive: { borderWidth: 1.2 },
   pillText: { fontWeight: "800", color: "#6B7280" },
-
-  row: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  title: { fontSize: 16, fontWeight: "800", marginBottom: 2 },
-  sub: { fontSize: 13 },
 });
