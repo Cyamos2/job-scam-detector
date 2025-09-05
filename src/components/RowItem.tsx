@@ -1,134 +1,72 @@
 // src/components/RowItem.tsx
 import * as React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  Alert,
-} from "react-native";
-import { Swipeable } from "react-native-gesture-handler";
-import { useTheme } from "@react-navigation/native";
+import { Pressable, Text, View, StyleSheet, Platform } from "react-native";
 import ScoreBadge from "./ScoreBadge";
-import { bucket, type Severity } from "../lib/scoring";
+import { scoreJob, bucket } from "../lib/scoring";
+import { useJobs } from "../hooks/useJobs";
 
-export type RowItemProps = {
-  id: string;
-  title: string;
-  company: string;
-  url?: string | null;
-  risk: Severity;
-  score: number;
-  onPress: (id: string) => void;
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => Promise<void> | void;
+// Derive the Job type from the store — no import from ../store/savedItems
+type Job = ReturnType<typeof useJobs>["items"][number];
+
+type Props = {
+  job: Job;
+  onPress: () => void;
 };
 
-export default function RowItem({
-  id,
-  title,
-  company,
-  url,
-  risk,
-  score,
-  onPress,
-  onEdit,
-  onDelete,
-}: RowItemProps) {
-  const { colors } = useTheme();
+export default function RowItem({ job, onPress }: Props) {
+  // normalize nullable fields to undefined for scoreJob
+  const { score } = scoreJob({
+    title: job.title,
+    company: job.company,
+    url: job.url ?? undefined,
+    notes: job.notes ?? undefined,
+    risk: job.risk,
+  });
+
   const b = bucket(score);
-  const [swiping, setSwiping] = React.useState(false);
-  const swipeRef = React.useRef<Swipeable>(null);
-
-  const handleDelete = () => {
-    Alert.alert("Delete", "Remove this item?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          await onDelete(id);
-          swipeRef.current?.close();
-        },
-      },
-    ]);
-  };
-
-  const RightActions = () => (
-    <View style={styles.actionsRow}>
-      <Pressable style={[styles.actionBtn, styles.edit]} onPress={() => { onEdit(id); swipeRef.current?.close(); }}>
-        <Text style={styles.actionText}>Edit</Text>
-      </Pressable>
-      <Pressable style={[styles.actionBtn, styles.delete]} onPress={handleDelete}>
-        <Text style={[styles.actionText, { color: "#fff" }]}>Delete</Text>
-      </Pressable>
-    </View>
-  );
+  const theme = palette[b];
 
   return (
-    <Swipeable
-      ref={swipeRef}
-      friction={2}
-      renderRightActions={RightActions}
-      onSwipeableWillOpen={() => setSwiping(true)}
-      onSwipeableWillClose={() => setSwiping(false)}
+    <Pressable
+      onPress={onPress}
+      android_ripple={{ color: theme.ripple }}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: pressed ? theme.bgPressed : theme.bg, borderColor: theme.border },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${job.title} at ${job.company}, ${b} risk`}
     >
-      <Pressable
-        onPress={() => !swiping && onPress(id)}
-        style={[
-          styles.row,
-          { borderColor: colors.border, backgroundColor: colors.card },
-          tint(b),
-        ]}
-      >
-        <View style={{ flex: 1, paddingRight: 12 }}>
-          <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
-            {title}
-          </Text>
-          <Text style={styles.sub} numberOfLines={1}>
-            {company}
-            {url ? ` · ${url}` : ""} · {risk.toUpperCase()}
-          </Text>
-        </View>
-        <ScoreBadge score={score} />
-      </Pressable>
-    </Swipeable>
+      <View style={[styles.accent, { backgroundColor: theme.accent }]} />
+      <View style={styles.textWrap}>
+        <Text style={styles.title} numberOfLines={1}>{job.title}</Text>
+        <Text style={styles.sub} numberOfLines={1}>
+          {job.company}{job.risk ? ` • ${job.risk.toUpperCase()}` : ""}
+        </Text>
+      </View>
+      <ScoreBadge score={score} />
+    </Pressable>
   );
 }
 
-const tint = (b: ReturnType<typeof bucket>) => {
-  switch (b) {
-    case "high":   return { backgroundColor: "#FEF2F2" };
-    case "medium": return { backgroundColor: "#FFF7ED" };
-    default:       return { backgroundColor: "#F0FDF4" };
-  }
-};
-
 const styles = StyleSheet.create({
   row: {
-    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
     borderRadius: 14,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
+    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    overflow: Platform.OS === "android" ? "hidden" : "visible",
   },
-  title: { fontSize: 16, fontWeight: "800", marginBottom: 2 },
-  sub: { fontSize: 13, color: "#6B7280" },
-  actionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: "100%",
-    gap: 8,
-    paddingRight: 8,
-  },
-  actionBtn: {
-    height: "80%",
-    alignSelf: "center",
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    justifyContent: "center",
-  },
-  edit:   { backgroundColor: "#F3F4F6" },
-  delete: { backgroundColor: "#EF4444" },
-  actionText: { fontWeight: "800", color: "#111" },
+  accent: { width: 4, alignSelf: "stretch", borderRadius: 4, marginRight: 10 },
+  textWrap: { flex: 1, paddingRight: 10 },
+  title: { fontSize: 18, fontWeight: "800" },
+  sub: { marginTop: 4, color: "#6B7280" },
 });
+
+const palette = {
+  low:    { bg: "#ECFDF5", bgPressed: "#E1FAF1", border: "#D1FAE5", accent: "#10B981", ripple: "#00000019" },
+  medium: { bg: "#FFF7ED", bgPressed: "#FFF1E6", border: "#FFE4D3", accent: "#F59E0B", ripple: "#00000019" },
+  high:   { bg: "#FEF2F2", bgPressed: "#FDEDED", border: "#FECACA", accent: "#EF4444", ripple: "#00000019" },
+} as const;

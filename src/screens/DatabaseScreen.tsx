@@ -23,6 +23,7 @@ import type { RootStackParamList } from "../navigation/types";
 // ---------- types ----------
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Risk = "low" | "medium" | "high";
+type Job = ReturnType<typeof useJobs>["items"][number];
 
 // A single row in the list (job + computed score)
 type Row = {
