@@ -1,22 +1,34 @@
 // src/components/Screen.tsx
-import React from "react";
+import * as React from "react";
 import { View, StyleSheet } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "@react-navigation/native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type Props = {
   children: React.ReactNode;
-  insetBottom?: boolean; // <- add back
+  insetBottom?: boolean; // allow optional bottom inset
+  padded?: boolean;      // allow optional padding (default true)
 };
 
-export default function Screen({ children, insetBottom = false }: Props) {
+export default function Screen({
+  children,
+  insetBottom = false,
+  padded = true,
+}: Props) {
   const { colors } = useTheme();
+
   return (
     <SafeAreaView
       edges={insetBottom ? ["top", "left", "right", "bottom"] : ["top", "left", "right"]}
       style={[styles.safe, { backgroundColor: colors.background }]}
     >
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          styles.container,
+          { backgroundColor: colors.background },
+          !padded && { padding: 0 },
+        ]}
+      >
         {children}
       </View>
     </SafeAreaView>

@@ -1,3 +1,4 @@
+// src/screens/DatabaseScreen.tsx
 import * as React from "react";
 import {
   View,
@@ -23,11 +24,9 @@ import type { RootStackParamList } from "../navigation/types";
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Risk = "low" | "medium" | "high";
 
-// row + section types
 type Row = { j: ReturnType<typeof useJobs>["items"][number]; s: ScoreResult };
 type Section = { title: Risk; data: Row[] };
 
-// normalize to scoring input
 const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
   title: j.title,
   company: j.company,
@@ -36,19 +35,22 @@ const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
   risk: j.risk,
 });
 
-// comparators used per-section
 type SortBy = "date" | "title" | "score";
-const getComparator = (by: SortBy) => {
+const sortRows = (rows: Row[], by: SortBy) => {
+  const copy = rows.slice();
   switch (by) {
     case "title":
-      return (a: Row, b: Row) => a.j.title.localeCompare(b.j.title);
+      copy.sort((a, b) => a.j.title.localeCompare(b.j.title));
+      break;
     case "score":
-      return (a: Row, b: Row) => b.s.score - a.s.score; // desc
+      copy.sort((a, b) => b.s.score - a.s.score);
+      break;
     case "date":
     default:
-      // preserve incoming order within a section
-      return (_a: Row, _b: Row) => 0;
+      // keep current order (assume newest first from store)
+      break;
   }
+  return copy;
 };
 
 export default function DatabaseScreen() {
@@ -61,31 +63,18 @@ export default function DatabaseScreen() {
   const [sortBy, setSortBy] = React.useState<SortBy>("score");
   const [refreshing, setRefreshing] = React.useState(false);
 
-  // build sections: score → filter → search → group → per-section sort
-  const sections = React.useMemo<Section[]>(() => {
+  const sections: Section[] = React.useMemo(() => {
     const q = search.trim().toLowerCase();
+    let rows: Row[] = items.map((j) => ({ j, s: scoreJob(toScoreInput(j)) }));
+    rows = rows.filter(({ j }) => (filter === "all" ? true : j.risk === filter));
+    if (q) rows = rows.filter(({ j }) => `${j.title} ${j.company}`.toLowerCase().includes(q));
+    rows = sortRows(rows, sortBy);
 
-    // score everything up-front
-    const scored: Row[] = items.map((j) => ({ j, s: scoreJob(toScoreInput(j)) }));
-
-    // filter by risk (or all)
-    const filtered = scored.filter(({ j }) => (filter === "all" ? true : j.risk === filter));
-
-    // search in title/company
-    const searched = q
-      ? filtered.filter(({ j }) => `${j.title} ${j.company}`.toLowerCase().includes(q))
-      : filtered;
-
-    // group by risk
     const buckets: Record<Risk, Row[]> = { high: [], medium: [], low: [] };
-    for (const r of searched) buckets[r.j.risk].push(r);
+    rows.forEach((r) => buckets[r.j.risk].push(r));
 
-    // sort each bucket by current comparator
-    const cmp = getComparator(sortBy);
-    (["high", "medium", "low"] as Risk[]).forEach((rk) => buckets[rk].sort(cmp));
-
-    // emit only non-empty in High → Medium → Low
-    return (["high", "medium", "low"] as Risk[])
+    const order: Risk[] = ["high", "medium", "low"];
+    return order
       .map((title) => ({ title, data: buckets[title] }))
       .filter((s) => s.data.length > 0);
   }, [items, search, filter, sortBy]);
@@ -115,11 +104,9 @@ export default function DatabaseScreen() {
   const renderItem = ({ item }: { item: Row }) => {
     const { j, s } = item;
     const tint =
-      j.risk === "high"
-        ? dark ? "#3b1f1f" : "#FEF2F2"
-        : j.risk === "medium"
-        ? dark ? "#3b2a1f" : "#FFF7ED"
-        : dark ? "#10291f" : "#F0FDF4";
+      j.risk === "high" ? (dark ? "#3b1f1f" : "#FEF2F2") :
+      j.risk === "medium" ? (dark ? "#3b2a1f" : "#FFF7ED") :
+      (dark ? "#10291f" : "#F0FDF4");
 
     return (
       <Pressable
@@ -161,18 +148,8 @@ export default function DatabaseScreen() {
     active,
     children,
     onPress,
-  }: {
-    active?: boolean;
-    children: React.ReactNode;
-    onPress?: () => void;
-  }) => (
-    <Pressable
-      onPress={onPress}
-      hitSlop={8}
-      style={[styles.pill, active && styles.pillActive]}
-      accessibilityRole="button"
-      accessibilityState={{ selected: !!active }}
-    >
+  }: { active?: boolean; children: React.ReactNode; onPress?: () => void }) => (
+    <Pressable onPress={onPress} style={[styles.pill, active && styles.pillActive]}>
       <Text style={[styles.pillText, active && { color: "#111827" }]}>{children}</Text>
     </Pressable>
   );
@@ -215,16 +192,14 @@ export default function DatabaseScreen() {
         ))}
       </View>
 
-      {/* sectioned list */}
+      {/* list with sections */}
       <SectionList<Row, Section>
-        key={sortBy}                                   // force remount on sort change
         sections={sections}
-        extraData={sortBy}                             // also trigger re-render
-        keyExtractor={({ j }, i) => `${j.id}-${sortBy}-${i}`}
+        keyExtractor={({ j }) => j.id}
         renderItem={renderItem}
         renderSectionHeader={renderSectionHeader}
         stickySectionHeadersEnabled
-        contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 12 }}
+        contentContainerStyle={{ padding: 16, paddingTop: 8, gap: 12, paddingBottom: 96 }}
         SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -234,6 +209,15 @@ export default function DatabaseScreen() {
           </View>
         }
       />
+
+      {/* FAB: Add */}
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => nav.navigate("AddContent" as any)}
+        style={[styles.fab, { backgroundColor: "#1f6cff", shadowColor: "#000" }]}
+      >
+        <Text style={{ color: "#fff", fontWeight: "900", fontSize: 16 }}>Add</Text>
+      </Pressable>
     </Screen>
   );
 }
@@ -241,42 +225,33 @@ export default function DatabaseScreen() {
 const styles = StyleSheet.create({
   search: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12 },
   filtersRow: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8,
+    flexDirection: "row", alignItems: "center", gap: 10,
   },
-  sortRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
+  sortRow: { paddingHorizontal: 16, paddingBottom: 6, flexDirection: "row", alignItems: "center", gap: 8 },
   sortLabel: { color: "#6B7280", fontWeight: "800", marginRight: 4 },
+
   pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#fff",
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
+    borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#fff",
   },
   pillActive: { borderWidth: 1.2 },
   pillText: { fontWeight: "800", color: "#6B7280" },
+
   sectionHeader: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderRadius: 10 },
   sectionTitle: { fontSize: 12, fontWeight: "900" },
+
   row: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, borderWidth: 1,
+    flexDirection: "row", alignItems: "center", gap: 12,
   },
   title: { fontSize: 16, fontWeight: "800", marginBottom: 2 },
   sub: { fontSize: 13 },
+
+  fab: {
+    position: "absolute", right: 20, bottom: 24,
+    paddingHorizontal: 20, paddingVertical: 14, borderRadius: 999,
+    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6,
+    elevation: 5,
+  },
 });
