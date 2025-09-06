@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useNavigation, useTheme } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-
+import { usePersistedState } from "../hooks/usePersistedState";
 import Screen from "../components/Screen";
 import ScoreBadge from "../components/ScoreBadge";
 import { scoreJob, type ScoreResult } from "../lib/scoring";
@@ -59,8 +59,8 @@ export default function DatabaseScreen() {
   const { items, remove } = useJobs();
 
   const [search, setSearch] = React.useState("");
-  const [filter, setFilter] = React.useState<"all" | Risk>("all");
-  const [sortBy, setSortBy] = React.useState<SortBy>("score");
+  const [filter, setFilter] = usePersistedState<"all" | Risk>("db.filter", "all");
+  const [sortBy, setSortBy] = usePersistedState<SortBy>("db.sortBy", "score");
   const [refreshing, setRefreshing] = React.useState(false);
 
   const sections: Section[] = React.useMemo(() => {
