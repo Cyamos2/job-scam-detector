@@ -1,4 +1,3 @@
-// src/screens/DatabaseScreen.tsx
 import * as React from "react";
 import {
   View,
@@ -17,7 +16,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Screen from "../components/Screen";
-import { scoreJob, type ScoreResult } from "../lib/scoring";
+import { scoreJob } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
 import type { RootStackParamList } from "../navigation/types";
 import { usePersistedState } from "../store/persist";
@@ -26,16 +25,13 @@ import JobRow from "../components/JobRow";
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Risk = "low" | "medium" | "high";
 
-// Row shape we render
 type Row = {
   j: ReturnType<typeof useJobs>["items"][number];
-  s: ScoreResult;
+  s: ReturnType<typeof scoreJob>;
 };
 
-// Grouping shape for SectionList
 type Section = { title: Risk; data: Row[] };
 
-// Normalize for scoring.ts input (null -> undefined)
 const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
   title: j.title,
   company: j.company,
@@ -44,7 +40,6 @@ const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
   risk: j.risk,
 });
 
-// Sort helpers
 type SortBy = "date" | "title" | "score";
 const sortRows = (rows: Row[], by: SortBy) => {
   const copy = rows.slice();
@@ -57,14 +52,13 @@ const sortRows = (rows: Row[], by: SortBy) => {
       break;
     case "date":
     default:
-      // items are already newest-first in useJobs; keep stable order
       break;
   }
   return copy;
 };
 
 export default function DatabaseScreen() {
-  const insets = useSafeAreaInsets(); // ✅ ensure we render below the notch & above the home indicator
+  const insets = useSafeAreaInsets();
   const nav = useNavigation<Nav>();
   const { colors, dark } = useTheme();
   const { items, remove } = useJobs();
@@ -74,30 +68,24 @@ export default function DatabaseScreen() {
   const [sortBy, setSortBy] = usePersistedState<SortBy>("db.sort", "score");
   const [refreshing, setRefreshing] = React.useState(false);
 
-  // recompute: score -> filter -> search -> sort -> group into sections
   const sections: Section[] = React.useMemo(() => {
     const q = search.trim().toLowerCase();
 
     let rows: Row[] = items.map((j) => ({ j, s: scoreJob(toScoreInput(j)) }));
 
-    // filter by risk pill
     rows = rows.filter(({ j }) => (filter === "all" ? true : j.risk === filter));
 
-    // search
     if (q) {
       rows = rows.filter(({ j }) =>
         `${j.title} ${j.company}`.toLowerCase().includes(q)
       );
     }
 
-    // sort
     rows = sortRows(rows, sortBy);
 
-    // group into sections by risk
     const buckets: Record<Risk, Row[]> = { high: [], medium: [], low: [] };
     rows.forEach((r) => buckets[r.j.risk].push(r));
 
-    // only non-empty, in High → Medium → Low order
     const order: Risk[] = ["high", "medium", "low"];
     return order
       .map((title) => ({ title, data: buckets[title] }))
@@ -105,7 +93,6 @@ export default function DatabaseScreen() {
   }, [items, search, filter, sortBy]);
 
   const onRefresh = React.useCallback(() => {
-    // If you add a real refresh in useJobs, call it here.
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 500);
   }, []);
@@ -130,7 +117,7 @@ export default function DatabaseScreen() {
   );
 
   const onAdd = React.useCallback(() => {
-    nav.navigate("AddContent"); // route name used by your AddContent screen
+    nav.navigate("AddContent"); // ✅ no {}
   }, [nav]);
 
   const renderItem = ({ item }: { item: Row }) => {
@@ -165,7 +152,6 @@ export default function DatabaseScreen() {
     );
   };
 
-  // Tiny pill component reused for filters/sort
   const Pill = ({
     active,
     children,
@@ -187,10 +173,8 @@ export default function DatabaseScreen() {
 
   return (
     <Screen>
-      {/* top spacer so search is always below the notch */}
       <View style={{ height: insets.top }} />
 
-      {/* search */}
       <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
         <TextInput
           value={search}
@@ -208,7 +192,6 @@ export default function DatabaseScreen() {
         />
       </View>
 
-      {/* filters row */}
       <View style={styles.filtersRow}>
         {(["all", "low", "medium", "high"] as const).map((f) => (
           <Pill key={f} active={filter === f} onPress={() => setFilter(f)}>
@@ -220,7 +203,6 @@ export default function DatabaseScreen() {
         </Pressable>
       </View>
 
-      {/* sort row */}
       <View style={styles.sortRow}>
         <Text style={styles.sortLabel}>Sort</Text>
         {(["score", "date", "title"] as const).map((s) => (
@@ -230,7 +212,6 @@ export default function DatabaseScreen() {
         ))}
       </View>
 
-      {/* list with sections + pull-to-refresh */}
       <SectionList<Row, Section>
         sections={sections}
         keyExtractor={({ j }) => j.id}
@@ -252,7 +233,6 @@ export default function DatabaseScreen() {
         }
       />
 
-      {/* Floating Add button (lifted above the home indicator) */}
       <Pressable
         onPress={onAdd}
         style={[
@@ -268,7 +248,6 @@ export default function DatabaseScreen() {
 }
 
 const styles = StyleSheet.create({
-  // inputs / pills
   search: {
     borderWidth: 1,
     borderRadius: 12,
@@ -303,7 +282,6 @@ const styles = StyleSheet.create({
   pillActive: { borderWidth: 1.2 },
   pillText: { fontWeight: "800", color: "#6B7280" },
 
-  // list headers
   sectionHeader: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -312,7 +290,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 12, fontWeight: "900" },
 
-  // FAB
   addBtn: {
     position: "absolute",
     right: 22,

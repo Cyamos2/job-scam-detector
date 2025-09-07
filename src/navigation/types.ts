@@ -2,10 +2,10 @@
 export type RootStackParamList = {
   Tabs: undefined;
   ReportDetail: { id: string };
-  AddContent: { presetUri?: string } | undefined; // ✅ declare optional param
+  AddContent: undefined;
 };
 
-export type RootTabParamList = {
+export type TabsParamList = {
   Home: undefined;
   Database: undefined;
   Settings: undefined;
