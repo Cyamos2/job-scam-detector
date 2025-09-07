@@ -1,4 +1,3 @@
-// src/screens/DatabaseScreen.tsx
 import * as React from "react";
 import {
   View,
@@ -17,18 +16,18 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Screen from "../components/Screen";
-import { scoreJob, type ScoreResult } from "../lib/scoring";
+import { scoreJob, bucket, type Severity } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
 import type { RootStackParamList } from "../navigation/types";
 import { usePersistedState } from "../store/persist";
 import JobRow from "../components/JobRow";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-type Risk = "low" | "medium" | "high";
+type Risk = Severity;
 
 type Row = {
   j: ReturnType<typeof useJobs>["items"][number];
-  s: ScoreResult;
+  s: ReturnType<typeof scoreJob>;
 };
 
 type Section = { title: Risk; data: Row[] };
@@ -65,8 +64,10 @@ export default function DatabaseScreen() {
   const { items, remove } = useJobs();
 
   const [search, setSearch] = React.useState("");
-  const [filter, setFilter] = usePersistedState<"all" | Risk>("db.filter", "all");
-  const [sortBy, setSortBy] = usePersistedState<SortBy>("db.sort", "score");
+  const [filter, setFilter] =
+    usePersistedState<"all" | Risk>("db.filter", "all");
+  const [sortBy, setSortBy] =
+    usePersistedState<SortBy>("db.sort", "score");
   const [refreshing, setRefreshing] = React.useState(false);
 
   const sections: Section[] = React.useMemo(() => {
@@ -74,7 +75,7 @@ export default function DatabaseScreen() {
 
     let rows: Row[] = items.map((j) => ({ j, s: scoreJob(toScoreInput(j)) }));
 
-    rows = rows.filter(({ j }) => (filter === "all" ? true : j.risk === filter));
+    rows = rows.filter(({ s }) => (filter === "all" ? true : bucket(s.score) === filter));
 
     if (q) {
       rows = rows.filter(({ j }) =>
@@ -85,7 +86,7 @@ export default function DatabaseScreen() {
     rows = sortRows(rows, sortBy);
 
     const buckets: Record<Risk, Row[]> = { high: [], medium: [], low: [] };
-    rows.forEach((r) => buckets[r.j.risk].push(r));
+    rows.forEach((r) => buckets[bucket(r.s.score)].push(r));
 
     const order: Risk[] = ["high", "medium", "low"];
     return order
@@ -118,23 +119,21 @@ export default function DatabaseScreen() {
   );
 
   const onAdd = React.useCallback(() => {
-    nav.navigate("AddContent"); // params are optional; edit uses { editId } in detail screen
+    nav.navigate("AddContent");
   }, [nav]);
 
   const renderItem = ({ item }: { item: Row }) => {
     const { j, s } = item;
-
-    // Build a short preview (top 1–2 reason labels, highest -> lowest severity)
-    const high = s.reasons.filter((r) => r.severity === "high").map((r) => r.label);
-    const med = s.reasons.filter((r) => r.severity === "medium").map((r) => r.label);
-    const low = s.reasons.filter((r) => r.severity === "low").map((r) => r.label);
-    const preview = [...high, ...med, ...low].slice(0, 2);
+    // Build a short, optional preview for the row
+    const reasonsPreview = (s.reasons ?? [])
+      .map((r) => r.label)
+      .slice(0, 2);
 
     return (
       <JobRow
         job={j}
         score={s.score}
-        reasonsPreview={preview}
+        reasonsPreview={reasonsPreview}
         onPress={() => nav.navigate("ReportDetail", { id: j.id })}
         onLongPress={() => onDelete(j.id)}
       />
@@ -170,8 +169,13 @@ export default function DatabaseScreen() {
     children: React.ReactNode;
     onPress?: () => void;
   }) => (
-    <Pressable onPress={onPress} style={[styles.pill, active && styles.pillActive]}>
-      <Text style={[styles.pillText, active && { color: "#111827" }]}>{children}</Text>
+    <Pressable
+      onPress={onPress}
+      style={[styles.pill, active && styles.pillActive]}
+    >
+      <Text style={[styles.pillText, active && { color: "#111827" }]}>
+        {children}
+      </Text>
     </Pressable>
   );
 
@@ -179,7 +183,6 @@ export default function DatabaseScreen() {
     <Screen>
       <View style={{ height: insets.top }} />
 
-      {/* Search */}
       <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
         <TextInput
           value={search}
@@ -188,12 +191,15 @@ export default function DatabaseScreen() {
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.search,
-            { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
+            {
+              color: colors.text,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
           ]}
         />
       </View>
 
-      {/* Filters */}
       <View style={styles.filtersRow}>
         {(["all", "low", "medium", "high"] as const).map((f) => (
           <Pill key={f} active={filter === f} onPress={() => setFilter(f)}>
@@ -205,7 +211,6 @@ export default function DatabaseScreen() {
         </Pressable>
       </View>
 
-      {/* Sort */}
       <View style={styles.sortRow}>
         <Text style={styles.sortLabel}>Sort</Text>
         {(["score", "date", "title"] as const).map((s) => (
@@ -215,28 +220,36 @@ export default function DatabaseScreen() {
         ))}
       </View>
 
-      {/* List */}
       <SectionList<Row, Section>
         sections={sections}
         keyExtractor={({ j }) => j.id}
         renderItem={renderItem}
         renderSectionHeader={renderSectionHeader}
         stickySectionHeadersEnabled
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 + insets.bottom }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingBottom: 16 + insets.bottom,
+        }}
         SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
         ListEmptyComponent={
           <View style={{ padding: 24, alignItems: "center" }}>
-            <Text style={{ color: "#6B7280", fontWeight: "700" }}>No results.</Text>
+            <Text style={{ color: "#6B7280", fontWeight: "700" }}>
+              No results.
+            </Text>
           </View>
         }
       />
 
-      {/* FAB */}
       <Pressable
         onPress={onAdd}
-        style={[styles.addBtn, { bottom: 24 + insets.bottom, shadowColor: "#000" }]}
+        style={[
+          styles.addBtn,
+          { bottom: 24 + insets.bottom, shadowColor: "#000" },
+        ]}
         android_ripple={{ color: "#ffffff55", borderless: true }}
       >
         <Text style={styles.addBtnPlus}>＋</Text>
@@ -246,7 +259,12 @@ export default function DatabaseScreen() {
 }
 
 const styles = StyleSheet.create({
-  search: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12 },
+  search: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
   filtersRow: {
     paddingHorizontal: 16,
     paddingTop: 6,
@@ -255,7 +273,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  sortRow: { paddingHorizontal: 16, paddingBottom: 6, flexDirection: "row", alignItems: "center", gap: 8 },
+  sortRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   sortLabel: { color: "#6B7280", fontWeight: "800", marginRight: 4 },
 
   pill: {
@@ -269,7 +293,12 @@ const styles = StyleSheet.create({
   pillActive: { borderWidth: 1.2 },
   pillText: { fontWeight: "800", color: "#6B7280" },
 
-  sectionHeader: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderRadius: 10 },
+  sectionHeader: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+  },
   sectionTitle: { fontSize: 12, fontWeight: "900" },
 
   addBtn: {
@@ -286,5 +315,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
   },
-  addBtnPlus: { color: "#fff", fontSize: 28, lineHeight: 30, fontWeight: "700" },
+  addBtnPlus: {
+    color: "#fff",
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: "700",
+  },
 });

@@ -1,72 +1,77 @@
 // src/components/RowItem.tsx
-import * as React from "react";
-import { Pressable, Text, View, StyleSheet, Platform } from "react-native";
-import ScoreBadge from "./ScoreBadge";
-import { scoreJob, bucket } from "../lib/scoring";
-import { useJobs } from "../hooks/useJobs";
-
-// Derive the Job type from the store — no import from ../store/savedItems
-type Job = ReturnType<typeof useJobs>["items"][number];
+import React from "react";
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import { bucket, type Severity } from "../lib/scoring";
 
 type Props = {
-  job: Job;
-  onPress: () => void;
+  title: string;
+  subtitle?: string;
+  score: number;
+  onPress?: () => void;
+  onLongPress?: () => void;
 };
 
-export default function RowItem({ job, onPress }: Props) {
-  // normalize nullable fields to undefined for scoreJob
-  const { score } = scoreJob({
-    title: job.title,
-    company: job.company,
-    url: job.url ?? undefined,
-    notes: job.notes ?? undefined,
-    risk: job.risk,
-  });
+type Palette = { bg: string; bgPressed: string; text: string; border: string };
 
-  const b = bucket(score);
-  const theme = palette[b];
+const riskPalette: Record<Severity, Palette> = {
+  low:    { bg: "#ECFDF5", bgPressed: "#E1F7EC", text: "#047857", border: "#A7F3D0" },
+  medium: { bg: "#FFF7ED", bgPressed: "#FFEEDA", text: "#B45309", border: "#FBD38D" },
+  high:   { bg: "#FEF2F2", bgPressed: "#FDE8E8", text: "#B91C1C", border: "#FCA5A5" },
+} as const;
+
+export default function RowItem({ title, subtitle, score, onPress, onLongPress }: Props) {
+  const sev: Severity = bucket(score);
+  const pal = riskPalette[sev];
 
   return (
     <Pressable
       onPress={onPress}
-      android_ripple={{ color: theme.ripple }}
+      onLongPress={onLongPress}
       style={({ pressed }) => [
         styles.row,
-        { backgroundColor: pressed ? theme.bgPressed : theme.bg, borderColor: theme.border },
+        {
+          backgroundColor: pressed ? pal.bgPressed : pal.bg,
+          borderColor: pal.border,
+        },
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={`${job.title} at ${job.company}, ${b} risk`}
+      android_ripple={{ color: "#00000014", borderless: false }}
     >
-      <View style={[styles.accent, { backgroundColor: theme.accent }]} />
-      <View style={styles.textWrap}>
-        <Text style={styles.title} numberOfLines={1}>{job.title}</Text>
-        <Text style={styles.sub} numberOfLines={1}>
-          {job.company}{job.risk ? ` • ${job.risk.toUpperCase()}` : ""}
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.title, { color: pal.text }]} numberOfLines={1}>
+          {title}
         </Text>
+        {!!subtitle && (
+          <Text style={styles.sub} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        )}
       </View>
-      <ScoreBadge score={score} />
+      <View style={[styles.badge, { borderColor: pal.border }]}>
+        <Text style={{ color: pal.text, fontWeight: "800" }}>{score}</Text>
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    overflow: Platform.OS === "android" ? "hidden" : "visible",
+    gap: 10,
   },
-  accent: { width: 4, alignSelf: "stretch", borderRadius: 4, marginRight: 10 },
-  textWrap: { flex: 1, paddingRight: 10 },
-  title: { fontSize: 18, fontWeight: "800" },
-  sub: { marginTop: 4, color: "#6B7280" },
+  title: { fontSize: 16, fontWeight: "700" },
+  sub: { marginTop: 2, color: "#6B7280" },
+  badge: {
+    minWidth: 44,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
 });
-
-const palette = {
-  low:    { bg: "#ECFDF5", bgPressed: "#E1FAF1", border: "#D1FAE5", accent: "#10B981", ripple: "#00000019" },
-  medium: { bg: "#FFF7ED", bgPressed: "#FFF1E6", border: "#FFE4D3", accent: "#F59E0B", ripple: "#00000019" },
-  high:   { bg: "#FEF2F2", bgPressed: "#FDEDED", border: "#FECACA", accent: "#EF4444", ripple: "#00000019" },
-} as const;
