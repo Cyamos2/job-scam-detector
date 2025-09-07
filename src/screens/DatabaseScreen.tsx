@@ -12,35 +12,23 @@ import {
   Platform,
   ToastAndroid,
 } from "react-native";
-import {
-  useNavigation,
-  useTheme,
-  type CompositeNavigationProp,
-} from "@react-navigation/native";
+import { useNavigation, useTheme } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Screen from "../components/Screen";
-import { scoreJob } from "../lib/scoring";
+import { scoreJob, type ScoreResult } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
-import type { RootStackParamList, RootTabParamList } from "../navigation/types";
+import type { RootStackParamList } from "../navigation/types";
 import { usePersistedState } from "../store/persist";
 import JobRow from "../components/JobRow";
 
-// ---------- navigation typing ----------
-// We are inside the Database tab, but we also navigate to stack screens (ReportDetail/AddContent).
-type Nav = CompositeNavigationProp<
-  BottomTabNavigationProp<RootTabParamList, "Database">,
-  NativeStackNavigationProp<RootStackParamList>
->;
-
-// ---------- domain types ----------
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Risk = "low" | "medium" | "high";
 
 type Row = {
   j: ReturnType<typeof useJobs>["items"][number];
-  s: ReturnType<typeof scoreJob>;
+  s: ScoreResult;
 };
 
 type Section = { title: Risk; data: Row[] };
@@ -53,7 +41,6 @@ const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
   risk: j.risk,
 });
 
-// ---------- sort helpers ----------
 type SortBy = "date" | "title" | "score";
 const sortRows = (rows: Row[], by: SortBy) => {
   const copy = rows.slice();
@@ -66,7 +53,6 @@ const sortRows = (rows: Row[], by: SortBy) => {
       break;
     case "date":
     default:
-      // keep insertion order (newest-first already from useJobs)
       break;
   }
   return copy;
@@ -83,15 +69,12 @@ export default function DatabaseScreen() {
   const [sortBy, setSortBy] = usePersistedState<SortBy>("db.sort", "score");
   const [refreshing, setRefreshing] = React.useState(false);
 
-  // compute sections (score -> filter -> search -> sort -> bucket)
   const sections: Section[] = React.useMemo(() => {
     const q = search.trim().toLowerCase();
 
     let rows: Row[] = items.map((j) => ({ j, s: scoreJob(toScoreInput(j)) }));
 
-    if (filter !== "all") {
-      rows = rows.filter(({ j }) => j.risk === filter);
-    }
+    rows = rows.filter(({ j }) => (filter === "all" ? true : j.risk === filter));
 
     if (q) {
       rows = rows.filter(({ j }) =>
@@ -135,16 +118,23 @@ export default function DatabaseScreen() {
   );
 
   const onAdd = React.useCallback(() => {
-    // IMPORTANT: name-only navigate keeps TS happy with our route types
-    nav.navigate("AddContent");
+    nav.navigate("AddContent"); // params are optional; edit uses { editId } in detail screen
   }, [nav]);
 
   const renderItem = ({ item }: { item: Row }) => {
     const { j, s } = item;
+
+    // Build a short preview (top 1–2 reason labels, highest -> lowest severity)
+    const high = s.reasons.filter((r) => r.severity === "high").map((r) => r.label);
+    const med = s.reasons.filter((r) => r.severity === "medium").map((r) => r.label);
+    const low = s.reasons.filter((r) => r.severity === "low").map((r) => r.label);
+    const preview = [...high, ...med, ...low].slice(0, 2);
+
     return (
       <JobRow
         job={j}
         score={s.score}
+        reasonsPreview={preview}
         onPress={() => nav.navigate("ReportDetail", { id: j.id })}
         onLongPress={() => onDelete(j.id)}
       />
@@ -187,7 +177,6 @@ export default function DatabaseScreen() {
 
   return (
     <Screen>
-      {/* Top spacer so the first control sits below the notch */}
       <View style={{ height: insets.top }} />
 
       {/* Search */}
@@ -199,11 +188,7 @@ export default function DatabaseScreen() {
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.search,
-            {
-              color: colors.text,
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-            },
+            { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
           ]}
         />
       </View>
@@ -248,7 +233,7 @@ export default function DatabaseScreen() {
         }
       />
 
-      {/* Floating Add button */}
+      {/* FAB */}
       <Pressable
         onPress={onAdd}
         style={[styles.addBtn, { bottom: 24 + insets.bottom, shadowColor: "#000" }]}
@@ -261,12 +246,7 @@ export default function DatabaseScreen() {
 }
 
 const styles = StyleSheet.create({
-  search: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
+  search: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12 },
   filtersRow: {
     paddingHorizontal: 16,
     paddingTop: 6,
@@ -275,13 +255,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  sortRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
+  sortRow: { paddingHorizontal: 16, paddingBottom: 6, flexDirection: "row", alignItems: "center", gap: 8 },
   sortLabel: { color: "#6B7280", fontWeight: "800", marginRight: 4 },
 
   pill: {
@@ -295,12 +269,7 @@ const styles = StyleSheet.create({
   pillActive: { borderWidth: 1.2 },
   pillText: { fontWeight: "800", color: "#6B7280" },
 
-  sectionHeader: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderRadius: 10,
-  },
+  sectionHeader: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderRadius: 10 },
   sectionTitle: { fontSize: 12, fontWeight: "900" },
 
   addBtn: {
@@ -317,10 +286,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
   },
-  addBtnPlus: {
-    color: "#fff",
-    fontSize: 28,
-    lineHeight: 30,
-    fontWeight: "700",
-  },
+  addBtnPlus: { color: "#fff", fontSize: 28, lineHeight: 30, fontWeight: "700" },
 });
