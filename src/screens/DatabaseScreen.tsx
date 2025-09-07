@@ -1,3 +1,4 @@
+// src/screens/DatabaseScreen.tsx
 import * as React from "react";
 import {
   View,
@@ -11,18 +12,30 @@ import {
   Platform,
   ToastAndroid,
 } from "react-native";
-import { useNavigation, useTheme } from "@react-navigation/native";
+import {
+  useNavigation,
+  useTheme,
+  type CompositeNavigationProp,
+} from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Screen from "../components/Screen";
 import { scoreJob } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
-import type { RootStackParamList } from "../navigation/types";
+import type { RootStackParamList, RootTabParamList } from "../navigation/types";
 import { usePersistedState } from "../store/persist";
 import JobRow from "../components/JobRow";
 
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+// ---------- navigation typing ----------
+// We are inside the Database tab, but we also navigate to stack screens (ReportDetail/AddContent).
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<RootTabParamList, "Database">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+// ---------- domain types ----------
 type Risk = "low" | "medium" | "high";
 
 type Row = {
@@ -40,6 +53,7 @@ const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
   risk: j.risk,
 });
 
+// ---------- sort helpers ----------
 type SortBy = "date" | "title" | "score";
 const sortRows = (rows: Row[], by: SortBy) => {
   const copy = rows.slice();
@@ -52,6 +66,7 @@ const sortRows = (rows: Row[], by: SortBy) => {
       break;
     case "date":
     default:
+      // keep insertion order (newest-first already from useJobs)
       break;
   }
   return copy;
@@ -68,12 +83,15 @@ export default function DatabaseScreen() {
   const [sortBy, setSortBy] = usePersistedState<SortBy>("db.sort", "score");
   const [refreshing, setRefreshing] = React.useState(false);
 
+  // compute sections (score -> filter -> search -> sort -> bucket)
   const sections: Section[] = React.useMemo(() => {
     const q = search.trim().toLowerCase();
 
     let rows: Row[] = items.map((j) => ({ j, s: scoreJob(toScoreInput(j)) }));
 
-    rows = rows.filter(({ j }) => (filter === "all" ? true : j.risk === filter));
+    if (filter !== "all") {
+      rows = rows.filter(({ j }) => j.risk === filter);
+    }
 
     if (q) {
       rows = rows.filter(({ j }) =>
@@ -117,7 +135,8 @@ export default function DatabaseScreen() {
   );
 
   const onAdd = React.useCallback(() => {
-    nav.navigate("AddContent"); // ✅ no {}
+    // IMPORTANT: name-only navigate keeps TS happy with our route types
+    nav.navigate("AddContent");
   }, [nav]);
 
   const renderItem = ({ item }: { item: Row }) => {
@@ -161,20 +180,17 @@ export default function DatabaseScreen() {
     children: React.ReactNode;
     onPress?: () => void;
   }) => (
-    <Pressable
-      onPress={onPress}
-      style={[styles.pill, active && styles.pillActive]}
-    >
-      <Text style={[styles.pillText, active && { color: "#111827" }]}>
-        {children}
-      </Text>
+    <Pressable onPress={onPress} style={[styles.pill, active && styles.pillActive]}>
+      <Text style={[styles.pillText, active && { color: "#111827" }]}>{children}</Text>
     </Pressable>
   );
 
   return (
     <Screen>
+      {/* Top spacer so the first control sits below the notch */}
       <View style={{ height: insets.top }} />
 
+      {/* Search */}
       <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
         <TextInput
           value={search}
@@ -192,6 +208,7 @@ export default function DatabaseScreen() {
         />
       </View>
 
+      {/* Filters */}
       <View style={styles.filtersRow}>
         {(["all", "low", "medium", "high"] as const).map((f) => (
           <Pill key={f} active={filter === f} onPress={() => setFilter(f)}>
@@ -203,6 +220,7 @@ export default function DatabaseScreen() {
         </Pressable>
       </View>
 
+      {/* Sort */}
       <View style={styles.sortRow}>
         <Text style={styles.sortLabel}>Sort</Text>
         {(["score", "date", "title"] as const).map((s) => (
@@ -212,6 +230,7 @@ export default function DatabaseScreen() {
         ))}
       </View>
 
+      {/* List */}
       <SectionList<Row, Section>
         sections={sections}
         keyExtractor={({ j }) => j.id}
@@ -221,24 +240,18 @@ export default function DatabaseScreen() {
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 + insets.bottom }}
         SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           <View style={{ padding: 24, alignItems: "center" }}>
-            <Text style={{ color: "#6B7280", fontWeight: "700" }}>
-              No results.
-            </Text>
+            <Text style={{ color: "#6B7280", fontWeight: "700" }}>No results.</Text>
           </View>
         }
       />
 
+      {/* Floating Add button */}
       <Pressable
         onPress={onAdd}
-        style={[
-          styles.addBtn,
-          { bottom: 24 + insets.bottom, shadowColor: "#000" },
-        ]}
+        style={[styles.addBtn, { bottom: 24 + insets.bottom, shadowColor: "#000" }]}
         android_ripple={{ color: "#ffffff55", borderless: true }}
       >
         <Text style={styles.addBtnPlus}>＋</Text>

@@ -1,13 +1,18 @@
 // src/screens/ReportDetailScreen.tsx
-import React from "react";
+import * as React from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   Pressable,
+  Linking,
 } from "react-native";
-import { useTheme, useNavigation, useRoute } from "@react-navigation/native";
+import {
+  useNavigation,
+  useRoute,
+  useTheme,
+} from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 
@@ -25,6 +30,7 @@ export default function ReportDetailScreen() {
   const { colors } = useTheme();
   const { items } = useJobs();
 
+  // ----- find job -----
   const job = items.find((j) => j.id === route.params.id);
   if (!job) {
     return (
@@ -34,6 +40,7 @@ export default function ReportDetailScreen() {
     );
   }
 
+  // ----- score -----
   const scored: ScoreResult = scoreJob({
     title: job.title,
     company: job.company,
@@ -42,7 +49,7 @@ export default function ReportDetailScreen() {
     risk: job.risk,
   });
 
-  // grouped reasons by severity
+  // ----- group reasons by severity for display -----
   const grouped = React.useMemo(() => {
     const by: Record<"high" | "medium" | "low", string[]> = {
       high: [],
@@ -55,109 +62,102 @@ export default function ReportDetailScreen() {
     return by;
   }, [scored.reasons]);
 
+  // palette for headings
+  const palette: Record<"high" | "medium" | "low", { label: string; color: string }> = {
+    high: { label: "High Risk", color: "#B91C1C" },
+    medium: { label: "Medium Risk", color: "#B45309" },
+    low: { label: "Low Risk", color: "#047857" },
+  };
+
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{ padding: 16 }}
+      style={[styles.root, { backgroundColor: colors.background }]}
+      contentContainerStyle={styles.content}
     >
-      {/* Title + Company + URL */}
+      {/* header */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {job.title}
-          </Text>
-          <Text style={[styles.company, { color: colors.text }]}>
-            {job.company}
-          </Text>
+          <Text style={[styles.title, { color: colors.text }]}>{job.title}</Text>
+          <Text style={[styles.company, { color: colors.text }]}>{job.company}</Text>
           {job.url ? (
-            <Text style={styles.url} numberOfLines={1}>
-              {job.url}
-            </Text>
+            <Pressable onPress={() => Linking.openURL(job.url!)}>
+              <Text style={styles.url} numberOfLines={1}>{job.url}</Text>
+            </Pressable>
           ) : null}
         </View>
         <ScoreBadge score={scored.score} />
       </View>
 
-      {/* Why this score */}
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>
-        Why this score
-      </Text>
-      {(["high", "medium", "low"] as const).map((sev) => {
-        if (grouped[sev].length === 0) return null;
-
-        const palette: Record<typeof sev, { color: string; label: string }> = {
-          high: { color: "#B91C1C", label: "High Risk" },
-          medium: { color: "#B45309", label: "Medium Risk" },
-          low: { color: "#047857", label: "Low Risk" },
-        };
-
-        return (
-          <View key={sev} style={{ marginBottom: 12 }}>
-            <Text style={[styles.sevHeader, { color: palette[sev].color }]}>
+      {/* reasons */}
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>Why this score</Text>
+      {(["high", "medium", "low"] as const).map((sev) =>
+        grouped[sev].length ? (
+          <View key={sev} style={styles.reasonBlock}>
+            <Text style={[styles.severity, { color: palette[sev].color }]}>
               {palette[sev].label}
             </Text>
-            {grouped[sev].map((label, i) => (
-              <Text
-                key={i}
-                style={{ marginLeft: 12, marginBottom: 2, color: colors.text }}
-              >
+            {grouped[sev].map((label, idx) => (
+              <Text key={idx} style={[styles.reason, { color: colors.text }]}>
                 • {label}
               </Text>
             ))}
           </View>
-        );
-      })}
+        ) : null
+      )}
 
-      {/* Notes */}
+      {/* notes */}
       {job.notes ? (
         <>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            Notes
-          </Text>
-          <Text style={{ color: colors.text, marginBottom: 16 }}>
-            {job.notes}
-          </Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Notes</Text>
+          <Text style={[styles.notes, { color: colors.text }]}>{job.notes}</Text>
         </>
       ) : null}
 
-      {/* Edit button */}
-      <Pressable
-        onPress={() => navigation.navigate("AddContent", { editId: job.id })}
-        style={styles.editBtn}
-      >
-        <Text style={styles.editText}>Edit</Text>
-      </Pressable>
+      {/* actions */}
+      <View style={styles.actions}>
+        <Pressable
+          onPress={() => navigation.navigate("AddContent", { editId: job.id })}
+          style={[styles.actionBtn, styles.primary]}
+        >
+          <Text style={styles.actionText}>Edit</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  root: { flex: 1 },
+  content: { padding: 16 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  header: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  title: { fontSize: 18, fontWeight: "700", marginBottom: 2 },
-  company: { fontSize: 14, marginBottom: 2 },
-  url: { fontSize: 13, color: "#2563EB" },
 
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 12,
-    marginBottom: 6,
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
   },
-  sevHeader: {
-    fontWeight: "700",
-    marginBottom: 4,
-  },
+  title: { fontSize: 18, fontWeight: "800" },
+  company: { fontSize: 14, marginTop: 2 },
+  url: { fontSize: 13, color: "#2563EB", marginTop: 4 },
 
-  editBtn: {
-    alignSelf: "flex-start",
+  sectionTitle: { fontSize: 16, fontWeight: "800", marginTop: 8, marginBottom: 6 },
+
+  reasonBlock: { marginBottom: 10 },
+  severity: { fontWeight: "800", marginBottom: 4 },
+  reason: { marginLeft: 12, marginBottom: 2 },
+
+  notes: { lineHeight: 20, marginBottom: 12 },
+
+  actions: { flexDirection: "row", gap: 10, marginTop: 6 },
+  actionBtn: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#E5E7EB",
     backgroundColor: "#F9FAFB",
   },
-  editText: { fontWeight: "600", color: "#1D4ED8" },
+  primary: { backgroundColor: "#EBF2FF", borderColor: "#C7DAFF" },
+  actionText: { fontWeight: "700", color: "#1D4ED8" },
 });
