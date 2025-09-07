@@ -1,28 +1,28 @@
 // src/components/ScoreBadge.tsx
-import React from "react";
+import * as React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { bucket, type Severity } from "../lib/scoring";
+import { visualBucket } from "../lib/scoring";
 
 export default function ScoreBadge({ score }: { score: number }) {
-  const sev: Severity = bucket(score);
+  const b = visualBucket(score);
 
-  const ring: Record<Severity, { bg: string; text: string; border: string }> = {
-    low:    { bg: "#ECFDF5", text: "#047857", border: "#A7F3D0" },
-    medium: { bg: "#FFF7ED", text: "#B45309", border: "#FBD38D" },
-    high:   { bg: "#FEF2F2", text: "#B91C1C", border: "#FCA5A5" },
-  };
+  const palette = {
+    low:    { bg: "#E7F8ED", text: "#047857", border: "#A7F3D0" },
+    medium: { bg: "#FFF4E6", text: "#B45309", border: "#FED7AA" },
+    high:   { bg: "#FEE2E2", text: "#B91C1C", border: "#FCA5A5" },
+  } as const;
 
-  const c = ring[sev];
+  const p = palette[b];
 
   return (
-    <View style={[styles.wrap, { backgroundColor: c.bg, borderColor: c.border }]}>
-      <Text style={[styles.text, { color: c.text }]}>{score}</Text>
+    <View style={[styles.badge, { backgroundColor: p.bg, borderColor: p.border }]}>
+      <Text style={[styles.text, { color: p.text }]}>{score}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  badge: {
     minWidth: 44,
     height: 32,
     paddingHorizontal: 10,

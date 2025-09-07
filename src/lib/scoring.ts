@@ -1,18 +1,12 @@
 // src/lib/scoring.ts
-/**
- * Stricter, more explicit scoring.
- * - We cap at 100.
- * - We return a normalized score and detailed reasons with severities.
- * - Buckets are stricter (high >= 60, medium >= 30).
- */
+// Central scoring + helpers. Stricter, with failsafe high-risk rules.
 
 export type Severity = "low" | "medium" | "high";
 
 export type ScoreReason = {
-  code: string;
-  label: string;
   severity: Severity;
-  weight: number; // contributes to score
+  label: string;
+  code?: string;
 };
 
 export type ScoreInput = {
@@ -20,211 +14,136 @@ export type ScoreInput = {
   company: string;
   url?: string;
   notes?: string;
-  risk?: Severity; // optional legacy/manual tag – NOT used for bucket, only for context if needed
+  // User's own initial sense of risk (used only as a soft hint, not as a rule)
+  risk: Severity;
 };
 
 export type ScoreResult = {
-  score: number; // 0..100
-  reasons: ScoreReason[];
+  score: number;           // 0..100
+  reasons: ScoreReason[];  // sorted: high -> medium -> low
 };
 
-// ---------- helpers ----------
-const clamp = (n: number, min = 0, max = 100) => Math.max(min, Math.min(max, n));
-const has = (s: string | undefined | null, rx: RegExp) =>
-  !!(s && rx.test(s.toLowerCase()));
+/* ------------------------------ tiny utils ------------------------------ */
 
-const textOf = (input: ScoreInput) =>
-  [input.title, input.company, input.url, input.notes].filter(Boolean).join(" ").toLowerCase();
+const hasSuspiciousTLD = (u?: string) =>
+  !!u?.match(/\.(top|xyz|click|cam|live|rest|loan|win|men|bid|work|vip)$/i);
 
-const hostFromUrl = (url?: string) => {
-  try {
-    if (!url) return undefined;
-    const u = new URL(url);
-    return u.hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
+const norm = (s?: string) => (s ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+const hasRemoteOnlyHype = (t?: string, n?: string) => {
+  const blob = `${t ?? ""} ${n ?? ""}`.toLowerCase();
+  return /\b(remote[- ]?only|work from home|wfh)\b/.test(blob);
 };
 
-// very suspicious/public TLDs & fake-y second-levels
-const SUSPICIOUS_TLD = /\.(top|xyz|click|cam|live|rest|loan|win|men|bid|work|zip|quest|cfd|cyou|mom|gq|ml|ga|tk|icu)$/i;
+const hasPaymentScheme = (t?: string, n?: string) => {
+  const blob = `${t ?? ""} ${n ?? ""}`.toLowerCase();
+  return /\b(payroll|check ?cashing|money ?order|bitcoin|crypto|gift ?card)\b/.test(blob);
+};
 
-// looks like personal/free domain host
-const FREE_HOST = /\.(weebly|wixsite|blogspot|wordpress|medium|notion|sites\.google|godaddysites)\.com$/i;
+const hasUpfrontFee = (t?: string, n?: string) => {
+  const blob = `${t ?? ""} ${n ?? ""}`.toLowerCase();
+  return /\b(upfront fee|purchase equipment|training fee|application fee|pay(?:ment)? required)\b/.test(blob);
+};
 
-// messaging-only interview channels
-const CHAT_ONLY = /(telegram|whats\s*app|whatsapp|signal|wechat|facebook\s*messenger)\b/;
+const manyExclaims = (t?: string, n?: string) =>
+  (t ?? "").split("!").length + (n ?? "").split("!").length > 5;
 
-// gift cards / crypto / wires upfront
-const SUSPICIOUS_PAY = /(bitcoin|crypto|gift\s*card|western\s*union|moneygram|wire\s*transfer)\b/;
+/* ------------------------------ reasons -------------------------------- */
 
-// immediate pay / upfront fee / equipment purchase
-const UPFRONT = /(application\s*fee|training\s*fee|upfront|pay\s*to\s*apply|purchase\s*(equipment|materials))/;
-
-// too remote-hype
-const REMOTE_HYPE = /\b(remote[-\s]*only|work\s*from\s*home|wfh)\b/;
-
-// grammar/typos heuristic: lots of !!! or ALL CAPS stretches
-const SHOUTY = /!{2,}|([A-Z]{6,})/;
-
-// title bait
-const TITLE_BAIT = /(assistant|clerk|data\s*entry|package\s*handler|virtual\s*assistant)\b.*\b(no\s*experience|required)/;
-
-// salary looks too good (simple heuristic)
-const TOO_GOOD = /\$?\b([5-9]\d{2,})\b\s*(per\s*(week|day)|weekly|daily)/; // e.g., $900/day, $1500 weekly
-
-// ---------- weights (stricter) ----------
-const W = {
-  // high severity
-  SUSPICIOUS_TLD: 18,
-  FREE_HOST: 16,
-  CHAT_ONLY: 18,
-  SUSPICIOUS_PAY: 24,   // very strong signal
-  UPFRONT: 22,          // very strong signal
-  TOO_GOOD: 16,
-
-  // medium severity
-  COMPANY_DOMAIN_MISMATCH: 14,
-  TITLE_BAIT: 12,
-  SHOUTY: 10,
-
-  // low severity
-  REMOTE_HYPE: 8,
-} as const;
-
-// ---------- scoring ----------
-export function scoreJob(input: ScoreInput): ScoreResult {
+function collectReasons(input: ScoreInput): ScoreReason[] {
+  const { title, company, url, notes } = input;
   const reasons: ScoreReason[] = [];
-  const all = textOf(input);
-  const host = hostFromUrl(input.url);
 
-  // 1) URL/TLD issues (HIGH/MED)
-  if (host && SUSPICIOUS_TLD.test(host)) {
-    reasons.push({
-      code: "SUSPICIOUS_TLD",
-      label: "Suspicious TLD",
-      severity: "high",
-      weight: W.SUSPICIOUS_TLD,
-    });
-  }
-  if (host && FREE_HOST.test(host)) {
-    reasons.push({
-      code: "FREE_HOST",
-      label: "Free/Personal hosting",
-      severity: "high",
-      weight: W.FREE_HOST,
-    });
+  // HIGH — suspicious payment / crypto / gift cards, etc.
+  if (hasPaymentScheme(title, notes)) {
+    reasons.push({ severity: "high", label: "Suspicious payment scheme", code: "PAY" });
   }
 
-  // 2) Company vs domain mismatch (MED)
-  if (host && input.company) {
-    const co = input.company.toLowerCase().replace(/[^a-z0-9]/g, "");
-    const simplifiedHost = host.replace(/^www\./, "").replace(/\.(com|net|org|co|io|ai|biz|top|xyz|info|us)$/, "");
-    if (co && !simplifiedHost.includes(co)) {
-      reasons.push({
-        code: "COMPANY_DOMAIN_MISMATCH",
-        label: "Company/domain mismatch",
-        severity: "medium",
-        weight: W.COMPANY_DOMAIN_MISMATCH,
-      });
+  // MED — suspicious TLDs (common throwaway domains)
+  if (hasSuspiciousTLD(url)) {
+    reasons.push({ severity: "medium", label: "Suspicious TLD", code: "TLD" });
+  }
+
+  // MED — company vs domain mismatch (best-effort heuristic)
+  if (url) {
+    const m = url.match(/^https?:\/\/([^/]+)/i);
+    const host = m?.[1] ?? "";
+    const hostCo = norm(host.split(".").slice(-2, -1)[0]); // approximate brand
+    const co = norm(company);
+    if (hostCo && co && !hostCo.includes(co) && !co.includes(hostCo)) {
+      reasons.push({ severity: "medium", label: "Company/domain mismatch", code: "MISMATCH" });
     }
   }
 
-  // 3) Payment/interview red flags (HIGH)
-  if (has(all, SUSPICIOUS_PAY)) {
-    reasons.push({
-      code: "SUSPICIOUS_PAY",
-      label: "Suspicious payment scheme",
-      severity: "high",
-      weight: W.SUSPICIOUS_PAY,
-    });
-  }
-  if (has(all, CHAT_ONLY)) {
-    reasons.push({
-      code: "CHAT_ONLY",
-      label: "Interview via chat app",
-      severity: "high",
-      weight: W.CHAT_ONLY,
-    });
-  }
-  if (has(all, UPFRONT)) {
-    reasons.push({
-      code: "UPFRONT",
-      label: "Upfront fee/purchase requested",
-      severity: "high",
-      weight: W.UPFRONT,
-    });
+  // LOW — remote-only hype
+  if (hasRemoteOnlyHype(title, notes)) {
+    reasons.push({ severity: "low", label: "Remote-only hype", code: "REMOTE" });
   }
 
-  // 4) “too good to be true” (HIGH/MED)
-  if (has(all, TOO_GOOD)) {
-    reasons.push({
-      code: "TOO_GOOD",
-      label: "Too-good-to-be-true pay",
-      severity: "high",
-      weight: W.TOO_GOOD,
-    });
+  // LOW — excessive exclamation marks
+  if (manyExclaims(title, notes)) {
+    reasons.push({ severity: "low", label: "Excessive exclamation marks", code: "EXCL" });
   }
 
-  // 5) Copy quality / hype (MED/LOW)
-  if (has(all, TITLE_BAIT)) {
-    reasons.push({
-      code: "TITLE_BAIT",
-      label: "No-experience role bait",
-      severity: "medium",
-      weight: W.TITLE_BAIT,
-    });
-  }
-  if (has(all, SHOUTY)) {
-    reasons.push({
-      code: "SHOUTY",
-      label: "Poor grammar / shouting",
-      severity: "medium",
-      weight: W.SHOUTY,
-    });
-  }
-  if (has(all, REMOTE_HYPE)) {
-    reasons.push({
-      code: "REMOTE_HYPE",
-      label: "Remote-only hype",
-      severity: "low",
-      weight: W.REMOTE_HYPE,
-    });
-  }
-
-  // Combo bonus: if *any* HIGH + any other signal, bump a little
-  const hasHigh = reasons.some(r => r.severity === "high");
-  if (hasHigh && reasons.length >= 2) {
-    reasons.push({
-      code: "COMBO_BONUS",
-      label: "Multiple high/medium indicators",
-      severity: "medium",
-      weight: 6,
-    });
-  }
-
-  // final score
-  const raw = reasons.reduce((sum, r) => sum + r.weight, 0);
-  const score = clamp(raw);
-
-  // sort reasons: High → Medium → Low, then by weight desc
-  reasons.sort((a, b) => {
-    const sevRank = (s: Severity) => (s === "high" ? 3 : s === "medium" ? 2 : 1);
-    const d = sevRank(b.severity) - sevRank(a.severity);
-    return d !== 0 ? d : b.weight - a.weight;
-  });
-
-  return { score, reasons };
+  return reasons;
 }
 
-// stricter thresholds
-export function bucket(score: number): Severity {
-  if (score >= 60) return "high";
-  if (score >= 30) return "medium";
+function sortReasons(reasons: ScoreReason[]): ScoreReason[] {
+  const order: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
+  return reasons.slice().sort((a, b) => order[a.severity] - order[b.severity]);
+}
+
+/* ------------------------------- bucket -------------------------------- */
+
+export function bucket(score: number, hasMedium: boolean, hasHigh: boolean): Severity {
+  // stricter cutoff per your spec
+  const HIGH_CUTOFF = 55;
+  if (score >= HIGH_CUTOFF || hasHigh) return "high";
+  if (hasMedium) return "medium";
   return "low";
 }
 
-// small helper for list preview
-export function summarizeReasons(reasons: ScoreReason[], max = 2): string[] {
-  return reasons.slice(0, max).map((r) => r.label);
+/** Convenience wrapper so callers can pass just a ScoreResult or just a number. */
+export function visualBucket(arg: ScoreResult | number, hasMedium?: boolean, hasHigh?: boolean): Severity {
+  if (typeof arg === "number") {
+    return bucket(arg, !!hasMedium, !!hasHigh);
+  }
+  const med = arg.reasons.some(r => r.severity === "medium");
+  const hi  = arg.reasons.some(r => r.severity === "high");
+  return bucket(arg.score, med, hi);
+}
+
+/* -------------------------------- score -------------------------------- */
+
+export function scoreJob(input: ScoreInput): ScoreResult {
+  const reasons = collectReasons(input);
+
+  // Failsafe (automatic high) — critical red-flag combos
+  const hasHigh   = reasons.some(r => r.severity === "high");
+  const hasMedium = reasons.some(r => r.severity === "medium");
+  const critical  = hasHigh && hasUpfrontFee(input.title, input.notes);
+
+  if (critical) {
+    // Make the reason explicit
+    reasons.push({ severity: "high", label: "Upfront fee + payment red flag", code: "FAILSAFE" });
+  }
+
+  // Weighted sum (cumulative severity balance)
+  const highCount = reasons.filter(r => r.severity === "high").length;
+  const medCount  = reasons.filter(r => r.severity === "medium").length;
+  const lowCount  = reasons.filter(r => r.severity === "low").length;
+
+  let score = 0;
+
+  if (critical) score = 85; // force high baseline for failsafe
+  score += highCount * 22 + medCount * 11 + lowCount * 5;
+
+  // Small bonus for diversity of flags (max +6)
+  const kindCount = (highCount ? 1 : 0) + (medCount ? 1 : 0) + (lowCount ? 1 : 0);
+  score += Math.min(6, kindCount * 2);
+
+  // Clamp & round
+  score = Math.max(0, Math.min(100, Math.round(score)));
+
+  return { score, reasons: sortReasons(reasons) };
 }

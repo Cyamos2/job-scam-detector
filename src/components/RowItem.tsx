@@ -1,77 +1,63 @@
 // src/components/RowItem.tsx
-import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
-import { bucket, type Severity } from "../lib/scoring";
+import * as React from "react";
+import { Pressable, View, Text, StyleSheet } from "react-native";
+import ScoreBadge from "./ScoreBadge";
+import { scoreJob, visualBucket } from "../lib/scoring";
+import type { Job } from "../hooks/useJobs";
 
-type Props = {
-  title: string;
-  subtitle?: string;
-  score: number;
+export default function RowItem({
+  job,
+  onPress,
+  onLongPress,
+}: {
+  job: Job;
   onPress?: () => void;
   onLongPress?: () => void;
-};
+}) {
+  const s = scoreJob({
+    title: job.title,
+    company: job.company,
+    url: job.url ?? undefined,
+    notes: job.notes ?? undefined,
+    risk: job.risk,
+  });
 
-type Palette = { bg: string; bgPressed: string; text: string; border: string };
+  const b = visualBucket(s);
 
-const riskPalette: Record<Severity, Palette> = {
-  low:    { bg: "#ECFDF5", bgPressed: "#E1F7EC", text: "#047857", border: "#A7F3D0" },
-  medium: { bg: "#FFF7ED", bgPressed: "#FFEEDA", text: "#B45309", border: "#FBD38D" },
-  high:   { bg: "#FEF2F2", bgPressed: "#FDE8E8", text: "#B91C1C", border: "#FCA5A5" },
-} as const;
+  const pills = s.reasons.slice(0, 2).map(r => r.label).join(" · ");
 
-export default function RowItem({ title, subtitle, score, onPress, onLongPress }: Props) {
-  const sev: Severity = bucket(score);
-  const pal = riskPalette[sev];
+  const tint = {
+    low:    { bg: "#F0FFF4", border: "#DCFCE7" },
+    medium: { bg: "#FFF7ED", border: "#FFE4D5" },
+    high:   { bg: "#FEF2F2", border: "#FEE2E2" },
+  } as const;
 
   return (
-    <Pressable
-      onPress={onPress}
-      onLongPress={onLongPress}
-      style={({ pressed }) => [
-        styles.row,
-        {
-          backgroundColor: pressed ? pal.bgPressed : pal.bg,
-          borderColor: pal.border,
-        },
-      ]}
-      android_ripple={{ color: "#00000014", borderless: false }}
-    >
+    <Pressable onPress={onPress} onLongPress={onLongPress} style={[styles.row, { backgroundColor: tint[b].bg, borderColor: tint[b].border }]}>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.title, { color: pal.text }]} numberOfLines={1}>
-          {title}
+        <Text style={styles.title} numberOfLines={1}>{job.title}</Text>
+        <Text style={styles.sub} numberOfLines={1}>
+          {job.company}
+          {job.url ? `  ·  ${job.url}` : ""}  ·  {b.toUpperCase()}
         </Text>
-        {!!subtitle && (
-          <Text style={styles.sub} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        )}
+        {pills ? <Text style={styles.hint} numberOfLines={1}>{pills}</Text> : null}
       </View>
-      <View style={[styles.badge, { borderColor: pal.border }]}>
-        <Text style={{ color: pal.text, fontWeight: "800" }}>{score}</Text>
-      </View>
+      <ScoreBadge score={s.score} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
-    borderWidth: 1,
     borderRadius: 14,
+    borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
-  title: { fontSize: 16, fontWeight: "700" },
-  sub: { marginTop: 2, color: "#6B7280" },
-  badge: {
-    minWidth: 44,
-    height: 32,
-    borderWidth: 1,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
+  title: { fontSize: 18, fontWeight: "800" },
+  sub:   { color: "#6B7280", marginTop: 2 },
+  hint:  { color: "#9CA3AF", marginTop: 4, fontSize: 12 },
 });
