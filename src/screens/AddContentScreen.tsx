@@ -18,12 +18,12 @@ import type { RouteProp } from "@react-navigation/native";
 
 import Screen from "../components/Screen";
 import ScoreBadge from "../components/ScoreBadge";
-import { scoreJob, visualBucket } from "../lib/scoring";
+import { scoreJob } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "AddContent">;
-type Rt  = RouteProp<RootStackParamList, "AddContent">;
+type Rt = RouteProp<RootStackParamList, "AddContent">;
 type Risk = "low" | "medium" | "high";
 
 const URL_RE = /^https?:\/\/[^\s]+$/i;
@@ -32,17 +32,17 @@ export default function AddContentScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Rt>();
   const { colors, dark } = useTheme();
-  const { create, update, items } = useJobs(); // <- single destructure
+  const { create, update, items } = useJobs();
 
+  // --- detect edit mode
   const editId = route.params?.editId;
-  const isEdit = !!editId;
-
-  // Prefill when editing
   const editingJob = React.useMemo(
-    () => (isEdit ? items.find(j => j.id === editId) : undefined),
-    [isEdit, editId, items]
+    () => (editId ? items.find((j) => j.id === editId) : undefined),
+    [editId, items]
   );
+  const isEditing = !!editingJob;
 
+  // --- state
   const [title, setTitle] = React.useState(editingJob?.title ?? "");
   const [company, setCompany] = React.useState(editingJob?.company ?? "");
   const [url, setUrl] = React.useState(editingJob?.url ?? "");
@@ -52,36 +52,31 @@ export default function AddContentScreen() {
   const [saving, setSaving] = React.useState(false);
   const lastSubmitted = React.useRef<string | null>(null);
 
-  // if user navigated to edit but job is gone, bail gracefully
+  // keep state in sync if user navigates to a different editId without unmount
   React.useEffect(() => {
-    if (isEdit && !editingJob) {
-      if (Platform.OS === "android") {
-        ToastAndroid.show("Item no longer exists", ToastAndroid.SHORT);
-      }
-      navigation.goBack();
+    if (editingJob) {
+      setTitle(editingJob.title ?? "");
+      setCompany(editingJob.company ?? "");
+      setUrl(editingJob.url ?? "");
+      setRisk(editingJob.risk ?? "low");
+      setNotes(editingJob.notes ?? "");
     }
-  }, [isEdit, editingJob, navigation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingJob?.id]);
 
-  // Title in header: Add vs Edit
-  React.useEffect(() => {
-    navigation.setOptions({ title: isEdit ? "Edit" : "Add Content" });
-  }, [navigation, isEdit]);
+  // --- Live score preview (reasons + score)
+  const preview = React.useMemo(() => {
+    const input = {
+      title,
+      company,
+      url: url.trim() ? url.trim() : undefined,
+      notes: notes.trim() ? notes.trim() : undefined,
+      risk,
+    };
+    return scoreJob(input);
+  }, [title, company, url, notes, risk]);
 
-  // Live score preview
-  const preview = React.useMemo(
-    () =>
-      scoreJob({
-        title,
-        company,
-        url: url.trim() ? url.trim() : undefined,
-        notes: notes.trim() ? notes.trim() : undefined,
-        risk,
-      }),
-    [title, company, url, notes, risk]
-  );
-  const bucket = visualBucket(preview); // "low" | "medium" | "high"
-
-  // iOS snackbar
+  // --- iOS toast/snackbar (Android uses ToastAndroid)
   const snackY = React.useRef(new Animated.Value(-60)).current;
   const [snackText, setSnackText] = React.useState("");
   const showSnack = (msg: string) => {
@@ -91,21 +86,32 @@ export default function AddContentScreen() {
     }
     setSnackText(msg);
     Animated.sequence([
-      Animated.timing(snackY, { toValue: 0, duration: 180, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(snackY, {
+        toValue: 0,
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
       Animated.delay(900),
-      Animated.timing(snackY, { toValue: -60, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(snackY, {
+        toValue: -60,
+        duration: 180,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
     ]).start();
   };
 
-  // Validation
+  // --- Validation helpers
   const errorTitle = showErrors && !title.trim();
   const errorCompany = showErrors && !company.trim();
   const errorUrl = showErrors && !!url.trim() && !URL_RE.test(url.trim());
 
-  // Submit (create or update)
+  // --- Submit flow
   const doSubmit = async () => {
     try {
       setSaving(true);
+
       const payload = {
         title: title.trim(),
         company: company.trim(),
@@ -113,25 +119,31 @@ export default function AddContentScreen() {
         risk,
         notes: notes.trim() ? notes.trim() : undefined,
       };
-      const fp = JSON.stringify({ editId, ...payload });
+
+      // de-dupe accidental double taps
+      const fp = JSON.stringify({ mode: isEditing ? "edit" : "create", id: editId ?? "", payload });
       if (lastSubmitted.current === fp) {
         setSaving(false);
         return;
       }
       lastSubmitted.current = fp;
 
-      if (isEdit && editId) {
+      if (isEditing && editId) {
         await update(editId, payload);
-        showSnack("Saved");
+        showSnack("Changes saved");
       } else {
         await create(payload);
         showSnack("Added to database");
       }
 
-      if (Platform.OS === "ios") setTimeout(() => navigation.goBack(), 600);
-      else navigation.goBack();
+      // small delay on iOS so toast is visible, then go back
+      if (Platform.OS === "ios") {
+        setTimeout(() => navigation.goBack(), 600);
+      } else {
+        navigation.goBack();
+      }
     } catch (e) {
-      Alert.alert(isEdit ? "Save failed" : "Add failed", String(e ?? "Unknown error"));
+      Alert.alert(isEditing ? "Save failed" : "Add failed", String(e ?? "Unknown error"));
     } finally {
       setSaving(false);
     }
@@ -143,45 +155,44 @@ export default function AddContentScreen() {
       return;
     }
     if (saving) return;
-    Alert.alert(isEdit ? "Save changes?" : "Add this item?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      { text: isEdit ? "Save" : "Add", onPress: doSubmit },
-    ]);
+
+    Alert.alert(
+      isEditing ? "Save changes?" : "Add this item?",
+      isEditing ? "Update this entry in the database?" : "Are you sure you want to add this to the database?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: isEditing ? "Save" : "Add", onPress: doSubmit },
+      ]
+    );
   };
 
-  // Chip colors for preview and selector
+  // risk chip helpers
   const riskBg: Record<Risk, string> = { low: "#ECFDF5", medium: "#FFF7ED", high: "#FEF2F2" };
   const riskBorder: Record<Risk, string> = { low: "#A7F3D0", medium: "#FED7AA", high: "#FCA5A5" };
   const riskText: Record<Risk, string> = { low: "#047857", medium: "#B45309", high: "#B91C1C" };
 
-  const previewBg = bucket === "high" ? "#FEF2F2" : bucket === "medium" ? "#FFF7ED" : "#ECFDF5";
-  const previewFg = bucket === "high" ? "#B91C1C" : bucket === "medium" ? "#B45309" : "#047857";
-  const previewBorder = bucket === "high" ? "#FCA5A5" : bucket === "medium" ? "#FED7AA" : "#A7F3D0";
-
   return (
     <Screen>
+      {/* iOS snackbar */}
       {Platform.OS === "ios" && (
         <Animated.View style={[styles.snack, { transform: [{ translateY: snackY }] }]}>
           <Text style={styles.snackText}>{snackText}</Text>
         </Animated.View>
       )}
 
-      {/* Header with live score */}
+      {/* Header row with live score */}
       <View style={styles.headerRow}>
-        <Text style={[styles.h1, { color: colors.text }]}>{isEdit ? "Edit" : "Add Content"}</Text>
+        <Text style={[styles.h1, { color: colors.text }]}>{isEditing ? "Edit Content" : "Add Content"}</Text>
         <ScoreBadge score={preview.score} />
       </View>
 
-      {/* Preview reason chip */}
-      <View style={{ paddingHorizontal: 16 }}>
-        {!!preview.reasons.length && (
-          <View style={[styles.previewChip, { backgroundColor: previewBg, borderColor: previewBorder }]}>
-            <Text style={[styles.previewChipText, { color: previewFg }]}>{preview.reasons[0].label}</Text>
-          </View>
-        )}
-      </View>
+      {/* Top reason chip (if any) */}
+      {!!preview.reasons.length && (
+        <View style={styles.previewChip}>
+          <Text style={styles.previewChipText}>{preview.reasons[0].label}</Text>
+        </View>
+      )}
 
-      {/* Form */}
       <View style={styles.form}>
         <Text style={styles.label}>Title *</Text>
         <TextInput
@@ -189,7 +200,10 @@ export default function AddContentScreen() {
           onChangeText={setTitle}
           placeholder="e.g., Payroll Assistant"
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
-          style={[styles.input, { borderColor: errorTitle ? "#ef4444" : "#E5E7EB", color: colors.text, backgroundColor: colors.card }]}
+          style={[
+            styles.input,
+            { borderColor: errorTitle ? "#ef4444" : "#E5E7EB", color: colors.text, backgroundColor: colors.card },
+          ]}
         />
 
         <Text style={styles.label}>Company *</Text>
@@ -198,7 +212,10 @@ export default function AddContentScreen() {
           onChangeText={setCompany}
           placeholder="e.g., Fakester Ltd"
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
-          style={[styles.input, { borderColor: errorCompany ? "#ef4444" : "#E5E7EB", color: colors.text, backgroundColor: colors.card }]}
+          style={[
+            styles.input,
+            { borderColor: errorCompany ? "#ef4444" : "#E5E7EB", color: colors.text, backgroundColor: colors.card },
+          ]}
         />
 
         <Text style={styles.label}>URL (optional)</Text>
@@ -209,7 +226,10 @@ export default function AddContentScreen() {
           autoCapitalize="none"
           keyboardType="url"
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
-          style={[styles.input, { borderColor: errorUrl ? "#ef4444" : "#E5E7EB", color: colors.text, backgroundColor: colors.card }]}
+          style={[
+            styles.input,
+            { borderColor: errorUrl ? "#ef4444" : "#E5E7EB", color: colors.text, backgroundColor: colors.card },
+          ]}
         />
         {errorUrl ? <Text style={styles.helperError}>Enter a valid http(s) URL</Text> : null}
 
@@ -221,7 +241,10 @@ export default function AddContentScreen() {
               <Pressable
                 key={r}
                 onPress={() => setRisk(r)}
-                style={[styles.riskChip, active && { borderColor: riskBorder[r], backgroundColor: riskBg[r] }]}
+                style={[
+                  styles.riskChip,
+                  active && { borderColor: riskBorder[r], backgroundColor: riskBg[r] },
+                ]}
               >
                 <Text style={[styles.riskChipText, active && { color: riskText[r] }]}>{r.toUpperCase()}</Text>
               </Pressable>
@@ -235,12 +258,15 @@ export default function AddContentScreen() {
           onChangeText={setNotes}
           placeholder="Paste the message or any context here..."
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
-          style={[styles.textarea, { color: colors.text, backgroundColor: colors.card, borderColor: "#E5E7EB" }]}
+          style={[
+            styles.textarea,
+            { color: colors.text, backgroundColor: colors.card, borderColor: "#E5E7EB" },
+          ]}
           multiline
         />
 
         <Pressable onPress={onSubmit} disabled={saving} style={[styles.addBtn, saving && { opacity: 0.6 }]}>
-          <Text style={styles.addBtnText}>{saving ? (isEdit ? "Saving…" : "Adding…") : isEdit ? "Save" : "Add"}</Text>
+          <Text style={styles.addBtnText}>{saving ? (isEditing ? "Saving…" : "Adding…") : isEditing ? "Save" : "Add"}</Text>
         </Pressable>
 
         {showErrors && (errorTitle || errorCompany || errorUrl) ? (
@@ -252,14 +278,38 @@ export default function AddContentScreen() {
 }
 
 const styles = StyleSheet.create({
-  snack: { position: "absolute", top: 8, left: 0, right: 0, alignItems: "center", zIndex: 10 },
-  snackText: { backgroundColor: "#111", color: "#fff", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, overflow: "hidden", fontWeight: "700" },
+  // snackbar
+  snack: {
+    position: "absolute",
+    top: 8,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 10,
+  },
+  snackText: {
+    backgroundColor: "#111",
+    color: "#fff",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    overflow: "hidden",
+    fontWeight: "700",
+  },
 
   headerRow: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6, flexDirection: "row", alignItems: "center" },
   h1: { fontSize: 24, fontWeight: "800", flex: 1 },
 
-  previewChip: { alignSelf: "flex-start", marginTop: 2, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
-  previewChipText: { fontWeight: "700" },
+  previewChip: {
+    marginLeft: 16,
+    marginBottom: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#FFF1E8",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  previewChipText: { color: "#B45309", fontWeight: "700" },
 
   form: { paddingHorizontal: 16, paddingBottom: 24 },
   label: { marginTop: 14, marginBottom: 6, fontWeight: "800", color: "#111" },
@@ -267,7 +317,6 @@ const styles = StyleSheet.create({
   textarea: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12, minHeight: 120, textAlignVertical: "top" },
 
   helperError: { color: "#ef4444", marginTop: 6 },
-
   chipsRow: { flexDirection: "row", gap: 10 },
   riskChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#fff" },
   riskChipText: { fontWeight: "700", color: "#111" },

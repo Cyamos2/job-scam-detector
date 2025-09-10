@@ -9,5 +9,5 @@ export type RootTabParamList = {
 export type RootStackParamList = {
   Tabs: undefined;
   ReportDetail: { id: string };
-  AddContent: { editId?: string } | undefined; // <- allow opening empty OR with an edit id
+  AddContent: { editId?: string } | undefined;
 };

@@ -1,10 +1,13 @@
 // src/components/ScoreBadge.tsx
 import * as React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { visualBucket } from "../lib/scoring";
+import { visualBucket, scoreJob, type ScoreResult } from "../lib/scoring";
 
+// Accept a numeric score and color by visual bucket inferred from it
 export default function ScoreBadge({ score }: { score: number }) {
-  const b = visualBucket(score);
+  // synthesize a minimal ScoreResult for coloring
+  const fakeResult: ScoreResult = { score, reasons: [], hasHigh: false, hasMedium: false, hasLow: false };
+  const b = visualBucket(fakeResult);
 
   const palette = {
     low:    { bg: "#E7F8ED", text: "#047857", border: "#A7F3D0" },
