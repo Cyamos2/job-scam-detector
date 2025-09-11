@@ -18,21 +18,46 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Screen from "../components/Screen";
 import JobRow from "../components/JobRow";
+import { scoreJob } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
-import type { RootStackParamList } from "../navigation/types";
 import { usePersistedState } from "../store/persist";
-import { scoreJob, visualBucket, type ScoreResult, type Risk } from "../lib/scoring";
+import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Risk = "low" | "medium" | "high";
 
 type Row = {
   j: ReturnType<typeof useJobs>["items"][number];
-  s: ScoreResult;
-  b: Risk; // computed bucket
+  s: ReturnType<typeof scoreJob>;
 };
-
 type Section = { title: Risk; data: Row[] };
+
+const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
+  title: j.title,
+  company: j.company,
+  url: j.url ?? undefined,
+  notes: j.notes ?? undefined,
+  risk: j.risk,
+});
+
 type SortBy = "date" | "title" | "score";
+
+const sortRows = (rows: Row[], by: SortBy, asc: boolean) => {
+  const copy = rows.slice();
+  switch (by) {
+    case "title":
+      copy.sort((a, b) => a.j.title.localeCompare(b.j.title));
+      break;
+    case "score":
+      copy.sort((a, b) => b.s.score - a.s.score);
+      break;
+    case "date":
+    default:
+      // assuming items are already newest-first by insertion; keep as-is
+      break;
+  }
+  return asc ? copy.reverse() : copy;
+};
 
 export default function DatabaseScreen() {
   const insets = useSafeAreaInsets();
@@ -43,44 +68,32 @@ export default function DatabaseScreen() {
   const [search, setSearch] = React.useState("");
   const [filter, setFilter] = usePersistedState<"all" | Risk>("db.filter", "all");
   const [sortBy, setSortBy] = usePersistedState<SortBy>("db.sort", "score");
+  const [sortAsc, setSortAsc] = usePersistedState<boolean>("db.sortAsc", false);
   const [refreshing, setRefreshing] = React.useState(false);
 
   const sections: Section[] = React.useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    // score each job and compute *visual* bucket
-    let rows: Row[] = items.map((j) => {
-      const s = scoreJob({
-        title: j.title,
-        company: j.company,
-        url: j.url ?? undefined,
-        notes: j.notes ?? undefined,
-        risk: j.risk, // keep as a weak prior
-      });
-      return { j, s, b: visualBucket(s) };
-    });
+    let rows: Row[] = items.map((j) => ({ j, s: scoreJob(toScoreInput(j)) }));
 
-    // filter by the UI bucket (not j.risk)
-    rows = rows.filter(({ b }) => (filter === "all" ? true : b === filter));
+    if (filter !== "all") rows = rows.filter(({ j }) => j.risk === filter);
 
-    // text filter
     if (q) {
       rows = rows.filter(({ j }) =>
         `${j.title} ${j.company}`.toLowerCase().includes(q)
       );
     }
 
-    // sort
-    rows = sortRows(rows, sortBy);
+    rows = sortRows(rows, sortBy, sortAsc);
 
-    // group by computed bucket
     const buckets: Record<Risk, Row[]> = { high: [], medium: [], low: [] };
-    rows.forEach((r) => buckets[r.b].push(r));
+    rows.forEach((r) => buckets[r.j.risk].push(r));
 
-    return (["high", "medium", "low"] as Risk[])
+    const order: Risk[] = ["high", "medium", "low"];
+    return order
       .map((title) => ({ title, data: buckets[title] }))
       .filter((s) => s.data.length > 0);
-  }, [items, search, filter, sortBy]);
+  }, [items, search, filter, sortBy, sortAsc]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -107,7 +120,8 @@ export default function DatabaseScreen() {
   );
 
   const onAdd = React.useCallback(() => {
-    nav.navigate("AddContent");
+    // object form keeps TS happy; params are optional
+    nav.navigate({ name: "AddContent", params: undefined });
   }, [nav]);
 
   const renderItem = ({ item }: { item: Row }) => {
@@ -116,8 +130,9 @@ export default function DatabaseScreen() {
       <JobRow
         job={j}
         score={s.score}
-        reasonsPreview={s.reasons.slice(0, 2).map((r) => r.label)}
-        onPress={() => nav.navigate("ReportDetail", { id: j.id })}
+        onPress={() =>
+          nav.navigate({ name: "ReportDetail", params: { id: j.id } })
+        }
         onLongPress={() => onDelete(j.id)}
       />
     );
@@ -130,6 +145,7 @@ export default function DatabaseScreen() {
       low: { label: "Low Risk", color: "#047857", bg: "#ECFDF5" },
     };
     const p = map[section.title];
+
     return (
       <View
         style={[
@@ -151,10 +167,25 @@ export default function DatabaseScreen() {
     children: React.ReactNode;
     onPress?: () => void;
   }) => (
-    <Pressable onPress={onPress} style={[styles.pill, active && styles.pillActive]}>
-      <Text style={[styles.pillText, active && { color: "#111827" }]}>{children}</Text>
+    <Pressable
+      onPress={onPress}
+      style={[styles.pill, active && styles.pillActive]}
+    >
+      <Text style={[styles.pillText, active && { color: "#111827" }]}>
+        {children}
+      </Text>
     </Pressable>
   );
+
+  const toggleScoreSort = () => {
+    setSortBy("score");
+    setSortAsc((v) => !v);
+  };
+
+  const toggleTitleSort = () => {
+    setSortBy("title");
+    setSortAsc((v) => !v);
+  };
 
   return (
     <Screen>
@@ -168,7 +199,11 @@ export default function DatabaseScreen() {
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.search,
-            { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
+            {
+              color: colors.text,
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+            },
           ]}
         />
       </View>
@@ -186,11 +221,15 @@ export default function DatabaseScreen() {
 
       <View style={styles.sortRow}>
         <Text style={styles.sortLabel}>Sort</Text>
-        {(["score", "date", "title"] as const).map((s) => (
-          <Pill key={s} active={sortBy === s} onPress={() => setSortBy(s)}>
-            {s === "score" ? "Score ↓" : s === "date" ? "Date" : "Title Z→A"}
-          </Pill>
-        ))}
+        <Pill active={sortBy === "score"} onPress={toggleScoreSort}>
+          Score {sortBy === "score" ? (sortAsc ? "↑" : "↓") : ""}
+        </Pill>
+        <Pill active={sortBy === "date"} onPress={() => setSortBy("date")}>
+          Date
+        </Pill>
+        <Pill active={sortBy === "title"} onPress={toggleTitleSort}>
+          Title {sortBy === "title" ? (sortAsc ? "A→Z" : "Z→A") : "A→Z"}
+        </Pill>
       </View>
 
       <SectionList<Row, Section>
@@ -199,43 +238,36 @@ export default function DatabaseScreen() {
         renderItem={renderItem}
         renderSectionHeader={renderSectionHeader}
         stickySectionHeadersEnabled
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 + insets.bottom }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingBottom: 16 + insets.bottom,
+        }}
         SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
         ListEmptyComponent={
           <View style={{ padding: 24, alignItems: "center" }}>
-            <Text style={{ color: "#6B7280", fontWeight: "700" }}>No results.</Text>
+            <Text style={{ color: "#6B7280", fontWeight: "700" }}>
+              No results.
+            </Text>
           </View>
         }
       />
 
       <Pressable
         onPress={onAdd}
-        style={[styles.addBtn, { bottom: 24 + insets.bottom, shadowColor: "#000" }]}
+        style={[
+          styles.addBtn,
+          { bottom: 24 + insets.bottom, shadowColor: "#000" },
+        ]}
         android_ripple={{ color: "#ffffff55", borderless: true }}
       >
         <Text style={styles.addBtnPlus}>＋</Text>
       </Pressable>
     </Screen>
   );
-}
-
-function sortRows(rows: Row[], by: SortBy) {
-  const copy = rows.slice();
-  switch (by) {
-    case "title":
-      copy.sort((a, b) => a.j.title.localeCompare(b.j.title)); // Z→A label already applied
-      break;
-    case "score":
-      copy.sort((a, b) => b.s.score - a.s.score);
-      break;
-    case "date":
-    default:
-      // keep insertion (most recent top if you add newest-first to items)
-      break;
-  }
-  return copy;
 }
 
 const styles = StyleSheet.create({
@@ -295,5 +327,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
   },
-  addBtnPlus: { color: "#fff", fontSize: 28, lineHeight: 30, fontWeight: "700" },
+  addBtnPlus: {
+    color: "#fff",
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: "700",
+  },
 });

@@ -1,14 +1,21 @@
 // src/screens/ReportDetailScreen.tsx
 import * as React from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+} from "react-native";
 import { useTheme, useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 
+import Screen from "../components/Screen";
+import ScoreBadge from "../components/ScoreBadge";
 import { useJobs } from "../hooks/useJobs";
 import { scoreJob, type ScoreResult } from "../lib/scoring";
 import type { RootStackParamList } from "../navigation/types";
-import ScoreBadge from "../components/ScoreBadge";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type Rt = RouteProp<RootStackParamList, "ReportDetail">;
@@ -20,15 +27,18 @@ export default function ReportDetailScreen() {
   const { items } = useJobs();
 
   const job = items.find((j) => j.id === route.params.id);
+
   if (!job) {
     return (
-      <View style={styles.center}>
-        <Text style={{ color: colors.text }}>Job not found.</Text>
-      </View>
+      <Screen>
+        <View style={styles.center}>
+          <Text style={{ color: colors.text }}>Job not found.</Text>
+        </View>
+      </Screen>
     );
   }
 
-  const scored: ScoreResult = scoreJob({
+  const result: ScoreResult = scoreJob({
     title: job.title,
     company: job.company,
     url: job.url ?? undefined,
@@ -36,115 +46,115 @@ export default function ReportDetailScreen() {
     risk: job.risk,
   });
 
-  // Group reasons by severity
   const grouped = React.useMemo(() => {
     const by: Record<"high" | "medium" | "low", string[]> = {
       high: [],
       medium: [],
       low: [],
     };
-    for (const r of scored.reasons) by[r.severity].push(r.label);
+    for (const r of result.reasons) by[r.severity].push(r.label);
     return by;
-  }, [scored.reasons]);
+  }, [result.reasons]);
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{ padding: 16 }}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.title, { color: colors.text }]}>{job.title}</Text>
-          <Text style={[styles.company, { color: colors.text }]}>{job.company}</Text>
-          {job.url ? (
-            <Text style={styles.url} numberOfLines={1}>
-              {job.url}
+    <Screen>
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={{ padding: 16 }}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: colors.text }]} numberOfLines={2}>
+              {job.title}
             </Text>
-          ) : null}
+            <Text style={[styles.company, { color: colors.text }]}>{job.company}</Text>
+            {job.url ? (
+              <Text style={styles.url} numberOfLines={1}>
+                {job.url}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Score pill */}
+          <ScoreBadge score={result.score} />
         </View>
 
-        <View style={{ alignItems: "flex-end" }}>
-          <Text style={styles.badgeLabel}>Scam Likelihood</Text>
-          <ScoreBadge score={scored.score} />
-          <Pressable
-            onPress={() => nav.navigate("AddContent", { editId: job.id })}
-            style={styles.editPill}
-          >
-            <Text style={styles.editPillText}>Edit</Text>
-          </Pressable>
-        </View>
-      </View>
+        {/* Why this score */}
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Why this score</Text>
 
-      {/* Why this score */}
-      <Text style={[styles.sectionTitle, { color: colors.text }]}>Why this score</Text>
+        {(["high", "medium", "low"] as const).map((sev) => {
+          if (!grouped[sev].length) return null;
 
-      {grouped.high.length > 0 && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={[styles.sevHeader, { color: "#B91C1C" }]}>High-risk factors detected:</Text>
-          {grouped.high.map((label, i) => (
-            <Text key={`h-${i}`} style={[styles.bullet, { color: colors.text }]}>
-              • {label}
-            </Text>
-          ))}
-        </View>
-      )}
+          const palette = {
+            high: { color: "#B91C1C", label: "High-risk factors detected:" },
+            medium: { color: "#B45309", label: "Medium-risk factors detected:" },
+            low: { color: "#047857", label: "Low-risk factors detected:" },
+          } as const;
 
-      {grouped.medium.length > 0 && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={[styles.sevHeader, { color: "#B45309" }]}>Medium-risk factors detected:</Text>
-          {grouped.medium.map((label, i) => (
-            <Text key={`m-${i}`} style={[styles.bullet, { color: colors.text }]}>
-              • {label}
-            </Text>
-          ))}
-        </View>
-      )}
+          return (
+            <View key={sev} style={{ marginBottom: 12 }}>
+              <Text style={[styles.sevHeader, { color: palette[sev].color }]}>
+                {palette[sev].label}
+              </Text>
+              {grouped[sev].map((label, i) => (
+                <Text
+                  key={`${sev}-${i}`}
+                  style={{ marginLeft: 12, marginBottom: 2, color: colors.text }}
+                >
+                  • {label}
+                </Text>
+              ))}
+            </View>
+          );
+        })}
 
-      {grouped.low.length > 0 && (
-        <View style={{ marginBottom: 12 }}>
-          <Text style={[styles.sevHeader, { color: "#047857" }]}>Low-risk factors detected:</Text>
-          {grouped.low.map((label, i) => (
-            <Text key={`l-${i}`} style={[styles.bullet, { color: colors.text }]}>
-              • {label}
-            </Text>
-          ))}
-        </View>
-      )}
+        {/* Notes */}
+        {job.notes ? (
+          <>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Notes</Text>
+            <Text style={{ color: colors.text, marginBottom: 16 }}>{job.notes}</Text>
+          </>
+        ) : null}
 
-      {/* Notes */}
-      {job.notes ? (
-        <>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Notes</Text>
-          <Text style={{ color: colors.text, marginBottom: 16 }}>{job.notes}</Text>
-        </>
-      ) : null}
-    </ScrollView>
+        {/* Edit button */}
+        <Pressable
+          onPress={() =>
+            nav.navigate({
+              name: "AddContent",
+              params: { editId: job.id }, // edit mode
+            })
+          }
+          style={styles.editBtn}
+        >
+          <Text style={styles.editText}>Edit</Text>
+        </Pressable>
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
-  title: { fontSize: 20, fontWeight: "800" },
-  company: { fontSize: 14, marginTop: 2 },
-  url: { fontSize: 13, color: "#2563EB", marginTop: 2 },
 
-  badgeLabel: { fontSize: 10, fontWeight: "700", color: "#6B7280", marginBottom: 4, textAlign: "right" },
-  editPill: {
-    marginTop: 8,
-    alignSelf: "flex-end",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
+  title: { fontSize: 22, fontWeight: "800", marginBottom: 4 },
+  company: { fontSize: 14, opacity: 0.9, marginBottom: 2 },
+  url: { fontSize: 13, color: "#2563EB" },
+
+  sectionTitle: { fontSize: 16, fontWeight: "800", marginTop: 14, marginBottom: 6 },
+  sevHeader: { fontWeight: "800", marginBottom: 4 },
+
+  editBtn: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: "#E5E7EB",
     backgroundColor: "#F9FAFB",
+    marginTop: 8,
   },
-  editPillText: { fontWeight: "700", color: "#1D4ED8" },
-
-  sectionTitle: { fontSize: 16, fontWeight: "900", marginTop: 12, marginBottom: 6 },
-  sevHeader: { fontWeight: "900", marginBottom: 4 },
-  bullet: { marginLeft: 12, marginBottom: 2 },
+  editText: { fontWeight: "600", color: "#1D4ED8" },
 });

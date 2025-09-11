@@ -1,117 +1,80 @@
-// src/hooks/useJobs.tsx
+// ...existing imports...
 import * as React from "react";
-import { loadJobs, saveJobs } from "../store/persist";
+import { saveJobs, loadJobs } from "../store/persist"; // or whatever your persist helpers are named
 
-/** Domain types */
 export type Risk = "low" | "medium" | "high";
-
 export type Job = {
   id: string;
   title: string;
   company: string;
-  url?: string | null;
-  notes?: string | null;
+  url?: string;
   risk: Risk;
-  /** canonical epoch ms */
+  notes?: string;
   createdAt: number;
+  updatedAt?: number;
 };
 
-export type JobInput = {
-  title: string;
-  company: string;
-  url?: string | undefined;
-  notes?: string | undefined;
-  risk: Risk;
-};
-
-export type JobPatch = Partial<JobInput>;
-
-/** Context shape */
-type JobsCtx = {
+type Ctx = {
   items: Job[];
-  refresh: () => Promise<void>;
-  create: (input: JobInput) => Promise<Job>;
-  update: (id: string, patch: JobPatch) => Promise<Job>;
+  create: (payload: Omit<Job, "id" | "createdAt" | "updatedAt">) => Promise<Job>;
+  update: (id: string, changes: Partial<Omit<Job, "id" | "createdAt">>) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  getById: (id: string) => Job | undefined;
 };
 
-const Ctx = React.createContext<JobsCtx | null>(null);
+const JobsContext = React.createContext<Ctx | undefined>(undefined);
 
-/** Provider (now in TSX) */
 export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<Job[]>([]);
 
   // initial load
   React.useEffect(() => {
     (async () => {
-      const loaded = await loadJobs(); // ensures createdAt is number
-      setItems(loaded);
+      try {
+        const raw = await loadJobs();
+        if (raw) setItems(raw);
+      } catch {}
     })();
   }, []);
 
-  const refresh = React.useCallback(async () => {
-    const loaded = await loadJobs();
-    setItems(loaded);
+  const persist = React.useCallback(async (next: Job[]) => {
+    setItems(next);
+    try { await saveJobs(next); } catch {}
   }, []);
 
-  const create = React.useCallback(async (input: JobInput): Promise<Job> => {
-    const job: Job = {
+  const create = React.useCallback<Ctx["create"]>(async (payload) => {
+    const j: Job = {
       id: Math.random().toString(36).slice(2),
-      title: input.title.trim(),
-      company: input.company.trim(),
-      url: input.url?.trim() || null,
-      notes: input.notes?.trim() || null,
-      risk: input.risk,
       createdAt: Date.now(),
+      ...payload,
     };
-    setItems(prev => {
-      const next = [job, ...prev];
-      saveJobs(next).catch(() => {});
-      return next;
-    });
-    return job;
-  }, []);
+    const next = [j, ...items];
+    await persist(next);
+    return j;
+  }, [items, persist]);
 
-  const update = React.useCallback(async (id: string, patch: JobPatch) => {
-    let updated!: Job;
-    setItems(prev => {
-      const next = prev.map(j => {
-        if (j.id !== id) return j;
-        updated = {
-          ...j,
-          title: patch.title?.trim() ?? j.title,
-          company: patch.company?.trim() ?? j.company,
-          url: (patch.url?.trim() ?? j.url) || null,
-          notes: (patch.notes?.trim() ?? j.notes) || null,
-          risk: patch.risk ?? j.risk,
-        };
-        return updated;
-      });
-      saveJobs(next).catch(() => {});
-      return next;
-    });
-    return updated;
-  }, []);
+  // ✅ NEW: update
+  const update = React.useCallback<Ctx["update"]>(async (id, changes) => {
+    const next = items.map((j) =>
+      j.id === id ? { ...j, ...changes, updatedAt: Date.now() } : j
+    );
+    await persist(next);
+  }, [items, persist]);
 
-  const remove = React.useCallback(async (id: string) => {
-    setItems(prev => {
-      const next = prev.filter(j => j.id !== id);
-      saveJobs(next).catch(() => {});
-      return next;
-    });
-  }, []);
+  const remove = React.useCallback<Ctx["remove"]>(async (id) => {
+    const next = items.filter((j) => j.id !== id);
+    await persist(next);
+  }, [items, persist]);
 
-  const value = React.useMemo<JobsCtx>(
-    () => ({ items, refresh, create, update, remove }),
-    [items, refresh, create, update, remove]
-  );
+  // ✅ NEW: helper
+  const getById = React.useCallback((id: string) => items.find((j) => j.id === id), [items]);
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  const value: Ctx = { items, create, update, remove, getById };
+  return <JobsContext.Provider value={value}>{children}</JobsContext.Provider>;
 }
 
-/** Hook */
-export function useJobs(): JobsCtx {
-  const ctx = React.useContext(Ctx);
-  if (!ctx) throw new Error("useJobs must be used within a JobsProvider");
+export function useJobs() {
+  const ctx = React.useContext(JobsContext);
+  if (!ctx) throw new Error("useJobs must be used inside JobsProvider");
   return ctx;
 }
