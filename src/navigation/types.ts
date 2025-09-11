@@ -9,6 +9,5 @@ export type RootTabParamList = {
 export type RootStackParamList = {
   Tabs: undefined;
   ReportDetail: { id: string };
-  // Optional editId enables edit flow in AddContentScreen
-  AddContent: { editId?: string } | undefined;
+  AddContent: { editId?: string } | undefined; // ← allows both add and edit
 };

@@ -1,4 +1,3 @@
-// src/screens/DatabaseScreen.tsx
 import * as React from "react";
 import {
   View,
@@ -17,47 +16,31 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Screen from "../components/Screen";
-import JobRow from "../components/JobRow";
-import { scoreJob } from "../lib/scoring";
+import { scoreJob, visualBucket, type Severity } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
-import { usePersistedState } from "../store/persist";
 import type { RootStackParamList } from "../navigation/types";
+import { usePersistedState } from "../store/persist";
+import JobRow from "../components/JobRow";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-type Risk = "low" | "medium" | "high";
 
 type Row = {
   j: ReturnType<typeof useJobs>["items"][number];
   s: ReturnType<typeof scoreJob>;
+  b: Severity;
 };
-type Section = { title: Risk; data: Row[] };
+
+type Section = { title: Severity; data: Row[] };
 
 const toScoreInput = (j: ReturnType<typeof useJobs>["items"][number]) => ({
   title: j.title,
   company: j.company,
   url: j.url ?? undefined,
   notes: j.notes ?? undefined,
-  risk: j.risk,
 });
 
 type SortBy = "date" | "title" | "score";
-
-const sortRows = (rows: Row[], by: SortBy, asc: boolean) => {
-  const copy = rows.slice();
-  switch (by) {
-    case "title":
-      copy.sort((a, b) => a.j.title.localeCompare(b.j.title));
-      break;
-    case "score":
-      copy.sort((a, b) => b.s.score - a.s.score);
-      break;
-    case "date":
-    default:
-      // assuming items are already newest-first by insertion; keep as-is
-      break;
-  }
-  return asc ? copy.reverse() : copy;
-};
+type SortDir = "desc" | "asc";
 
 export default function DatabaseScreen() {
   const insets = useSafeAreaInsets();
@@ -66,34 +49,55 @@ export default function DatabaseScreen() {
   const { items, remove } = useJobs();
 
   const [search, setSearch] = React.useState("");
-  const [filter, setFilter] = usePersistedState<"all" | Risk>("db.filter", "all");
+  const [filter, setFilter] = usePersistedState<"all" | Severity>("db.filter", "all");
   const [sortBy, setSortBy] = usePersistedState<SortBy>("db.sort", "score");
-  const [sortAsc, setSortAsc] = usePersistedState<boolean>("db.sortAsc", false);
+  const [sortDir, setSortDir] = usePersistedState<SortDir>("db.sortDir", "desc");
   const [refreshing, setRefreshing] = React.useState(false);
 
   const sections: Section[] = React.useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    let rows: Row[] = items.map((j) => ({ j, s: scoreJob(toScoreInput(j)) }));
+    let rows: Row[] = items.map((j) => {
+      const s = scoreJob(toScoreInput(j));
+      const b = visualBucket(s);
+      return { j, s, b };
+    });
 
-    if (filter !== "all") rows = rows.filter(({ j }) => j.risk === filter);
-
-    if (q) {
-      rows = rows.filter(({ j }) =>
-        `${j.title} ${j.company}`.toLowerCase().includes(q)
-      );
+    if (filter !== "all") {
+      rows = rows.filter((r) => r.b === filter);
     }
 
-    rows = sortRows(rows, sortBy, sortAsc);
+    if (q) {
+      rows = rows.filter(({ j }) => `${j.title} ${j.company}`.toLowerCase().includes(q));
+    }
 
-    const buckets: Record<Risk, Row[]> = { high: [], medium: [], low: [] };
-    rows.forEach((r) => buckets[r.j.risk].push(r));
+    // Sort
+    rows = rows.slice().sort((a, b) => {
+      let cmp = 0;
+      switch (sortBy) {
+        case "title":
+          cmp = a.j.title.localeCompare(b.j.title);
+          break;
+        case "score":
+          cmp = a.s.score - b.s.score;
+          break;
+        case "date":
+        default:
+          // keep insertion order; you can sort by createdAt if present
+          cmp = 0;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
 
-    const order: Risk[] = ["high", "medium", "low"];
+    // Group by bucket
+    const buckets: Record<Severity, Row[]> = { high: [], medium: [], low: [] };
+    rows.forEach((r) => buckets[r.b].push(r));
+
+    const order: Severity[] = ["high", "medium", "low"];
     return order
       .map((title) => ({ title, data: buckets[title] }))
       .filter((s) => s.data.length > 0);
-  }, [items, search, filter, sortBy, sortAsc]);
+  }, [items, search, filter, sortBy, sortDir]);
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -120,8 +124,7 @@ export default function DatabaseScreen() {
   );
 
   const onAdd = React.useCallback(() => {
-    // object form keeps TS happy; params are optional
-    nav.navigate({ name: "AddContent", params: undefined });
+    nav.navigate("AddContent"); // open create
   }, [nav]);
 
   const renderItem = ({ item }: { item: Row }) => {
@@ -130,29 +133,22 @@ export default function DatabaseScreen() {
       <JobRow
         job={j}
         score={s.score}
-        onPress={() =>
-          nav.navigate({ name: "ReportDetail", params: { id: j.id } })
-        }
+        onPress={() => nav.navigate("ReportDetail", { id: j.id })}
         onLongPress={() => onDelete(j.id)}
       />
     );
   };
 
   const renderSectionHeader = ({ section }: { section: Section }) => {
-    const map: Record<Risk, { label: string; color: string; bg: string }> = {
-      high: { label: "High Risk", color: "#B91C1C", bg: "#FEF2F2" },
+    const map: Record<Severity, { label: string; color: string; bg: string }> = {
+      high:   { label: "High Risk",   color: "#B91C1C", bg: "#FEF2F2" },
       medium: { label: "Medium Risk", color: "#B45309", bg: "#FFF7ED" },
-      low: { label: "Low Risk", color: "#047857", bg: "#ECFDF5" },
+      low:    { label: "Low Risk",    color: "#047857", bg: "#ECFDF5" },
     };
     const p = map[section.title];
 
     return (
-      <View
-        style={[
-          styles.sectionHeader,
-          { backgroundColor: p.bg, borderColor: colors.border, marginTop: 8 },
-        ]}
-      >
+      <View style={[styles.sectionHeader, { backgroundColor: p.bg, borderColor: colors.border, marginTop: 8 }]}>
         <Text style={[styles.sectionTitle, { color: p.color }]}>{p.label}</Text>
       </View>
     );
@@ -167,25 +163,10 @@ export default function DatabaseScreen() {
     children: React.ReactNode;
     onPress?: () => void;
   }) => (
-    <Pressable
-      onPress={onPress}
-      style={[styles.pill, active && styles.pillActive]}
-    >
-      <Text style={[styles.pillText, active && { color: "#111827" }]}>
-        {children}
-      </Text>
+    <Pressable onPress={onPress} style={[styles.pill, active && styles.pillActive]}>
+      <Text style={[styles.pillText, active && { color: "#111827" }]}>{children}</Text>
     </Pressable>
   );
-
-  const toggleScoreSort = () => {
-    setSortBy("score");
-    setSortAsc((v) => !v);
-  };
-
-  const toggleTitleSort = () => {
-    setSortBy("title");
-    setSortAsc((v) => !v);
-  };
 
   return (
     <Screen>
@@ -199,11 +180,7 @@ export default function DatabaseScreen() {
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.search,
-            {
-              color: colors.text,
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-            },
+            { color: colors.text, backgroundColor: colors.card, borderColor: colors.border },
           ]}
         />
       </View>
@@ -221,14 +198,32 @@ export default function DatabaseScreen() {
 
       <View style={styles.sortRow}>
         <Text style={styles.sortLabel}>Sort</Text>
-        <Pill active={sortBy === "score"} onPress={toggleScoreSort}>
-          Score {sortBy === "score" ? (sortAsc ? "↑" : "↓") : ""}
+        <Pill
+          active={sortBy === "score"}
+          onPress={() => {
+            setSortBy("score");
+            setSortDir(sortDir === "desc" ? "asc" : "desc");
+          }}
+        >
+          Score {sortBy === "score" ? (sortDir === "desc" ? "↓" : "↑") : ""}
         </Pill>
-        <Pill active={sortBy === "date"} onPress={() => setSortBy("date")}>
+        <Pill
+          active={sortBy === "date"}
+          onPress={() => {
+            setSortBy("date");
+            setSortDir(sortDir === "desc" ? "asc" : "desc");
+          }}
+        >
           Date
         </Pill>
-        <Pill active={sortBy === "title"} onPress={toggleTitleSort}>
-          Title {sortBy === "title" ? (sortAsc ? "A→Z" : "Z→A") : "A→Z"}
+        <Pill
+          active={sortBy === "title"}
+          onPress={() => {
+            setSortBy("title");
+            setSortDir(sortDir === "desc" ? "asc" : "desc");
+          }}
+        >
+          Title {sortDir === "desc" ? "Z→A" : "A→Z"}
         </Pill>
       </View>
 
@@ -238,30 +233,21 @@ export default function DatabaseScreen() {
         renderItem={renderItem}
         renderSectionHeader={renderSectionHeader}
         stickySectionHeadersEnabled
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingBottom: 16 + insets.bottom,
-        }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 + insets.bottom + 80 }}
         SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           <View style={{ padding: 24, alignItems: "center" }}>
-            <Text style={{ color: "#6B7280", fontWeight: "700" }}>
-              No results.
-            </Text>
+            <Text style={{ color: "#6B7280", fontWeight: "700" }}>No results.</Text>
           </View>
         }
       />
 
+      {/* Floating Add button (restored) */}
       <Pressable
         onPress={onAdd}
-        style={[
-          styles.addBtn,
-          { bottom: 24 + insets.bottom, shadowColor: "#000" },
-        ]}
+        style={[styles.addBtn, { bottom: 24 + insets.bottom, shadowColor: "#000" }]}
         android_ripple={{ color: "#ffffff55", borderless: true }}
       >
         <Text style={styles.addBtnPlus}>＋</Text>
@@ -271,46 +257,22 @@ export default function DatabaseScreen() {
 }
 
 const styles = StyleSheet.create({
-  search: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
+  search: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 12 },
   filtersRow: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    paddingHorizontal: 16, paddingTop: 6, paddingBottom: 8,
+    flexDirection: "row", alignItems: "center", gap: 10,
   },
-  sortRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
+  sortRow: { paddingHorizontal: 16, paddingBottom: 6, flexDirection: "row", alignItems: "center", gap: 8 },
   sortLabel: { color: "#6B7280", fontWeight: "800", marginRight: 4 },
 
   pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#fff",
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999,
+    borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#fff",
   },
   pillActive: { borderWidth: 1.2 },
   pillText: { fontWeight: "800", color: "#6B7280" },
 
-  sectionHeader: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderRadius: 10,
-  },
+  sectionHeader: { paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderRadius: 10 },
   sectionTitle: { fontSize: 12, fontWeight: "900" },
 
   addBtn: {
@@ -326,11 +288,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
+    zIndex: 50,
   },
-  addBtnPlus: {
-    color: "#fff",
-    fontSize: 28,
-    lineHeight: 30,
-    fontWeight: "700",
-  },
+  addBtnPlus: { color: "#fff", fontSize: 28, lineHeight: 30, fontWeight: "700" },
 });

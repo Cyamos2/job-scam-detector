@@ -1,80 +1,115 @@
-// ...existing imports...
+// src/hooks/useJobs.ts
 import * as React from "react";
-import { saveJobs, loadJobs } from "../store/persist"; // or whatever your persist helpers are named
+import { usePersistedState } from "../store/persist";
 
 export type Risk = "low" | "medium" | "high";
+
 export type Job = {
   id: string;
   title: string;
   company: string;
   url?: string;
-  risk: Risk;
   notes?: string;
-  createdAt: number;
-  updatedAt?: number;
+  // kept optional for backward-compat with older records/UI that might read it
+  risk?: Risk;
+  createdAt: number; // epoch ms
+  updatedAt: number; // epoch ms
+};
+
+export type CreateJobInput = {
+  title: string;
+  company: string;
+  url?: string;
+  notes?: string;
+  // allow writing old records that still pass risk
+  risk?: Risk;
+};
+
+export type UpdateJobInput = Partial<Omit<CreateJobInput, "title" | "company">> & {
+  title?: string;
+  company?: string;
 };
 
 type Ctx = {
   items: Job[];
-  create: (payload: Omit<Job, "id" | "createdAt" | "updatedAt">) => Promise<Job>;
-  update: (id: string, changes: Partial<Omit<Job, "id" | "createdAt">>) => Promise<void>;
+  create: (input: CreateJobInput) => Promise<Job>;
+  update: (id: string, changes: UpdateJobInput) => Promise<Job | undefined>;
   remove: (id: string) => Promise<void>;
+  /** Alias of `remove` for clarity at callsites like ReportDetailScreen */
+  deleteJob: (id: string) => Promise<void>;
   getById: (id: string) => Job | undefined;
 };
 
 const JobsContext = React.createContext<Ctx | undefined>(undefined);
 
+// simple stable id
+const makeId = () =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 export function JobsProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = React.useState<Job[]>([]);
+  const [items, setItems] = usePersistedState<Job[]>("jobs.items", []);
 
-  // initial load
-  React.useEffect(() => {
-    (async () => {
-      try {
-        const raw = await loadJobs();
-        if (raw) setItems(raw);
-      } catch {}
-    })();
-  }, []);
-
-  const persist = React.useCallback(async (next: Job[]) => {
-    setItems(next);
-    try { await saveJobs(next); } catch {}
-  }, []);
-
-  const create = React.useCallback<Ctx["create"]>(async (payload) => {
-    const j: Job = {
-      id: Math.random().toString(36).slice(2),
-      createdAt: Date.now(),
-      ...payload,
+  const create = React.useCallback(async (input: CreateJobInput) => {
+    const now = Date.now();
+    const job: Job = {
+      id: makeId(),
+      title: input.title.trim(),
+      company: input.company.trim(),
+      url: input.url?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+      risk: input.risk, // tolerated, not used by scoring anymore
+      createdAt: now,
+      updatedAt: now,
     };
-    const next = [j, ...items];
-    await persist(next);
-    return j;
-  }, [items, persist]);
+    setItems((prev) => [job, ...prev]);
+    return job;
+  }, [setItems]);
 
-  // ✅ NEW: update
-  const update = React.useCallback<Ctx["update"]>(async (id, changes) => {
-    const next = items.map((j) =>
-      j.id === id ? { ...j, ...changes, updatedAt: Date.now() } : j
-    );
-    await persist(next);
-  }, [items, persist]);
+  const update = React.useCallback(
+    async (id: string, changes: UpdateJobInput) => {
+      let updated: Job | undefined;
+      setItems((prev) =>
+        prev.map((j) => {
+          if (j.id !== id) return j;
+          updated = {
+            ...j,
+            title: changes.title?.trim() ?? j.title,
+            company: changes.company?.trim() ?? j.company,
+            url: changes.url?.trim() || undefined,
+            notes: changes.notes?.trim() || undefined,
+            // keep risk if present but do not require it
+            risk: changes.risk ?? j.risk,
+            updatedAt: Date.now(),
+          };
+          return updated!;
+        })
+      );
+      return updated;
+    },
+    [setItems]
+  );
 
-  const remove = React.useCallback<Ctx["remove"]>(async (id) => {
-    const next = items.filter((j) => j.id !== id);
-    await persist(next);
-  }, [items, persist]);
+  const remove = React.useCallback(async (id: string) => {
+    setItems((prev) => prev.filter((j) => j.id !== id));
+  }, [setItems]);
 
-  // ✅ NEW: helper
-  const getById = React.useCallback((id: string) => items.find((j) => j.id === id), [items]);
+  // alias used by ReportDetailScreen
+  const deleteJob = remove;
 
-  const value: Ctx = { items, create, update, remove, getById };
+  const getById = React.useCallback(
+    (id: string) => items.find((j) => j.id === id),
+    [items]
+  );
+
+  const value: Ctx = { items, create, update, remove, deleteJob, getById };
+
   return <JobsContext.Provider value={value}>{children}</JobsContext.Provider>;
 }
 
-export function useJobs() {
+export function useJobs(): Ctx {
   const ctx = React.useContext(JobsContext);
-  if (!ctx) throw new Error("useJobs must be used inside JobsProvider");
+  if (!ctx) {
+    throw new Error("useJobs must be used within a JobsProvider");
+  }
   return ctx;
 }
