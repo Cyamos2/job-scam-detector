@@ -1,9 +1,10 @@
+// src/lib/scoring.ts
 // Stricter, conservative scoring with clear reasons + buckets.
 
 export type Severity = "low" | "medium" | "high";
 
 export type Reason = {
-  key: string;        // stable id (also used as "code")
+  key: string;        // stable identifier
   label: string;      // short chip label
   severity: Severity; // how bad it is
   explain: string;    // one-line explanation
@@ -21,238 +22,260 @@ export type ScoreResult = {
   reasons: Reason[]; // matched reasons
 };
 
-/* -------------------- helpers -------------------- */
+/* ---------------- helpers ---------------- */
+
 const rx = (s: string, flags = "i") => new RegExp(s, flags);
 const has = (text: string, re: RegExp) => re.test(text);
-const safeLower = (s?: string) => (s ?? "").toLowerCase();
 
-function blob(input: ScoreInput): string {
-  return [
-    input.title ?? "",
-    input.company ?? "",
-    input.url ?? "",
-    input.notes ?? "",
-  ].join(" \n ").toLowerCase();
+function norm(s?: string) {
+  return (s ?? "").toLowerCase().trim();
 }
 
-function urlTld(url?: string): string | null {
+// Combine all fields to scan for patterns
+function blob(input: ScoreInput): string {
+  return [input.title, input.company, input.url, input.notes]
+    .map((x) => norm(x))
+    .join("\n");
+}
+
+function hostOf(url?: string): string | null {
   if (!url) return null;
   try {
     const u = new URL(url);
-    const parts = u.hostname.split(".");
-    return parts.length >= 2 ? parts[parts.length - 1].toLowerCase() : null;
+    return u.hostname.toLowerCase();
   } catch {
     return null;
   }
 }
 
-/* -------------------- rules -------------------- */
+function looksHttps(url?: string): boolean {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+const SUSPICIOUS_TLDS = new Set([
+  "top","xyz","icu","click","rest","pw","work","loan","zip","cam","cfd","kim",
+]);
+
+function tldOf(host?: string | null): string | null {
+  if (!host) return null;
+  const parts = host.split(".");
+  return parts.length > 1 ? parts[parts.length - 1] : null;
+}
+
+// Very simple brand/host “match” heuristic
+function companyMatchesHost(company: string, host?: string | null): boolean {
+  if (!company || !host) return true; // don’t penalize unknowns
+  const c = norm(company).replace(/[^a-z0-9]/g, "");
+  if (!c) return true;
+  // check presence of company token in host (minus common prefixes)
+  const h = host
+    .replace(/^www\./, "")
+    .replace(/[^a-z0-9.]/g, "");
+  return h.includes(c);
+}
+
+/* ---------------- rules ---------------- */
 
 type Rule = {
-  key: string; label: string; explain: string; re: RegExp;
+  key: string;
+  label: string;
+  explain: string;
+  re: RegExp;
 };
 
-/** HIGH red flags */
 const HIGH: Rule[] = [
   {
-    key: "upfront_fee",
+    key: "upfront-fee",
     label: "Upfront fee",
     explain: "Asks you to pay fees, buy equipment, or prepay for onboarding.",
-    re: rx("\\b(application|processing|onboarding|training) fee\\b|\\b(pay|buy).*equipment\\b"),
+    re: rx("\\b(application fee|processing fee|upfront fee|pay.*equipment|buy.*equipment|training fee)\\b"),
   },
   {
-    key: "suspicious_payment",
+    key: "payment-schemes",
     label: "Suspicious payments",
-    explain: "Mentions crypto, gift cards, Zelle/Cash App, or wire transfers.",
-    re: rx("\\b(crypto|bitcoin|gift ?cards?|zelle|cash ?app|venmo|wire transfer)\\b"),
+    explain: "Mentions crypto, wire, gift cards, Zelle/Cash App/Venmo for payment.",
+    re: rx("\\b(crypto|bitcoin|wire transfer|gift ?cards?|zelle|cash app|venmo)\\b"),
   },
   {
-    key: "check_mule",
+    key: "check-scam",
     label: "Check to deposit",
-    explain: "Sends a check to deposit and asks you to forward money.",
-    re: rx("\\b(cashier'?s? check|send.*back.*(money|funds)|deposit.*check)\\b"),
+    explain: "Sends a check to deposit, then asks you to return funds.",
+    re: rx("\\b(cashier'?s? check|send.*back.*(money|funds))\\b"),
   },
   {
-    key: "unreal_pay",
-    label: "Unrealistic pay",
-    explain: "Pay far above market or guaranteed high daily income.",
-    re: rx("\\b\\$\\s?([3-9]\\d{2,}|[1-9]\\d{3,})\\b|\\b\\$(300|500|700)\\s?per\\s?(day|shift)\\b"),
+    key: "reshipping-mule",
+    label: "Reshipping/parcel mule",
+    explain: "Repack, reship, or receive packages at home.",
+    re: rx("\\b(repack|reship|package handler from home|parcel agent)\\b"),
+  },
+  {
+    key: "ssn-upfront",
+    label: "SSN/W-4 upfront",
+    explain: "Requests SSN/W-4 or sensitive identity info before hiring steps.",
+    re: rx("\\b(ssn|social security|w-?4|driver'?s? license)\\b"),
   },
 ];
 
-/** MED red flags */
 const MED: Rule[] = [
   {
-    key: "phone_in_body",
-    label: "Phone number included",
-    explain: "Phone number embedded directly in description.",
-    re: rx("(\\+?\\d[\\s-]?){7,}"),
+    key: "free-mail",
+    label: "Free email domain",
+    explain: "Uses free email for ‘HR’ (gmail/outlook/yahoo/hotmail).",
+    re: rx("\\b(gmail\\.com|outlook\\.com|yahoo\\.com|hotmail\\.com)\\b"),
   },
   {
-    key: "messaging_app",
-    label: "Asks to contact via messaging app",
-    explain: "Push to move chat to WhatsApp/Telegram/Signal/email.",
-    re: rx("\\b(telegram|whatsapp|signal)\\b"),
-  },
-  {
-    key: "urgent_hire",
+    key: "urgent-hire",
     label: "Urgent/immediate hire",
-    explain: "Pushy timeline: immediate hire, start today.",
+    explain: "Pushy timeline (immediate/urgent/start today).",
     re: rx("\\b(immediate(ly)? hire|urgent|start today|hiring now)\\b"),
   },
   {
-    key: "no_interview",
-    label: "No interview promised",
+    key: "no-interview",
+    label: "No interview",
     explain: "Promises job with no interview or instant approval.",
     re: rx("\\b(no interview|skip interview|instant approval|guaranteed job)\\b"),
   },
   {
-    key: "weekly_cash",
-    label: "Cash/daily/weekly pay callout",
-    explain: "Emphasis on daily/weekly cash or instant payouts.",
-    re: rx("\\b(daily|weekly) (cash|pay)\\b|\\bpaid (daily|instantly)\\b"),
-  },
-  {
-    key: "suspicious_tld",
-    label: "Suspicious domain",
-    explain: "Uses uncommon or low-reputation TLD.",
-    // handled via URL check below (no regex hit needed)
-    re: rx("$^"), // never matches; we manually add this reason if TLD matches set.
+    key: "off-platform",
+    label: "Move off-platform",
+    explain: "Push to chat on Telegram/WhatsApp/Signal/email.",
+    re: rx("\\b(telegram|whatsapp|signal)\\b"),
   },
 ];
 
-/** LOW signals */
 const LOW: Rule[] = [
   {
-    key: "remote_hype",
+    key: "remote-hype",
     label: "Remote hype",
-    explain: "Overemphasis on remote/flexible work without details.",
+    explain: "Overemphasis on remote/flexible without details.",
     re: rx("\\b(100% remote|work from (home|anywhere)|flexible hours)\\b"),
   },
   {
-    key: "vague_title",
+    key: "vague-title",
     label: "Vague role",
-    explain: "Very generic roles (assistant, clerk) with little detail.",
+    explain: "Very generic roles (assistant, clerk, data entry, typist).",
     re: rx("\\b(assistant|clerk|data entry|typist)\\b"),
   },
   {
-    key: "exclamations",
-    label: "Excessive exclamation",
-    explain: "Overuse of exclamation marks indicating hype.",
-    re: rx("!{3,}"),
-  },
-  {
-    key: "no_experience",
-    label: "No experience required",
-    explain: "Implies anyone qualifies immediately.",
-    re: rx("\\b(no experience (necessary|required))\\b"),
+    key: "benefits-hype",
+    label: "Benefits hype",
+    explain: "Unusual promises (free laptop, sign-on bonus, day-one benefits).",
+    re: rx("\\b(free laptop|sign[- ]?on bonus|instant benefits|day one benefits)\\b"),
   },
 ];
 
-/** Failsafe keys: any of these force HIGH; combos push higher. */
-const FAILSAFES = new Set([
-  "upfront_fee",
-  "suspicious_payment",
-  "check_mule",
+/** Failsafe red flags that immediately force HIGH. */
+const FAILSAFE_KEYS = new Set([
+  "upfront-fee",
+  "payment-schemes",
+  "check-scam",
+  "reshipping-mule",
+  "ssn-upfront",
 ]);
 
-/* -------------------- scoring core -------------------- */
+/* ---------------- core scoring ---------------- */
 
 export function scoreJob(input: ScoreInput): ScoreResult {
   const text = blob(input);
   const reasons: Reason[] = [];
 
-  // Pattern matches
   const addMatches = (rules: Rule[], severity: Severity) => {
     for (const r of rules) {
-      if (r.key === "suspicious_tld") continue; // special handling below
-      if (has(text, r.re)) reasons.push({ key: r.key, label: r.label, severity, explain: r.explain });
+      if (has(text, r.re)) {
+        reasons.push({ key: r.key, label: r.label, severity, explain: r.explain });
+      }
     }
   };
+
   addMatches(HIGH, "high");
   addMatches(MED, "medium");
   addMatches(LOW, "low");
 
-  // Suspicious TLDs via URL parse (safer than regex on blob)
-  const badTlds = new Set(["top", "xyz", "icu", "best", "loan", "work", "tk", "click", "buzz", "biz"]);
-  const tld = urlTld(input.url);
-  if (tld && badTlds.has(tld)) {
+  // URL-based heuristics
+  const host = hostOf(input.url);
+  if (input.url && !looksHttps(input.url)) {
     reasons.push({
-      key: "suspicious_tld",
-      label: "Suspicious TLD",
+      key: "non-https",
+      label: "Non-HTTPS URL",
       severity: "medium",
-      explain: `Domain ends with .${tld}`,
+      explain: "Website does not use HTTPS.",
+    });
+  }
+  const tld = tldOf(host);
+  if (tld && SUSPICIOUS_TLDS.has(tld)) {
+    reasons.push({
+      key: "suspicious-tld",
+      label: `Suspicious TLD (.${tld})`,
+      severity: "medium",
+      explain: "Domain ends with a high-risk top-level domain.",
+    });
+  }
+  if (host && input.company && !companyMatchesHost(input.company, host)) {
+    reasons.push({
+      key: "brand-mismatch",
+      label: "Brand/URL mismatch",
+      severity: "medium",
+      explain: "Company name and website domain don’t appear to match.",
     });
   }
 
-  // Compute weighted score
-  const numHigh = reasons.filter(r => r.severity === "high").length;
-  const numMed  = reasons.filter(r => r.severity === "medium").length;
-  const numLow  = reasons.filter(r => r.severity === "low").length;
+  // Weighted points by severity (cumulative)
+  const ptsHigh = 24;
+  const ptsMed  = 12;
+  const ptsLow  = 6;
 
-  // Base weights (slightly stricter)
-  const W_HIGH = 24;
-  const W_MED  = 12;
-  const W_LOW  = 5;
+  const countHigh = reasons.filter(r => r.severity === "high").length;
+  const countMed  = reasons.filter(r => r.severity === "medium").length;
+  const countLow  = reasons.filter(r => r.severity === "low").length;
 
   let raw =
-    numHigh * W_HIGH +
-    numMed  * W_MED  +
-    numLow  * W_LOW;
+    countHigh * ptsHigh +
+    countMed  * ptsMed  +
+    countLow  * ptsLow;
 
-  // Escalation: multiple high factors compound the risk
-  if (numHigh >= 2) raw += 10 + (numHigh - 2) * 6; // 2 highs +10, each extra +6
+  // Combo bonus: fee + suspicious payment → very strong signal
+  const hasFee   = reasons.some(r => r.key === "upfront-fee");
+  const hasPay   = reasons.some(r => r.key === "payment-schemes");
+  if (hasFee && hasPay) raw = Math.max(raw, 95);
 
-  // Diversity bonus: many different signals across severities
-  const kinds = (numHigh ? 1 : 0) + (numMed ? 1 : 0) + (numLow ? 1 : 0);
-  raw += Math.min(12, kinds * 4); // up to +12
+  // Clamp range
+  let score = Math.max(0, Math.min(100, raw));
 
-  // Clamp and failsafes
-  let score = Math.max(0, Math.min(100, Math.round(raw)));
-
-  // Any critical failsafe → at least 80; powerful combos → ≥90
-  const trippedFailsafe = reasons.some(r => FAILSAFES.has(r.key));
-  if (trippedFailsafe) score = Math.max(score, 80);
-  if (reasons.some(r => r.key === "upfront_fee") && reasons.some(r => r.key === "suspicious_payment")) {
-    score = Math.max(score, 95);
-  }
+  // Failsafe: any critical flag -> minimum 90
+  const trippedFailsafe = reasons.some(r => FAILSAFE_KEYS.has(r.key));
+  if (trippedFailsafe) score = Math.max(score, 90);
 
   return { score, reasons };
 }
 
-/* -------------------- buckets -------------------- */
+/* --------- buckets (visual) --------- */
 
+// Stricter thresholds: HIGH ≥ 60, MED ≥ 40
 export function numericBucket(score: number): Severity {
-  // High is stricter
-  if (score >= 55) return "high";
-  if (score >= 35) return "medium";
+  if (score >= 60) return "high";
+  if (score >= 40) return "medium";
   return "low";
 }
 
 /**
- * Visual bucket that also respects reasons:
+ * Visual bucket that respects reasons:
  *  - Any HIGH reason → "high"
- *  - Else any MED reason → "medium"
- *  - Else by numeric thresholds
+ *  - Any MED reason → at least "medium"
+ *  - Otherwise by numeric thresholds
  */
 export function visualBucket(resultOrScore: ScoreResult | number): Severity {
-  const result: ScoreResult =
+  const res: ScoreResult =
     typeof resultOrScore === "number" ? { score: resultOrScore, reasons: [] } : resultOrScore;
 
-  const hasHigh = result.reasons.some(r => r.severity === "high");
-  const hasMed  = result.reasons.some(r => r.severity === "medium");
-
+  const hasHigh = res.reasons.some(r => r.severity === "high");
+  const hasMed  = res.reasons.some(r => r.severity === "medium");
   if (hasHigh) return "high";
   if (hasMed)  return "medium";
-  return numericBucket(result.score);
-}
-
-/* -------------------- utilities -------------------- */
-
-// Stable sorter for display: High→Med→Low, then label
-export function sortReasons(reasons: Reason[]): Reason[] {
-  const rank: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
-  return [...reasons].sort((a, b) =>
-    rank[a.severity] - rank[b.severity] || a.label.localeCompare(b.label)
-  );
+  return numericBucket(res.score);
 }
