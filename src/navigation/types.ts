@@ -1,5 +1,4 @@
 // src/navigation/types.ts
-
 export type RootTabParamList = {
   Home: undefined;
   Database: undefined;
@@ -9,5 +8,5 @@ export type RootTabParamList = {
 export type RootStackParamList = {
   Tabs: undefined;
   ReportDetail: { id: string };
-  AddContent: { editId?: string } | undefined; // ← allows both add and edit
+  AddContent: { editId?: string } | undefined; // ✅ optional editId
 };
