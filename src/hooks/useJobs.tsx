@@ -1,15 +1,6 @@
-import React from "react";
-import { Alert } from "react-native";
-
-export type Job = {
-  id: string;
-  title: string;
-  company: string;
-  url?: string;
-  notes?: string;
-  createdAt: number;
-  updatedAt: number;
-};
+import * as React from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { nanoid } from "nanoid/non-secure";
 
 export type JobInput = {
   title: string;
@@ -18,132 +9,156 @@ export type JobInput = {
   notes?: string;
 };
 
-export type JobPatch = Partial<JobInput>;
-
-type PendingDelete = {
-  job: Job;
-  originalIndex: number;
-  expiresAt: number; // epoch ms
-  timer?: ReturnType<typeof setTimeout>;
+export type Job = JobInput & {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
 };
 
 type Ctx = {
   items: Job[];
-  create(input: JobInput): Promise<Job>;
-  update(id: string, patch: JobPatch): Promise<void>;
-  deleteJob(id: string): Promise<void>;
-  undoDelete(): void;
-  pendingDelete: PendingDelete | null;
-  getById(id: string): Job | undefined;
-  replaceAll(next: Job[]): void; // (used by screens that resort)
+  create: (input: JobInput) => Promise<void>;
+  update: (id: string, patch: Partial<JobInput>) => Promise<void>;
+  deleteJob: (id: string) => Promise<Job | undefined>;
+  undoDelete: () => Promise<void>;
+  getById: (id: string) => Job | undefined;
+
+  exportJson: () => Promise<string>;
+  importJson: (json: string, opts?: { merge?: boolean }) => Promise<void>;
+  nukeStorage: () => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
-const JobsContext = React.createContext<Ctx | null>(null);
+const JobsContext = React.createContext<Ctx | undefined>(undefined);
 
-export function useJobs(): Ctx {
-  const ctx = React.useContext(JobsContext);
-  if (!ctx) {
-    throw new Error("useJobs must be used within JobsProvider");
-  }
-  return ctx;
-}
-
-const UNDO_MS = 6000;
+const STORAGE_KEY = "jobs.v1";
 
 export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<Job[]>([]);
-  const [pendingDelete, setPendingDelete] = React.useState<PendingDelete | null>(null);
+  const lastDeleted = React.useRef<Job | undefined>(undefined);
 
-  // helper
-  const getById = React.useCallback((id: string) => items.find(j => j.id === id), [items]);
+  const load = React.useCallback(async () => {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed: Job[] = JSON.parse(raw);
+      // basic shape guard
+      if (Array.isArray(parsed)) {
+        setItems(
+          parsed
+            .filter((j) => j && j.id && j.title && j.company)
+            .sort((a, b) => b.createdAt - a.createdAt)
+        );
+      }
+    } catch {
+      // ignore bad data
+    }
+  }, []);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  const persist = React.useCallback(async (next: Job[]) => {
+    setItems(next);
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  }, []);
 
   const create = React.useCallback(async (input: JobInput) => {
     const now = Date.now();
     const job: Job = {
-      id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
+      id: nanoid(),
       title: input.title.trim(),
       company: input.company.trim(),
-      url: input.url?.trim() || undefined,
-      notes: input.notes?.trim() || undefined,
+      url: input.url?.trim(),
+      notes: input.notes?.trim(),
       createdAt: now,
       updatedAt: now,
     };
-    setItems(prev => [job, ...prev]);
-    return job;
-  }, []);
+    await persist([job, ...items]);
+  }, [items, persist]);
 
-  const update = React.useCallback(async (id: string, patch: JobPatch) => {
+  const update = React.useCallback(async (id: string, patch: Partial<JobInput>) => {
     const now = Date.now();
-    setItems(prev =>
-      prev.map(j =>
-        j.id === id
-          ? {
-              ...j,
-              ...patch,
-              title: patch.title?.trim() ?? j.title,
-              company: patch.company?.trim() ?? j.company,
-              url: patch.url?.trim() || undefined,
-              notes: patch.notes?.trim() || undefined,
-              updatedAt: now,
-            }
-          : j
-      )
+    const next = items.map((j) =>
+      j.id === id
+        ? {
+            ...j,
+            ...("title" in patch ? { title: patch.title?.trim() ?? j.title } : {}),
+            ...("company" in patch ? { company: patch.company?.trim() ?? j.company } : {}),
+            ...("url" in patch ? { url: patch.url?.trim() || undefined } : {}),
+            ...("notes" in patch ? { notes: (patch.notes ?? "").trim() || undefined } : {}),
+            updatedAt: now,
+          }
+        : j
     );
-  }, []);
+    await persist(next);
+  }, [items, persist]);
 
-  // Soft delete with Undo window
   const deleteJob = React.useCallback(async (id: string) => {
-    // If another pending delete exists, finalize it first
-    setPendingDelete(prev => {
-      if (prev?.timer) clearTimeout(prev.timer);
-      return null;
-    });
+    const j = items.find((x) => x.id === id);
+    if (!j) return undefined;
+    lastDeleted.current = j;
+    await persist(items.filter((x) => x.id !== id));
+    return j;
+  }, [items, persist]);
 
-    setItems(prev => {
-      const idx = prev.findIndex(j => j.id === id);
-      if (idx < 0) return prev;
-      const job = prev[idx];
+  const undoDelete = React.useCallback(async () => {
+    if (!lastDeleted.current) return;
+    const restored = lastDeleted.current;
+    lastDeleted.current = undefined;
+    await persist([restored, ...items]);
+  }, [items, persist]);
 
-      const next = [...prev.slice(0, idx), ...prev.slice(idx + 1)];
-      const pd: PendingDelete = {
-        job,
-        originalIndex: idx,
-        expiresAt: Date.now() + UNDO_MS,
-      };
-      pd.timer = setTimeout(() => {
-        // when time elapses, commit by clearing pending
-        setPendingDelete(null);
-      }, UNDO_MS);
-      setPendingDelete(pd);
+  const getById = React.useCallback((id: string) => {
+    return items.find((x) => x.id === id);
+  }, [items]);
 
-      return next;
-    });
-  }, []);
+  // ----- Import / Export / Clear -----
 
-  const undoDelete = React.useCallback(() => {
-    setPendingDelete(prev => {
-      if (!prev) return null;
-      if (prev.timer) clearTimeout(prev.timer);
+  const exportJson = React.useCallback(async () => {
+    // return JSON string; SettingsScreen will share it
+    return JSON.stringify(items, null, 2);
+  }, [items]);
 
-      setItems(cur => {
-        const idx = Math.min(Math.max(prev.originalIndex, 0), cur.length);
-        const next = [...cur];
-        next.splice(idx, 0, prev.job);
-        return next;
-      });
+  const importJson = React.useCallback(
+    async (json: string, opts?: { merge?: boolean }) => {
+      const incoming = JSON.parse(json) as Job[];
+      if (!Array.isArray(incoming)) throw new Error("Invalid JSON");
+      const clean = incoming
+        .filter((j) => j && j.id && j.title && j.company)
+        .map((j) => ({
+          ...j,
+          url: j.url || undefined,
+          notes: j.notes || undefined,
+        }));
 
-      return null;
-    });
-  }, []);
+      if (opts?.merge) {
+        // merge by id (incoming wins)
+        const map = new Map<string, Job>();
+        for (const j of items) map.set(j.id, j);
+        for (const j of clean) map.set(j.id, j);
+        const next = Array.from(map.values()).sort(
+          (a, b) => b.createdAt - a.createdAt
+        );
+        await persist(next);
+      } else {
+        // replace
+        const next = clean.sort((a, b) => b.createdAt - a.createdAt);
+        await persist(next);
+      }
+    },
+    [items, persist]
+  );
 
-  const replaceAll = React.useCallback((next: Job[]) => setItems(next), []);
+  const nukeStorage = React.useCallback(async () => {
+    lastDeleted.current = undefined;
+    await persist([]);
+  }, [persist]);
 
-  // Safety: if component unmounts, clear timer
-  React.useEffect(() => {
-    return () => {
-      if (pendingDelete?.timer) clearTimeout(pendingDelete.timer);
-    };
-  }, [pendingDelete]);
+  const refresh = React.useCallback(async () => {
+    await load();
+  }, [load]);
 
   const value: Ctx = {
     items,
@@ -151,10 +166,18 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
     update,
     deleteJob,
     undoDelete,
-    pendingDelete,
     getById,
-    replaceAll,
+    exportJson,
+    importJson,
+    nukeStorage,
+    refresh,
   };
 
   return <JobsContext.Provider value={value}>{children}</JobsContext.Provider>;
+}
+
+export function useJobs(): Ctx {
+  const ctx = React.useContext(JobsContext);
+  if (!ctx) throw new Error("useJobs must be used within JobsProvider");
+  return ctx;
 }

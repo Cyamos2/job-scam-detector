@@ -1,4 +1,3 @@
-// src/screens/SettingsScreen.tsx
 import React from "react";
 import {
   View,
@@ -8,35 +7,34 @@ import {
   Modal,
   TextInput,
   Alert,
+  Share as RNShare,
 } from "react-native";
-import * as RN from "react-native";
 import Screen from "../components/Screen";
 import {
   useSettings,
-  resolveThemeName,
   type ThemeName,
   type RiskFilter,
 } from "../SettingsProvider";
-import { exportJobs, importJobs } from "../store/persist";
 import { useTheme } from "@react-navigation/native";
+import { useJobs } from "../hooks/useJobs";
 
 const ORANGE = "#FF5733";
 
 export default function SettingsScreen() {
   const { colors } = useTheme();
   const { settings, setSettings } = useSettings();
+  const { exportJson, importJson, nukeStorage } = useJobs();
 
   const [importVisible, setImportVisible] = React.useState(false);
   const [importText, setImportText] = React.useState("");
 
   const setTheme = (theme: ThemeName) => setSettings({ theme });
-  const setRisk = (risk: RiskFilter) =>
-    setSettings({ defaultRiskFilter: risk });
+  const setRisk = (risk: RiskFilter) => setSettings({ defaultRiskFilter: risk });
 
   const onExport = async () => {
     try {
-      const json = await exportJobs();
-      await RN.Share.share({ message: json });
+      const json = await exportJson();
+      await RNShare.share({ message: json });
     } catch (e) {
       Alert.alert("Export failed", String(e ?? "Unknown error"));
     }
@@ -44,16 +42,20 @@ export default function SettingsScreen() {
 
   const onImport = async () => {
     try {
-      await importJobs(importText);
+      await importJson(importText, { merge: true });
       setImportVisible(false);
       setImportText("");
-      Alert.alert(
-        "Import complete",
-        "Your database has been replaced from JSON."
-      );
+      Alert.alert("Import complete", "Imported (merged) successfully.");
     } catch (e) {
       Alert.alert("Import failed", String(e ?? "Invalid JSON"));
     }
+  };
+
+  const onClear = () => {
+    Alert.alert("Clear all?", "This removes all saved posts.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Clear", style: "destructive", onPress: nukeStorage },
+    ]);
   };
 
   return (
@@ -126,17 +128,17 @@ export default function SettingsScreen() {
               Export JSON
             </Text>
           </Pressable>
-          <Pressable
-            onPress={() => setImportVisible(true)}
-            style={styles.chip}
-          >
+          <Pressable onPress={() => setImportVisible(true)} style={styles.chip}>
             <Text style={[styles.chipText, { color: colors.text }]}>
               Import JSON
             </Text>
           </Pressable>
+          <Pressable onPress={onClear} style={[styles.chip, { borderColor: "#fca5a5" }]}>
+            <Text style={[styles.chipText, { color: "#b91c1c" }]}>Clear all</Text>
+          </Pressable>
         </View>
         <Text style={[styles.note, { color: colors.text }]}>
-          Export shares a JSON snapshot. Import replaces your local database.
+          Export shares a JSON snapshot. Import merges into your database.
         </Text>
       </View>
 
@@ -181,9 +183,7 @@ export default function SettingsScreen() {
               onPress={onImport}
               style={[styles.chip, { backgroundColor: "#1f6cff" }]}
             >
-              <Text style={[styles.chipText, { color: "#fff" }]}>
-                Import
-              </Text>
+              <Text style={[styles.chipText, { color: "#fff" }]}>Import</Text>
             </Pressable>
           </View>
         </Screen>
