@@ -2,202 +2,278 @@ import * as React from "react";
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   SectionList,
   Pressable,
-  TextInput,
+  Platform,
 } from "react-native";
-import { useNavigation, useTheme } from "@react-navigation/native";
+import { useTheme, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useJobs, type Job } from "../hooks/useJobs";
-import { scoreJob, visualBucket, type Severity } from "../lib/scoring";
-import ScoreBadge from "../components/ScoreBadge";
+
+import Screen from "../components/Screen";
+import JobRow from "../components/JobRow";
 import UndoBar from "../components/UndoBar";
+import { useJobs } from "../hooks/useJobs";
+import { scoreJob, visualBucket, type Severity } from "../lib/scoring";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-type SortKey = "scoreDesc" | "scoreAsc" | "dateDesc" | "dateAsc" | "titleAsc" | "titleDesc";
+type SortKey = "score" | "date" | "title";
+type SortDir = "asc" | "desc";
+type RiskFilter = "all" | "high" | "medium" | "low";
 
 export default function DatabaseScreen() {
+  const { colors, dark } = useTheme();
   const nav = useNavigation<Nav>();
-  const { colors } = useTheme();
-  const { items, replaceAll } = useJobs();
 
+  const {
+    items,
+    deleteJob,
+    lastDeleted,
+    restoreLastDeleted,
+    clearUndoFlag,
+  } = useJobs();
+
+  // --- UI state
   const [query, setQuery] = React.useState("");
-  const [sort, setSort] = React.useState<SortKey>("scoreDesc");
+  const [risk, setRisk] = React.useState<RiskFilter>("all");
 
-  const filtered = React.useMemo(() => {
+  const [sortKey, setSortKey] = React.useState<SortKey>("score");
+  const [sortDir, setSortDir] = React.useState<SortDir>("desc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
+  // --- Prepare rows: score + reasons + bucket
+  const rows = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    return items.filter(j => {
-      if (!q) return true;
-      return (
-        j.title.toLowerCase().includes(q) ||
-        j.company.toLowerCase().includes(q) ||
-        (j.url ?? "").toLowerCase().includes(q)
-      );
-    });
-  }, [items, query]);
-
-  const sorted = React.useMemo(() => {
-    const rows = filtered.map(j => {
-      const r = scoreJob({
+    const scored = items.map((j) => {
+      const result = scoreJob({
         title: j.title,
         company: j.company,
-        url: j.url,
-        notes: j.notes,
+        url: j.url ?? undefined,
+        notes: j.notes ?? undefined,
       });
-      return { job: j, result: r, bucket: visualBucket(r) as Severity };
+      const bucket = visualBucket(result);
+      return { job: j, result, bucket };
     });
 
-    const key = sort;
-    rows.sort((a, b) => {
-      switch (key) {
-        case "scoreDesc":
-          return b.result.score - a.result.score;
-        case "scoreAsc":
-          return a.result.score - b.result.score;
-        case "dateDesc":
-          return (b.job.createdAt ?? 0) - (a.job.createdAt ?? 0);
-        case "dateAsc":
-          return (a.job.createdAt ?? 0) - (b.job.createdAt ?? 0);
-        case "titleAsc":
-          return a.job.title.localeCompare(b.job.title);
-        case "titleDesc":
-          return b.job.title.localeCompare(a.job.title);
-      }
+    // filter by search
+    const filteredByQuery = !q
+      ? scored
+      : scored.filter(({ job }) => {
+          const blob = `${job.title} ${job.company} ${job.url ?? ""}`.toLowerCase();
+          return blob.includes(q);
+        });
+
+    // filter by risk chip
+    const filtered =
+      risk === "all" ? filteredByQuery : filteredByQuery.filter((r) => r.bucket === risk);
+
+    // sort
+    filtered.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "score") cmp = a.result.score - b.result.score;
+      else if (sortKey === "date") cmp = (a.job.ts ?? 0) - (b.job.ts ?? 0);
+      else if (sortKey === "title") cmp = a.job.title.localeCompare(b.job.title);
+      return sortDir === "asc" ? cmp : -cmp;
     });
 
-    return rows;
-  }, [filtered, sort]);
+    return filtered;
+  }, [items, query, risk, sortKey, sortDir]);
 
+  // --- Group by visual bucket
   const sections = React.useMemo(() => {
-    const high = sorted.filter(r => r.bucket === "high");
-    const med  = sorted.filter(r => r.bucket === "medium");
-    const low  = sorted.filter(r => r.bucket === "low");
-    const s: Array<{ title: string; color: string; data: typeof sorted }> = [];
-    if (high.length) s.push({ title: "High Risk", color: "#FECACA", data: high });
-    if (med.length)  s.push({ title: "Medium Risk", color: "#FDE68A", data: med });
-    if (low.length)  s.push({ title: "Low Risk", color: "#D1FAE5", data: low });
-    return s;
-  }, [sorted]);
+    const buckets: Severity[] = ["high", "medium", "low"];
+    const labels: Record<Severity, string> = {
+      high: "High Risk",
+      medium: "Medium Risk",
+      low: "Low Risk",
+    };
 
-  // sort toggle labels
-  const sortLabel = React.useMemo(() => {
-    switch (sort) {
-      case "scoreDesc": return "Score ↓";
-      case "scoreAsc":  return "Score ↑";
-      case "dateDesc":  return "Date ↓";
-      case "dateAsc":   return "Date ↑";
-      case "titleAsc":  return "Title A→Z";
-      case "titleDesc": return "Title Z→A";
-    }
-  }, [sort]);
+    return buckets
+      .map((b) => ({
+        title: labels[b],
+        key: b,
+        data: rows.filter((r) => r.bucket === b),
+      }))
+      .filter((s) => s.data.length > 0);
+  }, [rows]);
 
-  const cycleScore = () => setSort(s => (s === "scoreDesc" ? "scoreAsc" : "scoreDesc"));
-  const cycleDate  = () => setSort(s => (s === "dateDesc"  ? "dateAsc"  : "dateDesc"));
-  const cycleTitle = () => setSort(s => (s === "titleAsc"  ? "titleDesc" : "titleAsc"));
+  // --- Delete handlers
+  const onDelete = (id: string) => deleteJob(id);
+  const onUndo = () => restoreLastDeleted();
+  const onUndoHide = () => clearUndoFlag();
+
+  // --- Empty state?
+  const empty = sections.length === 0;
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <Screen>
       {/* Search */}
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search by company or role"
-        placeholderTextColor="#9aa0a6"
-        style={[styles.search, { color: colors.text, backgroundColor: colors.card }]}
-      />
+      <View style={styles.searchWrap}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search by company or role"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.search,
+            {
+              color: colors.text,
+              backgroundColor: colors.card,
+              borderColor: "#E5E7EB",
+            },
+          ]}
+        />
+      </View>
 
-      {/* Sort toggles */}
-      <View style={styles.sortRow}>
-        <Pressable style={styles.chip} onPress={cycleScore}><Text style={styles.chipText}>{sortLabel.startsWith("Score") ? sortLabel : "Score ↓"}</Text></Pressable>
-        <Pressable style={styles.chip} onPress={cycleDate}><Text style={styles.chipText}>{sortLabel.startsWith("Date") ? sortLabel : "Date"}</Text></Pressable>
-        <Pressable style={styles.chip} onPress={cycleTitle}><Text style={styles.chipText}>{sortLabel.startsWith("Title") ? sortLabel : "Title A→Z"}</Text></Pressable>
-        <Pressable style={styles.chip} onPress={() => setQuery(q => q)}><Text style={styles.chipText}>Refresh</Text></Pressable>
+      {/* Filter + Sort row */}
+      <View style={styles.toolbar}>
+        <View style={styles.chipsRow}>
+          {(["all", "low", "medium", "high"] as const).map((r) => {
+            const active = risk === r;
+            return (
+              <Pressable
+                key={r}
+                onPress={() => setRisk(r)}
+                style={[styles.chip, active && styles.chipActive]}
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    active && styles.chipTextActive,
+                  ]}
+                >
+                  {r.toUpperCase()}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <View style={[styles.chipsRow, { marginTop: 10 }]}>
+          <Pressable onPress={() => toggleSort("score")} style={styles.sortChip}>
+            <Text style={styles.sortLabel}>
+              Score {sortKey === "score" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => toggleSort("date")} style={styles.sortChip}>
+            <Text style={styles.sortLabel}>
+              Date {sortKey === "date" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => toggleSort("title")} style={styles.sortChip}>
+            <Text style={styles.sortLabel}>
+              Title {sortKey === "title" ? (sortDir === "asc" ? "↑" : "↓") : ""}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* List */}
-      {sections.length === 0 ? (
-        <View style={styles.empty}><Text style={{ color: "#6B7280" }}>No results.</Text></View>
+      {empty ? (
+        <View style={styles.empty}>
+          <Text style={{ color: "#6B7280" }}>No results.</Text>
+        </View>
       ) : (
         <SectionList
           sections={sections}
-          keyExtractor={(item) => item.job.id}
+          keyExtractor={(row) => row.job.id}
+          stickySectionHeadersEnabled
           renderSectionHeader={({ section }) => (
-            <View style={[styles.section, { backgroundColor: section.color }]}><Text style={styles.sectionText}>{section.title}</Text></View>
-          )}
-          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => nav.navigate("ReportDetail", { id: item.job.id })}
-              style={[styles.row, { backgroundColor: colors.card }]}
+            <View
+              style={[
+                styles.sectionHeader,
+                section.key === "high"
+                  ? { backgroundColor: "#FEE2E2" }
+                  : section.key === "medium"
+                  ? { backgroundColor: "#FEF3C7" }
+                  : { backgroundColor: "#DCFCE7" },
+              ]}
             >
-              <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>{item.job.title}</Text>
-                <Text style={[styles.meta, { color: colors.text }]} numberOfLines={1}>
-                  {item.job.company}
-                  {item.job.url ? `  ·  ${item.job.url}` : ""}
-                </Text>
-              </View>
-              <ScoreBadge score={item.result.score} />
-            </Pressable>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            </View>
           )}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          renderItem={({ item }) => (
+            <JobRow
+              job={item.job}
+              score={item.result.score}
+              reasons={item.result.reasons}
+              bucket={item.bucket}
+              onPress={() => nav.navigate("ReportDetail", { id: item.job.id })}
+              onLongPress={() => onDelete(item.job.id)}
+            />
+          )}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          SectionSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       )}
 
-      {/* FAB */}
-      <Pressable
-        onPress={() => nav.navigate("AddContent")}
-        style={styles.fab}
-      >
-        <Text style={styles.fabPlus}>＋</Text>
-      </Pressable>
-
-      {/* Global Undo */}
-      <UndoBar />
-    </View>
+      {/* Bottom Undo snackbar */}
+      <UndoBar
+        visible={!!lastDeleted}
+        message="Item deleted"
+        actionLabel="Undo"
+        onAction={onUndo}
+        onHide={onUndoHide}
+        duration={2500}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  searchWrap: { paddingHorizontal: 16, paddingTop: 8 },
   search: {
-    margin: 16,
+    borderWidth: 1,
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 8,
+  },
+
+  toolbar: { paddingHorizontal: 16, paddingTop: 10 },
+  chipsRow: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
   },
-  sortRow: { flexDirection: "row", gap: 10, paddingHorizontal: 16, marginBottom: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#F9FAFB" },
+  chipActive: { borderColor: "#2563EB", backgroundColor: "#EFF6FF" },
   chipText: { fontWeight: "700", color: "#111" },
+  chipTextActive: { color: "#1D4ED8" },
 
-  section: { marginTop: 12, marginHorizontal: 16, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  sectionText: { color: "#7F1D1D", fontWeight: "800" },
-
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginHorizontal: 16,
-    padding: 12,
-    borderRadius: 12,
+  sortChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+    backgroundColor: "#fff",
   },
-  title: { fontSize: 16, fontWeight: "800" },
-  meta: { marginTop: 2 },
+  sortLabel: { fontWeight: "700", color: "#111" },
+
+  sectionHeader: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  sectionTitle: { fontWeight: "800", color: "#991B1B" },
 
   empty: { flex: 1, alignItems: "center", justifyContent: "center" },
-
-  fab: {
-    position: "absolute", right: 20, bottom: 20,
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: "#2563EB",
-    alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 12, elevation: 6,
-  },
-  fabPlus: { color: "#fff", fontSize: 32, lineHeight: 36, fontWeight: "800" },
 });

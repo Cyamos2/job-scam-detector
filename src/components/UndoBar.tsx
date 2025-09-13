@@ -1,54 +1,88 @@
 import * as React from "react";
-import { View, Text, StyleSheet, Pressable, Platform } from "react-native";
-import { useJobs } from "../hooks/useJobs";
+import { Animated, Easing, StyleSheet, Text, Pressable, View } from "react-native";
 
-export default function UndoBar() {
-  const { pendingDelete, undoDelete } = useJobs();
+type Props = {
+  visible: boolean;
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  onHide?: () => void;
+  duration?: number; // ms
+};
 
-  if (!pendingDelete) return null;
+export default function UndoBar({
+  visible,
+  message,
+  actionLabel = "Undo",
+  onAction,
+  onHide,
+  duration = 2500,
+}: Props) {
+  const y = React.useRef(new Animated.Value(80)).current; // offscreen
+  const timer = React.useRef<NodeJS.Timeout | null>(null);
 
-  const secondsLeft = Math.max(0, Math.ceil((pendingDelete.expiresAt - Date.now()) / 1000));
+  const hide = React.useCallback(() => {
+    Animated.timing(y, {
+      toValue: 80,
+      duration: 180,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => onHide && onHide());
+  }, [y, onHide]);
+
+  React.useEffect(() => {
+    if (!visible) return;
+    // slide up
+    Animated.timing(y, {
+      toValue: 0,
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    // auto-hide
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(hide, duration);
+
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [visible, duration, hide, y]);
+
+  if (!visible) return null;
 
   return (
-    <View style={styles.wrapper} pointerEvents="box-none">
-      <View style={styles.bar}>
-        <Text style={styles.text} numberOfLines={1}>
-          Deleted “{pendingDelete.job.title}”
-          {Platform.OS === "ios" ? "" : `  (${secondsLeft}s)`}
-        </Text>
-        <Pressable onPress={undoDelete} style={styles.btn}>
-          <Text style={styles.btnText}>Undo</Text>
-        </Pressable>
+    <Animated.View style={[styles.wrap, { transform: [{ translateY: y }] }]}>
+      <View style={styles.snack}>
+        <Text style={styles.msg}>{message}</Text>
+        {onAction ? (
+          <Pressable onPress={onAction} style={styles.btn}>
+            <Text style={styles.btnText}>{actionLabel}</Text>
+          </Pressable>
+        ) : null}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
+  wrap: {
     position: "absolute",
-    bottom: 16,
     left: 0,
     right: 0,
+    bottom: 12,
     alignItems: "center",
+    zIndex: 50,
   },
-  bar: {
-    maxWidth: 520,
-    width: "94%",
-    backgroundColor: "#111827",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+  snack: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-  text: { color: "#fff", fontWeight: "600", marginRight: 12, flex: 1 },
-  btn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#374151",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#111827",
     borderRadius: 999,
   },
+  msg: { color: "#fff", fontWeight: "700", marginRight: 12 },
+  btn: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: "#374151" },
   btnText: { color: "#fff", fontWeight: "800" },
 });
