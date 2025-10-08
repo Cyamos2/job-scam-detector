@@ -18,13 +18,26 @@ import Screen from "../components/Screen";
 import JobRow from "../components/JobRow";
 import UndoBar from "../components/UndoBar";
 import { useJobs } from "../hooks/useJobs";
-import { scoreJob, visualBucket, type Severity } from "../lib/scoring";
+import type { Job } from "../hooks/useJobs"; // <-- Job type
+import {
+  scoreJob,
+  visualBucket,
+  type Severity,
+  type ScoreResult,
+  type Reason,
+} from "../lib/scoring";
 import type { RootStackParamList } from "../navigation/types";
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SortKey = "score" | "date" | "title";
 type SortDir = "asc" | "desc";
 type RiskFilter = "all" | "high" | "medium" | "low";
+
+type Row = {
+  job: Job;
+  result: ScoreResult; // <-- matches scoring.ts return
+  bucket: Severity;
+};
 
 export default function DatabaseScreen() {
   const { colors, dark } = useTheme();
@@ -33,12 +46,24 @@ export default function DatabaseScreen() {
 
   const { items, deleteJob, undoDelete } = useJobs();
 
+  // UI state
   const [query, setQuery] = React.useState("");
   const [risk, setRisk] = React.useState<RiskFilter>("all");
   const [sortKey, setSortKey] = React.useState<SortKey>("score");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
-  const [showUndo, setShowUndo] = React.useState(false);
 
+  // Undo (visible for 60s)
+  const [showUndo, setShowUndo] = React.useState(false);
+  const undoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const UNDO_DURATION_MS = 60_000;
+
+  React.useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
+  // Header Add button
   React.useLayoutEffect(() => {
     nav.setOptions({
       headerRight: () => (
@@ -54,10 +79,11 @@ export default function DatabaseScreen() {
     });
   }, [nav]);
 
-  const rows = React.useMemo(() => {
+  // Build rows -> filter -> sort
+  const rows = React.useMemo<Row[]>(() => {
     const q = query.trim().toLowerCase();
 
-    const scored = items.map((job) => {
+    const scored: Row[] = items.map((job) => {
       const result = scoreJob({
         title: job.title,
         company: job.company,
@@ -68,16 +94,15 @@ export default function DatabaseScreen() {
       return { job, result, bucket };
     });
 
-    const filteredQuery = !q
+    const byQuery = !q
       ? scored
       : scored.filter(({ job }) =>
           `${job.title} ${job.company} ${job.url ?? ""}`.toLowerCase().includes(q)
         );
 
-    const filtered =
-      risk === "all" ? filteredQuery : filteredQuery.filter((r) => r.bucket === risk);
+    const byRisk = risk === "all" ? byQuery : byQuery.filter((r) => r.bucket === risk);
 
-    filtered.sort((a, b) => {
+    byRisk.sort((a, b) => {
       let cmp = 0;
       if (sortKey === "score") cmp = a.result.score - b.result.score;
       else if (sortKey === "date") cmp = a.job.updatedAt - b.job.updatedAt;
@@ -85,28 +110,36 @@ export default function DatabaseScreen() {
       return sortDir === "asc" ? cmp : -cmp;
     });
 
-    return filtered;
+    return byRisk;
   }, [items, query, risk, sortKey, sortDir]);
 
-  const sections = React.useMemo(() => {
-    const buckets: Severity[] = ["high", "medium", "low"];
-    const labels: Record<Severity, string> = {
-      high: "High Risk",
-      medium: "Medium Risk",
-      low: "Low Risk",
-    };
-    return buckets
-      .map((b) => ({
-        title: labels[b],
-        key: b,
-        data: rows.filter((r) => r.bucket === b),
-      }))
-      .filter((s) => s.data.length > 0);
-  }, [rows]);
+  // Sections by severity
+  const sections = React.useMemo(
+    () =>
+      (["high", "medium", "low"] as Severity[])
+        .map((sev) => ({
+          title: sev === "high" ? "High Risk" : sev === "medium" ? "Medium Risk" : "Low Risk",
+          key: sev,
+          data: rows.filter((r) => r.bucket === sev),
+        }))
+        .filter((s) => s.data.length > 0),
+    [rows]
+  );
 
+  const empty = sections.length === 0;
+
+  // Delete + confirm + undo (60s)
   const onDelete = async (id: string) => {
     await deleteJob(id);
     setShowUndo(true);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setShowUndo(false), UNDO_DURATION_MS);
+  };
+
+  const onUndo = async () => {
+    await undoDelete();
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setShowUndo(false);
   };
 
   const confirmDelete = (id: string) => {
@@ -117,7 +150,7 @@ export default function DatabaseScreen() {
           destructiveButtonIndex: 1,
           cancelButtonIndex: 0,
           title: "Delete this job?",
-          message: "You can Undo right after deleting.",
+          message: "You can Undo for up to 1 minute after deleting.",
         },
         (idx) => {
           if (idx === 1) onDelete(id);
@@ -126,7 +159,7 @@ export default function DatabaseScreen() {
     } else {
       Alert.alert(
         "Delete this job?",
-        "You can Undo right after deleting.",
+        "You can Undo for up to 1 minute after deleting.",
         [
           { text: "Cancel", style: "cancel" },
           { text: "Delete", style: "destructive", onPress: () => onDelete(id) },
@@ -135,13 +168,6 @@ export default function DatabaseScreen() {
       );
     }
   };
-
-  const onUndo = async () => {
-    await undoDelete();
-    setShowUndo(false);
-  };
-
-  const empty = sections.length === 0;
 
   return (
     <Screen>
@@ -160,6 +186,9 @@ export default function DatabaseScreen() {
               borderColor: "#E5E7EB",
             },
           ]}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
         />
       </View>
 
@@ -183,24 +212,27 @@ export default function DatabaseScreen() {
         </View>
 
         <View style={[styles.chipsRow, { marginTop: 10 }]}>
-          {(["score", "date", "title"] as const).map((key) => (
-            <Pressable
-              key={key}
-              onPress={() =>
-                setSortKey((prev) =>
-                  prev === key
-                    ? (setSortDir((d) => (d === "asc" ? "desc" : "asc")), key)
-                    : (setSortDir("desc"), key)
-                )
-              }
-              style={styles.sortChip}
-            >
-              <Text style={styles.sortLabel}>
-                {key[0].toUpperCase() + key.slice(1)}{" "}
-                {sortKey === key ? (sortDir === "asc" ? "↑" : "↓") : ""}
-              </Text>
-            </Pressable>
-          ))}
+          {(["score", "date", "title"] as const).map((key) => {
+            const active = sortKey === key;
+            const arrow = active ? (sortDir === "asc" ? "↑" : "↓") : "";
+            return (
+              <Pressable
+                key={key}
+                onPress={() => {
+                  if (active) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+                  else {
+                    setSortKey(key);
+                    setSortDir("desc");
+                  }
+                }}
+                style={styles.sortChip}
+              >
+                <Text style={styles.sortLabel}>
+                  {key[0].toUpperCase() + key.slice(1)} {arrow}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 
@@ -235,7 +267,7 @@ export default function DatabaseScreen() {
             <JobRow
               job={item.job}
               score={item.result.score}
-              reasons={item.result.reasons}
+              reasons={item.result.reasons as Reason[]} // matches JobRow prop
               bucket={item.bucket}
               onPress={() => nav.navigate("ReportDetail", { id: item.job.id })}
               onLongPress={() => confirmDelete(item.job.id)}
@@ -249,20 +281,28 @@ export default function DatabaseScreen() {
 
       {/* Floating Add */}
       <View pointerEvents="box-none" style={styles.fabWrap}>
-        <Pressable onPress={() => nav.navigate("AddContent")} style={styles.fab}>
+        <Pressable
+          onPress={() => nav.navigate("AddContent")}
+          style={styles.fab}
+          accessibilityRole="button"
+          accessibilityLabel="Add Job"
+        >
           <Text style={styles.fabPlus}>＋</Text>
         </Pressable>
       </View>
 
-      {/* Undo Snackbar (absolutely positioned above tab bar) */}
-      <View pointerEvents="box-none" style={[styles.snackbarWrap, { bottom: insets.bottom + 70 }]}>
+      {/* Undo Snackbar (above tab bar) */}
+      <View
+        pointerEvents="box-none"
+        style={[styles.snackbarWrap, { bottom: insets.bottom + 70 }]}
+      >
         <UndoBar
           visible={showUndo}
           message="Item deleted"
           actionLabel="Undo"
           onAction={onUndo}
           onHide={() => setShowUndo(false)}
-          duration={2500}
+          duration={UNDO_DURATION_MS}
         />
       </View>
     </Screen>
@@ -313,6 +353,7 @@ const styles = StyleSheet.create({
   sectionTitle: { fontWeight: "800", color: "#991B1B" },
 
   empty: { flex: 1, alignItems: "center", justifyContent: "center" },
+
   addBtn: {
     paddingHorizontal: 18,
     paddingVertical: 10,
@@ -341,6 +382,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-    // bottom set dynamically using safe area + 70
+    // bottom set via safe-area insets
   },
 });
