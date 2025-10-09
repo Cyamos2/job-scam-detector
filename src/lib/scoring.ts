@@ -69,16 +69,28 @@ function tldOf(host?: string | null): string | null {
 }
 
 // Very simple brand/host “match” heuristic
+function cleanCompany(company: string) {
+  return company
+    .toLowerCase()
+    .replace(/\b(inc|llc|ltd|co|corp|limited|incorporated|company)\b/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
 function companyMatchesHost(company: string, host?: string | null): boolean {
   if (!company || !host) return true; // don’t penalize unknowns
-  const c = norm(company).replace(/[^a-z0-9]/g, "");
+  const c = cleanCompany(company);
   if (!c) return true;
-  // check presence of company token in host (minus common prefixes)
-  const h = host
-    .replace(/^www\./, "")
-    .replace(/[^a-z0-9.]/g, "");
+  const h = host.replace(/^www\./, "").replace(/[^a-z0-9.]/g, "");
   return h.includes(c);
 }
+
+function parseHourly(text: string): number | null {
+  const m = text.match(/\$?\s*([1-9]\d{1,2})(?:\s*-\s*\$?\s*\d{2,3})?\s*\/?\s*(?:hr|hour|h)\b/i);
+  return m ? Number(m[1]) : null;
+}
+
+const SHORTENERS = new Set(["bit.ly","t.co","tinyurl.com","goo.gl","linktr.ee","is.gd","ow.ly"]);
 
 /* ---------------- rules ---------------- */
 
@@ -100,7 +112,7 @@ const HIGH: Rule[] = [
     key: "payment-schemes",
     label: "Suspicious payments",
     explain: "Mentions crypto, wire, gift cards, Zelle/Cash App/Venmo for payment.",
-    re: rx("\\b(crypto|bitcoin|wire transfer|gift ?cards?|zelle|cash app|venmo)\\b"),
+    re: rx("\\b(crypto|bitcoin|wire transfer|gift ?cards?|zelle|cash ?app|venmo)\\b"),
   },
   {
     key: "check-scam",
@@ -145,7 +157,13 @@ const MED: Rule[] = [
     key: "off-platform",
     label: "Move off-platform",
     explain: "Push to chat on Telegram/WhatsApp/Signal/email.",
-    re: rx("\\b(telegram|whatsapp|signal)\\b"),
+    re: rx("\\b(telegram|whats ?app|signal)\\b"),
+  },
+  {
+    key: "short-link",
+    label: "Shortened link",
+    explain: "Uses a link shortener instead of a company domain.",
+    re: rx("\\b(bit\\.ly|t\\.co|tinyurl\\.com|goo\\.gl|linktr\\.ee|is\\.gd|ow\\.ly)\\b"),
   },
 ];
 
@@ -180,6 +198,12 @@ const FAILSAFE_KEYS = new Set([
 ]);
 
 /* ---------------- core scoring ---------------- */
+
+// Heavier weights → stricter grading
+const WEIGHTS = { high: 32, medium: 16, low: 8 };
+
+// Score thresholds (stricter)
+const THRESHOLDS = { HIGH_MIN: 70, MED_MIN: 25 };
 
 export function scoreJob(input: ScoreInput): ScoreResult {
   const text = blob(input);
@@ -224,30 +248,56 @@ export function scoreJob(input: ScoreInput): ScoreResult {
       explain: "Company name and website domain don’t appear to match.",
     });
   }
+  if (host && SHORTENERS.has(host)) {
+    reasons.push({
+      key: "shortener-host",
+      label: "Shortened link",
+      severity: "medium",
+      explain: "Link shortener hides the real site.",
+    });
+  }
+
+  // Pay heuristics (very high hourly for generic roles)
+  const hourly = parseHourly(text);
+  if (hourly !== null) {
+    if (hourly >= 65) {
+      reasons.push({
+        key: "implausible-pay-high",
+        label: "Implausible pay",
+        severity: "high",
+        explain: `Claims ~$${hourly}/hr; unusually high for generic roles.`,
+      });
+    } else if (hourly >= 45) {
+      reasons.push({
+        key: "implausible-pay-med",
+        label: "Unusual pay",
+        severity: "medium",
+        explain: `Claims ~$${hourly}/hr; higher than typical for many roles.`,
+      });
+    }
+  }
 
   // Weighted points by severity (cumulative)
-  const ptsHigh = 24;
-  const ptsMed  = 12;
-  const ptsLow  = 6;
-
   const countHigh = reasons.filter(r => r.severity === "high").length;
   const countMed  = reasons.filter(r => r.severity === "medium").length;
   const countLow  = reasons.filter(r => r.severity === "low").length;
 
   let raw =
-    countHigh * ptsHigh +
-    countMed  * ptsMed  +
-    countLow  * ptsLow;
+    countHigh * WEIGHTS.high +
+    countMed  * WEIGHTS.medium +
+    countLow  * WEIGHTS.low;
 
-  // Combo bonus: fee + suspicious payment → very strong signal
-  const hasFee   = reasons.some(r => r.key === "upfront-fee");
-  const hasPay   = reasons.some(r => r.key === "payment-schemes");
+  // Combo escalations
+  const hasFee = reasons.some(r => r.key === "upfront-fee");
+  const hasPay = reasons.some(r => r.key === "payment-schemes");
   if (hasFee && hasPay) raw = Math.max(raw, 95);
 
-  // Clamp range
+  if (countHigh >= 1 && countMed >= 1) raw = Math.max(raw, 75);
+
+  // Clamp & failsafe
   let score = Math.max(0, Math.min(100, raw));
 
-  // Failsafe: any critical flag -> minimum 90
+  // Any critical flag -> minimum 90
   const trippedFailsafe = reasons.some(r => FAILSAFE_KEYS.has(r.key));
   if (trippedFailsafe) score = Math.max(score, 90);
 
@@ -256,26 +306,24 @@ export function scoreJob(input: ScoreInput): ScoreResult {
 
 /* --------- buckets (visual) --------- */
 
-// Stricter thresholds: HIGH ≥ 60, MED ≥ 40
 export function numericBucket(score: number): Severity {
-  if (score >= 60) return "high";
-  if (score >= 40) return "medium";
+  if (score >= THRESHOLDS.HIGH_MIN) return "high";
+  if (score >= THRESHOLDS.MED_MIN)  return "medium";
   return "low";
 }
 
 /**
- * Visual bucket that respects reasons:
+ * Visual bucket (stricter):
  *  - Any HIGH reason → "high"
- *  - Any MED reason → at least "medium"
- *  - Otherwise by numeric thresholds
+ *  - Otherwise by numeric thresholds only
+ *    (a single MED reason no longer forces "medium")
  */
 export function visualBucket(resultOrScore: ScoreResult | number): Severity {
   const res: ScoreResult =
     typeof resultOrScore === "number" ? { score: resultOrScore, reasons: [] } : resultOrScore;
 
   const hasHigh = res.reasons.some(r => r.severity === "high");
-  const hasMed  = res.reasons.some(r => r.severity === "medium");
   if (hasHigh) return "high";
-  if (hasMed)  return "medium";
+
   return numericBucket(res.score);
 }

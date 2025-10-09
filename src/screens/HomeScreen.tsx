@@ -1,135 +1,174 @@
-import React from "react";
+import * as React from "react";
 import {
   View,
   Text,
-  Pressable,
+  StyleSheet,
   TextInput,
+  Pressable,
   Image,
   Platform,
-  StyleSheet,
-  Alert,
+  FlatList,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
-import { useNavigation, useTheme } from "@react-navigation/native";
-import type { NavigationProp } from "@react-navigation/native";
-import type { RootTabParamList } from "../navigation/types";
-import { goToAddContent } from "../navigation/goTo";
-import Screen from "../components/Screen";  // ✅
-import Logo from "../../assets/scamicide-logo.png";
+import {
+  useTheme,
+  useNavigation,
+  type CompositeNavigationProp,
+} from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
-const ORANGE = "#FF5733";
+import Screen from "../components/Screen";
+import JobRow from "../components/JobRow";
+import { useJobs } from "../hooks/useJobs";
+import { scoreJob, visualBucket, type Severity } from "../lib/scoring";
+import type { RootStackParamList, RootTabParamList } from "../navigation/types";
+
+// Composite: tabs + stack
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<RootTabParamList, "Home">,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 export default function HomeScreen() {
-  const navigation = useNavigation<NavigationProp<RootTabParamList>>();
   const { colors, dark } = useTheme();
-  const [query, setQuery] = React.useState("");
+  const nav = useNavigation<Nav>();
+  const { items } = useJobs();
 
-  const onStart = () => goToAddContent(navigation);
+  const [search, setSearch] = React.useState("");
 
-  const onPickScreenshot = async () => {
-    if (Platform.OS !== "web") {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission needed", "We need Photos access to pick a screenshot.");
-        return;
-      }
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 1,
-    });
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      navigation.getParent()?.navigate("Home", {
-        screen: "AddContent",
-        params: { presetUri: result.assets[0].uri },
+  const recent = React.useMemo(() => {
+    return [...items]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 3)
+      .map((job) => {
+        const result = scoreJob({
+          title: job.title,
+          company: job.company,
+          url: job.url,
+          notes: job.notes,
+        });
+        const bucket = visualBucket(result);
+        return { job, result, bucket };
       });
-    }
-  };
+  }, [items]);
+
+  const goDatabase = () => nav.navigate("Database");   // tab
+  const goAdd = () => nav.navigate("AddContent");      // stack
+  const goScan = () => nav.navigate("ScanScreen");     // stack
 
   return (
     <Screen>
-      <View style={styles.container}>
-        <Image source={Logo} resizeMode="contain" style={styles.logo} />
-
+      {/* Hero */}
+      <View style={styles.hero}>
+        <Image
+          source={require("../../assets/scamicide-logo.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
         <Text style={[styles.title, { color: colors.text }]}>Job Scam Detector</Text>
-        <Text style={[styles.subtitle, { color: dark ? "#cbd5e1" : "#6b7280" }]}>
+        <Text style={styles.subtitle}>
           Scan job posts, verify companies, avoid scams.
         </Text>
 
         <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Search by company or role"
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search your database…"
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          onFocus={goDatabase}
+          onSubmitEditing={goDatabase}
           style={[
             styles.search,
-            { backgroundColor: colors.card, borderColor: colors.border, color: colors.text },
+            {
+              color: colors.text,
+              backgroundColor: colors.card,
+              borderColor: "#E5E7EB",
+            },
           ]}
           returnKeyType="search"
         />
 
-        <View style={styles.actions}>
-          <Pressable onPress={onStart} style={[styles.ctaPrimary, { backgroundColor: ORANGE }]}>
-            <Text style={styles.ctaPrimaryText}>Start</Text>
+        {/* Quick actions */}
+        <View style={styles.actionsRow}>
+          <Pressable onPress={goAdd} style={[styles.primaryBtn, styles.btn]}>
+            <Text style={styles.primaryText}>Start</Text>
           </Pressable>
-          <Pressable
-            onPress={onPickScreenshot}
-            style={[styles.ctaSecondary, { backgroundColor: colors.card, borderColor: colors.border }]}
-          >
-            <Text style={[styles.ctaSecondaryText, { color: colors.text }]}>Pick Screenshot</Text>
+          <Pressable onPress={goScan} style={[styles.secondaryBtn, styles.btn]}>
+            <Text style={styles.secondaryText}>Pick Screenshot</Text>
           </Pressable>
         </View>
 
-        <Text style={[styles.helper, { color: dark ? "#94a3b8" : "#6b7280" }]}>
-          Tip: You can also paste a job link inside Add Content.
+        <Text style={styles.tip}>
+          Tip: You can also paste a job link on the Add screen.
         </Text>
       </View>
+
+      {/* Recent checks */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Recent checks</Text>
+        <Pressable onPress={goDatabase} hitSlop={8}>
+          <Text style={styles.sectionLink}>See all</Text>
+        </Pressable>
+      </View>
+
+      {recent.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={{ color: "#6B7280" }}>No saved jobs yet.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={recent}
+          keyExtractor={(r) => r.job.id}
+          renderItem={({ item }) => (
+            <JobRow
+              job={item.job}
+              score={item.result.score}
+              reasons={item.result.reasons}
+              bucket={item.bucket as Severity}
+              onPress={() => nav.navigate("ReportDetail", { id: item.job.id })}
+            />
+          )}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+        />
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    paddingHorizontal: 20,
-    justifyContent: "center",
-  },
-  logo: { width: 120, height: 120, marginBottom: 16 },
+  hero: { paddingHorizontal: 16, paddingTop: 16, alignItems: "center" },
+  logo: { width: 96, height: 96, marginBottom: 12 },
   title: { fontSize: 24, fontWeight: "800" },
-  subtitle: { fontSize: 14, marginTop: 4, textAlign: "center" },
+  subtitle: { color: "#6B7280", marginTop: 2, marginBottom: 16, textAlign: "center" },
   search: {
-    width: "100%",
-    marginTop: 18,
-    paddingHorizontal: 14,
+    alignSelf: "stretch",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === "ios" ? 12 : 8,
+  },
+  actionsRow: { alignSelf: "stretch", flexDirection: "row", gap: 12, marginTop: 12 },
+  btn: {
+    flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    borderWidth: 1,
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 18,
-    alignSelf: "stretch",
+    alignItems: "center",
     justifyContent: "center",
   },
-  ctaPrimary: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  ctaPrimaryText: { color: "#fff", fontWeight: "800", fontSize: 16 },
-  ctaSecondary: {
+  primaryBtn: { backgroundColor: "#EF4444" },
+  primaryText: { color: "white", fontWeight: "800" },
+  secondaryBtn: { backgroundColor: "#E5E7EB" },
+  secondaryText: { color: "#111827", fontWeight: "800" },
+  tip: { marginTop: 8, color: "#6B7280", fontSize: 12, textAlign: "center" },
+  sectionHeader: {
+    marginTop: 20,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  ctaSecondaryText: { fontWeight: "700", fontSize: 16 },
-  helper: { marginTop: 14, textAlign: "center" },
+  sectionTitle: { fontWeight: "800", color: "#111827" },
+  sectionLink: { color: "#2563EB", fontWeight: "700" },
+  empty: { paddingVertical: 24, alignItems: "center", justifyContent: "center" },
 });

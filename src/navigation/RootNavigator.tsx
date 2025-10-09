@@ -1,56 +1,45 @@
 // src/navigation/RootNavigator.tsx
-import React from "react";
+import * as React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { Ionicons } from "@expo/vector-icons";
 
+import type { RootStackParamList, RootTabParamList } from "./types";
+
+// Screens
 import HomeScreen from "../screens/HomeScreen";
 import DatabaseScreen from "../screens/DatabaseScreen";
 import SettingsScreen from "../screens/SettingsScreen";
-import ReportDetailScreen from "../screens/ReportDetailScreen";
 import AddContentScreen from "../screens/AddContentScreen";
-import type { RootStackParamList } from "./types";
+import ReportDetailScreen from "../screens/ReportDetailScreen";
+import ScanScreen from "../screens/ScanScreen";
 
+const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
-const Tabs = createBottomTabNavigator();
 
-function TabsNav() {
+function Tabs() {
   return (
-    <Tabs.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarIcon: ({ color, size }) => {
-          let icon: keyof typeof Ionicons.glyphMap = "home-outline";
-          if (route.name === "Database") icon = "list-outline";
-          if (route.name === "Settings") icon = "settings-outline";
-          return <Ionicons name={icon} size={size} color={color} />;
-        },
-      })}
-    >
-      <Tabs.Screen name="Home" component={HomeScreen} />
-      <Tabs.Screen name="Database" component={DatabaseScreen} />
-      <Tabs.Screen name="Settings" component={SettingsScreen} />
-    </Tabs.Navigator>
+    <Tab.Navigator screenOptions={{ headerShown: true }}>
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Database" component={DatabaseScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
+    </Tab.Navigator>
   );
 }
 
 export default function RootNavigator() {
   return (
-    <Stack.Navigator initialRouteName="Tabs">
-      <Stack.Screen
-        name="Tabs"
-        component={TabsNav}
-        options={{ headerShown: false }}
-      />
+    <Stack.Navigator>
+      <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
+      <Stack.Screen name="AddContent" component={AddContentScreen} options={{ title: "Add Job" }} />
       <Stack.Screen
         name="ReportDetail"
         component={ReportDetailScreen}
         options={{ title: "Report" }}
       />
       <Stack.Screen
-        name="AddContent"
-        component={AddContentScreen}
-        options={{ presentation: "modal", title: "Add Content" }}
+        name="ScanScreen"
+        component={ScanScreen}
+        options={{ title: "Pick Screenshot" }}
       />
     </Stack.Navigator>
   );
