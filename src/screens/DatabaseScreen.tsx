@@ -18,7 +18,7 @@ import Screen from "../components/Screen";
 import JobRow from "../components/JobRow";
 import UndoBar from "../components/UndoBar";
 import { useJobs } from "../hooks/useJobs";
-import type { Job } from "../hooks/useJobs"; // <-- Job type
+import type { Job } from "../hooks/useJobs";
 import {
   scoreJob,
   visualBucket,
@@ -33,11 +33,7 @@ type SortKey = "score" | "date" | "title";
 type SortDir = "asc" | "desc";
 type RiskFilter = "all" | "high" | "medium" | "low";
 
-type Row = {
-  job: Job;
-  result: ScoreResult; // <-- matches scoring.ts return
-  bucket: Severity;
-};
+type Row = { job: Job; result: ScoreResult; bucket: Severity };
 
 export default function DatabaseScreen() {
   const { colors, dark } = useTheme();
@@ -46,40 +42,27 @@ export default function DatabaseScreen() {
 
   const { items, deleteJob, undoDelete } = useJobs();
 
-  // UI state
+  // ------- UI state
   const [query, setQuery] = React.useState("");
   const [risk, setRisk] = React.useState<RiskFilter>("all");
   const [sortKey, setSortKey] = React.useState<SortKey>("score");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
 
-  // Undo (visible for 60s)
+  // ------- Undo state (1 minute)
   const [showUndo, setShowUndo] = React.useState(false);
   const undoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const UNDO_DURATION_MS = 60_000;
 
-  React.useEffect(() => {
-    return () => {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    };
+  React.useEffect(() => () => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, []);
 
-  // Header Add button
+  // Remove header "+ Add" (FAB only)
   React.useLayoutEffect(() => {
-    nav.setOptions({
-      headerRight: () => (
-        <Pressable
-          onPress={() => nav.navigate("AddContent")}
-          style={{ paddingHorizontal: 12, paddingVertical: 6 }}
-          accessibilityRole="button"
-          accessibilityLabel="Add Job"
-        >
-          <Text style={{ fontWeight: "700", color: "#2563EB" }}>＋ Add</Text>
-        </Pressable>
-      ),
-    });
+    nav.setOptions({ headerRight: undefined });
   }, [nav]);
 
-  // Build rows -> filter -> sort
+  // ------- Build rows → filter → sort
   const rows = React.useMemo<Row[]>(() => {
     const q = query.trim().toLowerCase();
 
@@ -105,7 +88,7 @@ export default function DatabaseScreen() {
     byRisk.sort((a, b) => {
       let cmp = 0;
       if (sortKey === "score") cmp = a.result.score - b.result.score;
-      else if (sortKey === "date") cmp = a.job.updatedAt - b.job.updatedAt;
+      else if (sortKey === "date") cmp = (a.job.updatedAt ?? 0) - (b.job.updatedAt ?? 0);
       else if (sortKey === "title") cmp = a.job.title.localeCompare(b.job.title);
       return sortDir === "asc" ? cmp : -cmp;
     });
@@ -113,7 +96,7 @@ export default function DatabaseScreen() {
     return byRisk;
   }, [items, query, risk, sortKey, sortDir]);
 
-  // Sections by severity
+  // ------- Group by bucket
   const sections = React.useMemo(
     () =>
       (["high", "medium", "low"] as Severity[])
@@ -128,7 +111,7 @@ export default function DatabaseScreen() {
 
   const empty = sections.length === 0;
 
-  // Delete + confirm + undo (60s)
+  // ------- Delete + Undo
   const onDelete = async (id: string) => {
     await deleteJob(id);
     setShowUndo(true);
@@ -169,6 +152,14 @@ export default function DatabaseScreen() {
     }
   };
 
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+  };
+
   return (
     <Screen>
       {/* Search */}
@@ -180,11 +171,7 @@ export default function DatabaseScreen() {
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.search,
-            {
-              color: colors.text,
-              backgroundColor: colors.card,
-              borderColor: "#E5E7EB",
-            },
+            { color: colors.text, backgroundColor: colors.card, borderColor: "#E5E7EB" },
           ]}
           autoCorrect={false}
           autoCapitalize="none"
@@ -192,7 +179,7 @@ export default function DatabaseScreen() {
         />
       </View>
 
-      {/* Filter + Sort */}
+      {/* Filters + Sort */}
       <View style={styles.toolbar}>
         <View style={styles.chipsRow}>
           {(["all", "low", "medium", "high"] as const).map((r) => {
@@ -202,6 +189,7 @@ export default function DatabaseScreen() {
                 key={r}
                 onPress={() => setRisk(r)}
                 style={[styles.chip, active && styles.chipActive]}
+                accessibilityLabel={`Filter ${r.toUpperCase()}`}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
                   {r.toUpperCase()}
@@ -218,14 +206,9 @@ export default function DatabaseScreen() {
             return (
               <Pressable
                 key={key}
-                onPress={() => {
-                  if (active) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-                  else {
-                    setSortKey(key);
-                    setSortDir("desc");
-                  }
-                }}
+                onPress={() => toggleSort(key)}
                 style={styles.sortChip}
+                accessibilityLabel={`Sort by ${key}`}
               >
                 <Text style={styles.sortLabel}>
                   {key[0].toUpperCase() + key.slice(1)} {arrow}
@@ -267,7 +250,7 @@ export default function DatabaseScreen() {
             <JobRow
               job={item.job}
               score={item.result.score}
-              reasons={item.result.reasons as Reason[]} // matches JobRow prop
+              reasons={item.result.reasons as Reason[]}
               bucket={item.bucket}
               onPress={() => nav.navigate("ReportDetail", { id: item.job.id })}
               onLongPress={() => confirmDelete(item.job.id)}
@@ -279,7 +262,7 @@ export default function DatabaseScreen() {
         />
       )}
 
-      {/* Floating Add */}
+      {/* FAB */}
       <View pointerEvents="box-none" style={styles.fabWrap}>
         <Pressable
           onPress={() => nav.navigate("AddContent")}
@@ -291,10 +274,10 @@ export default function DatabaseScreen() {
         </Pressable>
       </View>
 
-      {/* Undo Snackbar (above tab bar) */}
+      {/* Undo Snackbar (safe-area aware, above tab bar) */}
       <View
         pointerEvents="box-none"
-        style={[styles.snackbarWrap, { bottom: insets.bottom + 70 }]}
+        style={[styles.snackbarWrap, { bottom: Math.max(insets.bottom + 70, 86) }]}
       >
         <UndoBar
           visible={showUndo}
@@ -382,6 +365,5 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 16,
     right: 16,
-    // bottom set via safe-area insets
   },
 });
