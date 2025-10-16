@@ -42,27 +42,29 @@ export default function DatabaseScreen() {
 
   const { items, deleteJob, undoDelete } = useJobs();
 
-  // ------- UI state
+  // UI state
   const [query, setQuery] = React.useState("");
   const [risk, setRisk] = React.useState<RiskFilter>("all");
   const [sortKey, setSortKey] = React.useState<SortKey>("score");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
 
-  // ------- Undo state (1 minute)
+  // Undo (visible for 60s)
   const [showUndo, setShowUndo] = React.useState(false);
   const undoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const UNDO_DURATION_MS = 60_000;
 
-  React.useEffect(() => () => {
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+  React.useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
   }, []);
 
-  // Remove header "+ Add" (FAB only)
+  // Remove header "+ Add" (we use empty-state CTA + conditional FAB)
   React.useLayoutEffect(() => {
     nav.setOptions({ headerRight: undefined });
   }, [nav]);
 
-  // ------- Build rows → filter → sort
+  // Build rows → filter → sort
   const rows = React.useMemo<Row[]>(() => {
     const q = query.trim().toLowerCase();
 
@@ -96,7 +98,7 @@ export default function DatabaseScreen() {
     return byRisk;
   }, [items, query, risk, sortKey, sortDir]);
 
-  // ------- Group by bucket
+  // Group by bucket
   const sections = React.useMemo(
     () =>
       (["high", "medium", "low"] as Severity[])
@@ -110,8 +112,9 @@ export default function DatabaseScreen() {
   );
 
   const empty = sections.length === 0;
+  const showFab = !empty; // only show FAB when there are items
 
-  // ------- Delete + Undo
+  // Delete + Undo
   const onDelete = async (id: string) => {
     await deleteJob(id);
     setShowUndo(true);
@@ -256,23 +259,25 @@ export default function DatabaseScreen() {
               onLongPress={() => confirmDelete(item.job.id)}
             />
           )}
-          contentContainerStyle={{ paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: showFab ? 120 : 24 }}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           SectionSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       )}
 
-      {/* FAB */}
-      <View pointerEvents="box-none" style={styles.fabWrap}>
-        <Pressable
-          onPress={() => nav.navigate("AddContent")}
-          style={styles.fab}
-          accessibilityRole="button"
-          accessibilityLabel="Add Job"
-        >
-          <Text style={styles.fabPlus}>＋</Text>
-        </Pressable>
-      </View>
+      {/* FAB — only when list has items */}
+      {showFab && (
+        <View pointerEvents="box-none" style={styles.fabWrap}>
+          <Pressable
+            onPress={() => nav.navigate("AddContent")}
+            style={styles.fab}
+            accessibilityRole="button"
+            accessibilityLabel="Add Job"
+          >
+            <Text style={styles.fabPlus}>＋</Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Undo Snackbar (safe-area aware, above tab bar) */}
       <View
