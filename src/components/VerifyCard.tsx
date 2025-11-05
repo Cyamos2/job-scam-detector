@@ -1,3 +1,6 @@
+// src/components/VerifyCard.tsx
+// Self-contained verification card. No external types required.
+
 import * as React from "react";
 import {
   View,
@@ -22,7 +25,7 @@ export type VerifyResult = {
 type Props = {
   company?: string | null;
   url?: string | null;
-  baseUrl: string;
+  baseUrl: string; // e.g., http://localhost:4000
 };
 
 export default function VerifyCard({ company, url, baseUrl }: Props) {
@@ -36,10 +39,10 @@ export default function VerifyCard({ company, url, baseUrl }: Props) {
       setLoading(true);
       setError(null);
       try {
-        const q = new URLSearchParams();
-        if (company) q.set("company", company);
-        if (url) q.set("url", url);
-        const resp = await fetch(`${baseUrl}/api/verify?${q.toString()}`);
+        const qs = new URLSearchParams();
+        if (company) qs.set("company", company);
+        if (url) qs.set("url", url);
+        const resp = await fetch(`${baseUrl}/api/verify?${qs.toString()}`);
         const json = (await resp.json()) as VerifyResult;
         if (!cancelled) setData(json);
       } catch (e: any) {
@@ -48,9 +51,7 @@ export default function VerifyCard({ company, url, baseUrl }: Props) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [company, url, baseUrl]);
 
   const openLinkedIn = () => {
