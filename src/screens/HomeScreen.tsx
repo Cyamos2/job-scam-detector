@@ -8,6 +8,7 @@ import {
   Image,
   Platform,
   FlatList,
+  Alert,
 } from "react-native";
 import {
   useTheme,
@@ -21,6 +22,8 @@ import Screen from "../components/Screen";
 import JobRow from "../components/JobRow";
 import { useJobs } from "../hooks/useJobs";
 import { scoreJob, visualBucket, type Severity } from "../lib/scoring";
+import { extractTextFromImage } from "../lib/ocr";
+import * as ImagePicker from "expo-image-picker";
 import type { RootStackParamList, RootTabParamList } from "../navigation/types";
 
 // Composite: tabs + stack
@@ -53,6 +56,48 @@ export default function HomeScreen() {
   const goDatabase = () => nav.navigate("Database");   // tab
   const goAdd = () => nav.navigate("AddContent");      // stack
 
+  const [analyzing, setAnalyzing] = React.useState(false);
+
+  function extractUriFromPickerResult(result: unknown): string | undefined {
+    // Newer API returns { assets: [{ uri }] } and older returns { uri }
+    if (typeof result !== "object" || result === null) return undefined;
+    const r = result as { assets?: unknown; uri?: unknown };
+
+    if (Array.isArray(r.assets) && r.assets.length > 0) {
+      const a = r.assets[0] as { uri?: unknown };
+      if (a && typeof a.uri === "string") return a.uri;
+    }
+
+    if (typeof r.uri === "string") return r.uri;
+    return undefined;
+  }
+
+  const analyzeScreenshot = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Permission required", "Please allow photo access to select a screenshot.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+
+      const uri = extractUriFromPickerResult(result);
+      if (!uri) return;
+
+      setAnalyzing(true);
+      const text = await extractTextFromImage(uri);
+      setAnalyzing(false);
+
+      nav.navigate("AddContent", { prefill: { notes: text } });
+    } catch (e) {
+      setAnalyzing(false);
+      Alert.alert("Analysis failed", String(e ?? "Unknown error"));
+    }
+  };
+
   return (
     <Screen>
       {/* Hero */}
@@ -71,6 +116,9 @@ export default function HomeScreen() {
         <View style={styles.actionsRow}>
           <Pressable onPress={goAdd} style={[styles.primaryBtn, styles.btn]}>
             <Text style={styles.primaryText}>✨ Analyze Job Post</Text>
+          </Pressable>
+          <Pressable onPress={analyzeScreenshot} style={[styles.tertiaryBtn, styles.btn]}>
+            <Text style={styles.tertiaryText}>{analyzing ? "Analyzing…" : "📸 Analyze Screenshot"}</Text>
           </Pressable>
           <Pressable onPress={goDatabase} style={[styles.secondaryBtn, styles.btn]}>
             <Text style={styles.secondaryText}>View Saved Jobs</Text>
@@ -148,6 +196,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
   },
   primaryText: { color: "white", fontWeight: "800", fontSize: 16 },
+  tertiaryBtn: {
+    backgroundColor: "#10B981",
+  },
+  tertiaryText: { color: "white", fontWeight: "700", fontSize: 15 },
+  cameraBtn: {
+    backgroundColor: "#F59E0B",
+  },
+  cameraText: { color: "white", fontWeight: "700", fontSize: 15 },
   secondaryBtn: { 
     backgroundColor: "white",
     borderWidth: 2,

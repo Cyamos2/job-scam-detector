@@ -54,13 +54,13 @@ export default function SettingsScreen() {
     }
   };
 
-  const tryParse = (s: string) => {
+  const tryParse = (s: string): { ok: boolean; value: unknown | null } => {
     const trimmed = s.trim();
-    if (!trimmed) return { ok: false as const, value: null as any };
+    if (!trimmed) return { ok: false, value: null };
     try {
-      return { ok: true as const, value: JSON.parse(trimmed) };
+      return { ok: true, value: JSON.parse(trimmed) };
     } catch {
-      return { ok: false as const, value: null as any };
+      return { ok: false, value: null };
     }
   };
 

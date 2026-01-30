@@ -4,11 +4,12 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import DatabaseScreen from "../screens/DatabaseScreen";
 import ReportDetailScreen from "../screens/ReportDetailScreen";
 import AddContentScreen from "../screens/AddContentScreen";
+import type { JobInput } from "../hooks/useJobs";
 
 export type DatabaseStackParamList = {
   DatabaseHome: undefined;
   ReportDetail: { id: string };
-  AddContent: { presetUri?: string } | { preset?: any } | undefined;
+  AddContent: { presetUri?: string } | { preset?: Partial<JobInput> } | undefined;
 };
 
 const Stack = createNativeStackNavigator<DatabaseStackParamList>();

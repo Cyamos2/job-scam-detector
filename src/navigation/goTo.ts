@@ -8,14 +8,17 @@ import type { RootTabParamList } from "./types";
  * or a Stack screen. If the current navigator has a parent (the root stack),
  * we call navigate on that parent.
  */
-export function goToAddContent(nav: any) {
-  const parent = typeof nav?.getParent === "function" ? nav.getParent() : undefined;
+export function goToAddContent(nav: NavigationProp<RootTabParamList> | NavigationProp<RootStackParamList>) {
+  const parent = typeof nav?.getParent === "function" ? (nav.getParent() as NavigationProp<RootStackParamList>) : undefined;
   const target = parent ?? nav;
-  target?.navigate?.("AddContent");
+  // Narrow to the root stack nav so the overloads line up and TS allows the call
+  const rootNav = target as NavigationProp<RootStackParamList>;
+  rootNav.navigate("AddContent");
 }
 
-export function goToReportDetail(nav: any, id: string) {
-  const parent = typeof nav?.getParent === "function" ? nav.getParent() : undefined;
+export function goToReportDetail(nav: NavigationProp<RootTabParamList> | NavigationProp<RootStackParamList>, id: string) {
+  const parent = typeof nav?.getParent === "function" ? (nav.getParent() as NavigationProp<RootStackParamList>) : undefined;
   const target = parent ?? nav;
-  target?.navigate?.("ReportDetail", { id });
+  const rootNav = target as NavigationProp<RootStackParamList>;
+  rootNav.navigate("ReportDetail", { id });
 }

@@ -22,10 +22,8 @@ export type JobInput = {
   notes?: string;
 };
 
-const BASE_URL =
-  (Constants?.expoConfig?.extra as any)?.API_URL ||
-  process.env.EXPO_PUBLIC_API_URL ||
-  "http://127.0.0.1:3000";
+const extra = (Constants?.expoConfig?.extra ?? {}) as Record<string, unknown>;
+const BASE_URL = String(extra.API_URL ?? process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:3000");
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -50,6 +48,7 @@ export const api = {
     request<{ ok: true }>(`/jobs/${id}`, { method: "DELETE" }),
   verifyCompany: (target: string) =>
     request(`/verify?target=${encodeURIComponent(target)}`),
+  whois: (domain: string) => request<{ domain: string; createdAt: string | null; ageDays: number | null }>(`/whois?domain=${encodeURIComponent(domain)}`),
 
   // back-compat aliases (so old code keeps working)
   list(): Promise<Job[]> { return this.listJobs(); },

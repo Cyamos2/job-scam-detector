@@ -31,7 +31,7 @@ function coerceRisk(input?: string): Risk {
 async function main() {
   const csvPath = path.resolve(process.cwd(), "data/seed.csv");
   if (!fs.existsSync(csvPath)) {
-    console.log("No data/seed.csv found; skipping seed.");
+    console.info("No data/seed.csv found; skipping seed.");
     return;
   }
 
@@ -51,7 +51,7 @@ async function main() {
     const title = (row.title ?? "").trim();
     const company = (row.company ?? "").trim();
     if (!title || !company) {
-      console.log("Skipping row without title/company:", row);
+      console.info("Skipping row without title/company:", row);
       continue;
     }
 
@@ -68,7 +68,7 @@ async function main() {
     count++;
   }
 
-  console.log(`✅ Seeded ${count} job(s) from data/seed.csv`);
+  console.info(`✅ Seeded ${count} job(s) from data/seed.csv`);
 }
 
 main()

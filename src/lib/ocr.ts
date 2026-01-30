@@ -1,5 +1,5 @@
 // Stubbed OCR: swap in a real OCR library later (e.g., Vision/MLKit on-device).
 export async function extractTextFromImage(_uri: string): Promise<string> {
-  // For now, just return an empty string or demo text.
-  return "";
+  // Demo: return a placeholder so the flow is visible in development.
+  return "[Demo OCR] Extracted text from screenshot. Replace this stub with a real OCR implementation (Vision/MLKit or on-device model).";
 }

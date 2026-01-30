@@ -6,6 +6,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import type { AnimateStyle } from "react-native-reanimated"; // narrow single-style alias (generic mismatch handled below)
 import {
   Gesture,
   GestureDetector,
@@ -75,7 +76,8 @@ export default function ImageViewer({ uri, visible, onClose }: Props) {
           resizeMode="contain"
           style={[
             { width, height }, // base ImageStyle
-            imageStyle as any    // avoid deep generic mismatch noise
+            // Reanimated's AnimateStyle generic can be noisy here; cast intentionally.
+            imageStyle as unknown as AnimateStyle<any>
           ]}
         />
         {/* optional: tap to close area */}

@@ -18,7 +18,7 @@ import type { RouteProp } from "@react-navigation/native";
 
 import Screen from "../components/Screen";
 import { useJobs } from "../hooks/useJobs";
-import { scoreJob, visualBucket, type Reason, type Severity } from "../lib/scoring";
+import { scoreJob, scoreJobEnriched, visualBucket, type ScoreResultExtended, type Reason, type Severity } from "../lib/scoring";
 import type { RootStackParamList } from "../navigation/types";
 import VerifyCard from "../components/VerifyCard";
 
@@ -60,6 +60,28 @@ export default function ReportDetailScreen() {
   );
   const bucket = visualBucket(result);
   const baseUrl = process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:4000";
+
+  // Enriched async score (WHOIS + evidence)
+  const [enriched, setEnriched] = React.useState<ScoreResultExtended | null>(null);
+  const [enriching, setEnriching] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!job.url) return;
+    let mounted = true;
+    setEnriching(true);
+    (async () => {
+      try {
+        const r = await scoreJobEnriched({ title: job.title, company: job.company, url: job.url, notes: job.notes });
+        if (!mounted) return;
+        setEnriched(r);
+      } catch {
+        // ignore
+      } finally {
+        if (mounted) setEnriching(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [job.url]);
 
   const handleOpen = async () => {
     if (!job.url) return;
@@ -119,18 +141,22 @@ export default function ReportDetailScreen() {
               {job.company}
               {job.url ? "  ·  " + job.url : ""}
             </Text>
+            {enriching && <Text style={{ color: "#9CA3AF", marginTop: 6 }}>Checking domain info…</Text>}
+            {enriched?.evidence?.domainAgeDays != null && (
+              <Text style={{ color: "#9CA3AF", marginTop: 6 }}>Domain age: {enriched.evidence.domainAgeDays} days{enriched.evidence.domainAgeDays < 90 ? " (young)" : ""}</Text>
+            )}
           </View>
-          <ScorePill score={result.score} bucket={bucket} />
+          <ScorePill score={(enriched?.score ?? result.score)} bucket={bucket} />
         </View>
 
         {/* Reasons */}
         <View style={styles.section}>
           <Text style={styles.h2}>Why this score?</Text>
-          {result.reasons.length === 0 ? (
+          {(enriched ?? result).reasons.length === 0 ? (
             <Text style={{ color: "#6B7280", marginTop: 6 }}>No specific red flags matched.</Text>
           ) : (
             <View style={styles.pillsWrap}>
-              {result.reasons.map((r) => (
+              {(enriched ?? result).reasons.map((r) => (
                 <ReasonPill key={r.key} reason={r} />
               ))}
             </View>

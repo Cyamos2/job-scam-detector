@@ -22,6 +22,15 @@ export type ScoreResult = {
   reasons: Reason[];
 };
 
+export type ScoreResultExtended = ScoreResult & {
+  confidence?: number; // 0..1
+  evidence?: {
+    domain?: string | null;
+    domainCreatedAt?: string | null;
+    domainAgeDays?: number | null;
+  };
+};
+
 /* ---------------- helpers ---------------- */
 
 const rx = (s: string, flags = "i") => new RegExp(s, flags);
@@ -253,31 +262,86 @@ export function scoreJob(input: ScoreInput): ScoreResult {
     });
   }
 
-  // ---- Scoring
-  // Weights tuned to keep false-positives low but escalate clear scams fast.
-  const ptsHigh = 26;
-  const ptsMed  = 12;
-  const ptsLow  = 6;
+  // ---- Scoring (weighted rule engine)
+  // Default weights (can tune per rule in future)
+  const defaultWeights = { high: 28, medium: 13, low: 6 };
 
-  const countHigh = reasons.filter(r => r.severity === "high").length;
-  const countMed  = reasons.filter(r => r.severity === "medium").length;
-  const countLow  = reasons.filter(r => r.severity === "low").length;
+  const detailed = reasons.map(r => {
+    const weight = r.severity === "high" ? defaultWeights.high : r.severity === "medium" ? defaultWeights.medium : defaultWeights.low;
+    return { ...r, weight };
+  });
 
-  let raw = countHigh * ptsHigh + countMed * ptsMed + countLow * ptsLow;
+  // Basic aggregation
+  const raw = detailed.reduce((s, r) => s + r.weight, 0);
 
   // Combo bonuses (very common scam patterns)
-  const hasFee = reasons.some(r => r.key === "upfront-fee");
-  const hasPay = reasons.some(r => r.key === "payment-schemes");
-  const hasCheck = reasons.some(r => r.key === "check-scam");
-  if ((hasFee && hasPay) || (hasCheck && hasPay)) raw = Math.max(raw, 95);
+  const hasFee2 = detailed.some(r => r.key === "upfront-fee");
+  const hasPay2 = detailed.some(r => r.key === "payment-schemes");
+  const hasCheck2 = detailed.some(r => r.key === "check-scam");
+  let adj = raw;
+  if ((hasFee2 && hasPay2) || (hasCheck2 && hasPay2)) adj = Math.max(adj, 120);
 
-  // Clamp
-  let score = Math.max(0, Math.min(100, raw));
+  // Normalize to 0..100 (assume max useful raw ~140)
+  let score = Math.max(0, Math.min(100, Math.round((adj / 140) * 100)));
 
-  // Failsafe: any critical red flag → minimum 90
+  // Failsafe: presence of a critical red flag → minimum 90
   if (reasons.some(r => FAILSAFE_KEYS.has(r.key))) score = Math.max(score, 90);
 
   return { score, reasons };
+}
+
+/* --------- async enriched scoring (WHOIS) --------- */
+import api from "./db";
+
+export async function scoreJobEnriched(input: ScoreInput): Promise<ScoreResultExtended> {
+  const base = scoreJob(input);
+  const res: ScoreResultExtended = { ...base };
+
+  // If there is a URL, attempt WHOIS lookup for domain age
+  const host = hostOf(input.url);
+  if (!host) return res;
+
+  try {
+    const who = await api.whois(host);
+    if (who) {
+      res.evidence = res.evidence ?? {};
+      res.evidence.domain = who.domain;
+      res.evidence.domainCreatedAt = who.createdAt ?? null;
+      res.evidence.domainAgeDays = who.ageDays ?? null;
+
+      // If domain age is known and < 90 days, add a strong reason
+      if (who.ageDays != null && who.ageDays < 90) {
+        const r: Reason = {
+          key: "young-domain",
+          label: "Young domain",
+          severity: "high",
+          explain: `Domain was registered ${who.ageDays} days ago.`,
+        };
+        // avoid duplicate
+        if (!res.reasons.some(x => x.key === r.key)) res.reasons.push(r);
+      }
+
+      // Recompute score using same weighted engine
+      const defaultWeights = { high: 28, medium: 13, low: 6 };
+      const detailed = res.reasons.map(r => {
+        const weight = r.severity === "high" ? defaultWeights.high : r.severity === "medium" ? defaultWeights.medium : defaultWeights.low;
+        return { ...r, weight };
+      });
+
+      let raw = detailed.reduce((s, r) => s + r.weight, 0);
+      if (detailed.some(r => r.key === "upfront-fee") && detailed.some(r => r.key === "payment-schemes")) raw = Math.max(raw, 120);
+      let score = Math.max(0, Math.min(100, Math.round((raw / 140) * 100)));
+      if (res.reasons.some(r => FAILSAFE_KEYS.has(r.key))) score = Math.max(score, 90);
+      res.score = score;
+
+      // Confidence: simple heuristic (more weight → higher confidence)
+      res.confidence = Math.min(1, raw / 160);
+    }
+  } catch (e) {
+    // ignore; keep base result
+  }
+
+  return res;
 }
 
 /* --------- buckets (visual) --------- */

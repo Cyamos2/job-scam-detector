@@ -3,6 +3,7 @@
 import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+import type { JobInput } from "../hooks/useJobs";
 
 /** Bottom tabs in the app */
 export type RootTabParamList = {
@@ -14,7 +15,7 @@ export type RootTabParamList = {
 /** Stack that hosts the Tabs + modals/detail screens */
 export type RootStackParamList = {
   Tabs: undefined;
-  AddContent: { editId?: string } | undefined;
+  AddContent: { editId?: string; prefill?: Partial<JobInput> } | undefined;
   ReportDetail: { id: string };
 };
 

@@ -5,6 +5,7 @@ import cors from "cors";
 import { prisma } from "./prisma.js";
 import jobsRouter from "./routes/jobs.js";
 import verifyRouter from "./routes/verify.js";
+import whoisRouter from "./routes/whois.js";
 
 const app = express();
 
@@ -24,14 +25,16 @@ app.get("/health", (_req: Request, res: Response) => {
 // Routes
 app.use("/jobs", jobsRouter);
 app.use("/verify", verifyRouter);
+app.use("/whois", whoisRouter);
 
 // Error handler
 app.use(
-  (err: any, _req: Request, res: Response, _next: NextFunction) => {
-    console.error("Error:", err);
+  (err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof Error) console.error("Error:", err.message, err);
+    else console.error("Error:", err);
     res.status(500).json({
       error: "internal_error",
-      detail: String(err?.message ?? err),
+      detail: err instanceof Error ? err.message : String(err),
     });
   }
 );
@@ -41,5 +44,5 @@ const HOST = process.env.HOST ?? "0.0.0.0";
 const PORT = Number(process.env.PORT ?? 3000);
 
 app.listen(PORT, HOST, () => {
-  console.log(`🚀 API listening at http://${HOST}:${PORT}`);
+  if (process.env.NODE_ENV !== "test") console.info(`🚀 API listening at http://${HOST}:${PORT}`);
 });

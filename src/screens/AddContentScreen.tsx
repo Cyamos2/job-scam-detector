@@ -18,7 +18,7 @@ import type { RouteProp } from "@react-navigation/native";
 
 import Screen from "../components/Screen";
 import ScoreBadge from "../components/ScoreBadge";
-import { scoreJob } from "../lib/scoring";
+import { scoreJob, scoreJobEnriched, type ScoreResultExtended } from "../lib/scoring";
 import { useJobs } from "../hooks/useJobs";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -48,20 +48,31 @@ export default function AddContentScreen() {
   const [saving, setSaving] = React.useState(false);
   const lastSubmitted = React.useRef<string | null>(null);
 
-  // Prefill when editing
+  // Prefill when editing or from route prefill (e.g., screenshot OCR)
   React.useEffect(() => {
-    if (!isEdit || !editId) return;
-    const existing =
-      (typeof getById === "function" ? getById(editId) : undefined) ??
-      items.find(x => x.id === editId);
-    if (!existing) return;
-    setTitle(existing.title);
-    setCompany(existing.company);
-    setUrl(existing.url ?? "");
-    setNotes(existing.notes ?? "");
-  }, [isEdit, editId, getById, items]);
+    if (isEdit && editId) {
+      const existing =
+        (typeof getById === "function" ? getById(editId) : undefined) ??
+        items.find(x => x.id === editId);
+      if (!existing) return;
+      setTitle(existing.title);
+      setCompany(existing.company);
+      setUrl(existing.url ?? "");
+      setNotes(existing.notes ?? "");
+      return;
+    }
 
-  // Live score preview (no risk in the input)
+    const prefill = route.params?.prefill;
+    if (prefill) {
+      if (prefill.title) setTitle(prefill.title);
+      if (prefill.company) setCompany(prefill.company);
+      if (prefill.url) setUrl(prefill.url ?? "");
+      if (prefill.notes) setNotes(prefill.notes ?? "");
+      if (prefill.notes) showSnack(`Imported text (${String(prefill.notes).length} chars)`);
+    }
+  }, [isEdit, editId, getById, items, route.params?.prefill]);
+
+  // Live score preview (fast, synchronous)
   const preview = React.useMemo(() => {
     const input = {
       title,
@@ -70,6 +81,39 @@ export default function AddContentScreen() {
       notes: notes.trim() ? notes.trim() : undefined,
     };
     return scoreJob(input);
+  }, [title, company, url, notes]);
+
+  // Enriched scoring (WHOIS) — debounced async call when there's a URL
+  const [enriched, setEnriched] = React.useState<ScoreResultExtended | null>(null);
+  const [enriching, setEnriching] = React.useState(false);
+
+  React.useEffect(() => {
+    // Only run when there is a URL to check
+    const active = url.trim();
+    if (!active) {
+      setEnriched(null);
+      setEnriching(false);
+      return;
+    }
+
+    let mounted = true as boolean;
+    const t = setTimeout(async () => {
+      try {
+        setEnriching(true);
+        const res = await scoreJobEnriched({ title, company, url: url.trim(), notes });
+        if (!mounted) return;
+        setEnriched(res);
+      } catch (e) {
+        // ignore for now
+      } finally {
+        if (mounted) setEnriching(false);
+      }
+    }, 650); // debounce
+
+    return () => {
+      mounted = false;
+      clearTimeout(t);
+    };
   }, [title, company, url, notes]);
 
   // iOS snackbar (Android uses Toast)
@@ -196,19 +240,28 @@ export default function AddContentScreen() {
         </Text>
       </View>
 
-      {/* Score preview card - only show if there's content */}
+      {route.params?.prefill?.notes && !isEdit && (
+        <View style={styles.importedBanner}>
+          <Text style={styles.importedBannerText}>Imported text from screenshot</Text>
+        </View>
+      )}
+
       {(title.trim() || company.trim()) && (
-        <View style={[styles.scoreCard, { backgroundColor: colors.card }]}>
+        <View style={[styles.scoreCard, { backgroundColor: colors.card }]}> 
           <View style={styles.scoreRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.scoreLabel}>Risk Score</Text>
-              {!!preview.reasons.length && (
+              {!!(enriched?.reasons?.length ?? preview.reasons.length) && (
                 <Text style={styles.scoreHint} numberOfLines={1}>
-                  {preview.reasons[0].label}
+                  {(enriched?.reasons?.[0]?.label) ?? preview.reasons[0].label}
                 </Text>
               )}
+              {enriching && <Text style={[styles.scoreHint, { marginTop: 6 }]}>Checking domain info…</Text>}
+              {enriched?.evidence?.domainAgeDays != null && (
+                <Text style={[styles.scoreHint, { marginTop: 6 }]}>Domain age: {enriched.evidence.domainAgeDays} days{enriched.evidence.domainAgeDays < 90 ? " (young)" : ""}</Text>
+              )}
             </View>
-            <ScoreBadge score={preview.score} />
+            <ScoreBadge score={(enriched?.score ?? preview.score)} />
           </View>
         </View>
       )}
@@ -402,4 +455,18 @@ const styles = StyleSheet.create({
   },
   addBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   formError: { color: "#EF4444", marginTop: 12, fontWeight: "600" },
+
+  importedBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: "#111827",
+    opacity: 0.06,
+  },
+  importedBannerText: {
+    color: "#374151",
+    fontSize: 13,
+    fontWeight: "700",
+  },
 });

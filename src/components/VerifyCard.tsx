@@ -45,8 +45,11 @@ export default function VerifyCard({ company, url, baseUrl }: Props) {
         const resp = await fetch(`${baseUrl}/api/verify?${qs.toString()}`);
         const json = (await resp.json()) as VerifyResult;
         if (!cancelled) setData(json);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Network error");
+      } catch (e: unknown) {
+        if (!cancelled) {
+          if (e instanceof Error) setError(e.message);
+          else setError(String(e ?? "Network error"));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
