@@ -47,7 +47,7 @@ export default function EditJobModal({
     setTitle(job.title ?? "");
     setCompany(job.company ?? "");
     setUrl(job.url ?? undefined);
-    setRisk(job.risk ?? "low");
+    setRisk((job.risk ?? "low") as Risk);
     setNotes(job.notes ?? undefined);
   }, [job]);
 
@@ -56,9 +56,9 @@ export default function EditJobModal({
     const patch: Partial<Job> = {};
     if (title !== job.title) patch.title = title;
     if (company !== job.company) patch.company = company;
-    if ((url ?? null) !== (job.url ?? null)) patch.url = url ?? null;
-    if (risk !== job.risk) patch.risk = risk;
-    if ((notes ?? null) !== (job.notes ?? null)) patch.notes = notes ?? null;
+    if ((url ?? undefined) !== (job.url ?? undefined)) patch.url = url ?? undefined;
+    if (risk !== (job.risk ?? "low")) patch.risk = risk;
+    if ((notes ?? undefined) !== (job.notes ?? undefined)) patch.notes = notes ?? undefined;
     return patch;
   }
 

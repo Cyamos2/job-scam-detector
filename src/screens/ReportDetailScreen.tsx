@@ -162,24 +162,27 @@ export default function ReportDetailScreen() {
 /* ---------- local UI bits ---------- */
 
 function ScorePill({ score, bucket }: { score: number; bucket: Severity }) {
-  const bg = bucket === "high" ? "#FEE2E2" : bucket === "medium" ? "#FEF3C7" : "#DCFCE7";
-  const fg = bucket === "high" ? "#991B1B" : bucket === "medium" ? "#92400E" : "#065F46";
+  const bg = bucket === "high" ? "#FEE2E2" : bucket === "medium" ? "#FEF3C7" : "#ECFDF5";
+  const fg = bucket === "high" ? "#DC2626" : bucket === "medium" ? "#D97706" : "#047857";
+  const border = bucket === "high" ? "#FCA5A5" : bucket === "medium" ? "#FCD34D" : "#A7F3D0";
   return (
-    <View style={[styles.scoreWrap, { backgroundColor: bg }]}>
+    <View style={[styles.scoreWrap, { backgroundColor: bg, borderColor: border, borderWidth: 1 }]}>
       <Text style={[styles.score, { color: fg }]}>{score}</Text>
     </View>
   );
 }
 
 function ReasonPill({ reason }: { reason: Reason }) {
-  const border =
-    reason.severity === "high" ? "#FCA5A5" : reason.severity === "medium" ? "#FCD34D" : "#86EFAC";
-  const text =
-    reason.severity === "high" ? "#991B1B" : reason.severity === "medium" ? "#92400E" : "#065F46";
+  const colors = {
+    high: { bg: "#FEE2E2", border: "#FCA5A5", text: "#DC2626" },
+    medium: { bg: "#FEF3C7", border: "#FCD34D", text: "#D97706" },
+    low: { bg: "#ECFDF5", border: "#A7F3D0", text: "#047857" },
+  };
+  const c = colors[reason.severity];
 
   return (
-    <View style={[styles.reasonPill, { borderColor: border }]}>
-      <Text style={[styles.reasonText, { color: text }]}>{reason.label}</Text>
+    <View style={[styles.reasonPill, { borderColor: c.border, backgroundColor: c.bg }]}>
+      <Text style={[styles.reasonText, { color: c.text }]}>{reason.label}</Text>
     </View>
   );
 }
@@ -244,13 +247,12 @@ const styles = StyleSheet.create({
   h2: { fontWeight: "800", fontSize: 16 },
   pillsWrap: { marginTop: 8, flexDirection: "row", flexWrap: "wrap", gap: 8 },
   reasonPill: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderRadius: 999,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "#fff",
   },
-  reasonText: { fontWeight: "700" },
+  reasonText: { fontWeight: "700", fontSize: 13 },
 
   notes: { marginTop: 8, lineHeight: 20, color: "#1F2937" },
 

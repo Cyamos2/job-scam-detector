@@ -19,7 +19,6 @@ export default function RowItem({
     company: job.company,
     url: job.url ?? undefined,
     notes: job.notes ?? undefined,
-    risk: job.risk,
   });
 
   const b = visualBucket(s);
@@ -27,9 +26,9 @@ export default function RowItem({
   const pills = s.reasons.slice(0, 2).map(r => r.label).join(" · ");
 
   const tint = {
-    low:    { bg: "#F0FFF4", border: "#DCFCE7" },
-    medium: { bg: "#FFF7ED", border: "#FFE4D5" },
-    high:   { bg: "#FEF2F2", border: "#FEE2E2" },
+    low:    { bg: "#F0FDF4", border: "#BBF7D0" },
+    medium: { bg: "#FFFBEB", border: "#FDE68A" },
+    high:   { bg: "#FEF2F2", border: "#FECACA" },
   } as const;
 
   return (

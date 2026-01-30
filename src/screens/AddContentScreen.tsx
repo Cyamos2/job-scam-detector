@@ -189,26 +189,33 @@ export default function AddContentScreen() {
         </Animated.View>
       )}
 
-      {/* Header + live score */}
+      {/* Header */}
       <View style={styles.headerRow}>
         <Text style={[styles.h1, { color: colors.text }]}>
-          {isEdit ? "Edit Content" : "Add Content"}
+          {isEdit ? "Edit Job Analysis" : "Analyze Job Posting"}
         </Text>
-        <ScoreBadge score={preview.score} />
       </View>
 
-      {/* Top reason chip */}
-      {!!preview.reasons.length && (
-        <View style={styles.previewChip}>
-          <Text style={styles.previewChipText}>
-            {preview.reasons[0].label}
-          </Text>
+      {/* Score preview card - only show if there's content */}
+      {(title.trim() || company.trim()) && (
+        <View style={[styles.scoreCard, { backgroundColor: colors.card }]}>
+          <View style={styles.scoreRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.scoreLabel}>Risk Score</Text>
+              {!!preview.reasons.length && (
+                <Text style={styles.scoreHint} numberOfLines={1}>
+                  {preview.reasons[0].label}
+                </Text>
+              )}
+            </View>
+            <ScoreBadge score={preview.score} />
+          </View>
         </View>
       )}
 
       {/* Form */}
       <View style={styles.form}>
-        <Text style={styles.label}>Title *</Text>
+        <Text style={styles.label}>Job Title *</Text>
         <TextInput
           value={title}
           onChangeText={setTitle}
@@ -217,55 +224,58 @@ export default function AddContentScreen() {
           style={[
             styles.input,
             {
-              borderColor: errorTitle ? "#ef4444" : "#E5E7EB",
+              borderColor: errorTitle ? "#EF4444" : "#E5E7EB",
               color: colors.text,
               backgroundColor: colors.card,
             },
           ]}
+          returnKeyType="next"
         />
 
-        <Text style={styles.label}>Company *</Text>
+        <Text style={styles.label}>Company Name *</Text>
         <TextInput
           value={company}
           onChangeText={setCompany}
-          placeholder="e.g., Fakester Ltd"
+          placeholder="e.g., Acme Corp"
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.input,
             {
-              borderColor: errorCompany ? "#ef4444" : "#E5E7EB",
+              borderColor: errorCompany ? "#EF4444" : "#E5E7EB",
               color: colors.text,
               backgroundColor: colors.card,
             },
           ]}
+          returnKeyType="next"
         />
 
-        <Text style={styles.label}>URL (optional)</Text>
+        <Text style={styles.label}>Job Posting URL (optional)</Text>
         <TextInput
           value={url}
           onChangeText={setUrl}
-          placeholder="https://example.com"
+          placeholder="https://example.com/jobs/123"
           autoCapitalize="none"
           keyboardType="url"
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.input,
             {
-              borderColor: errorUrl ? "#ef4444" : "#E5E7EB",
+              borderColor: errorUrl ? "#EF4444" : "#E5E7EB",
               color: colors.text,
               backgroundColor: colors.card,
             },
           ]}
+          returnKeyType="next"
         />
-        {errorUrl ? (
-          <Text style={styles.helperError}>Enter a valid http(s) URL</Text>
-        ) : null}
+        {errorUrl && (
+          <Text style={styles.helperError}>⚠️ Please enter a valid http(s) URL</Text>
+        )}
 
-        <Text style={styles.label}>Notes</Text>
+        <Text style={styles.label}>Job Description & Notes</Text>
         <TextInput
           value={notes}
           onChangeText={setNotes}
-          placeholder="Paste the message or any context here..."
+          placeholder="Paste the full job description, message from recruiter, or any suspicious details here..."
           placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
           style={[
             styles.textarea,
@@ -276,6 +286,7 @@ export default function AddContentScreen() {
             },
           ]}
           multiline
+          textAlignVertical="top"
         />
 
         <Pressable
@@ -320,50 +331,75 @@ const styles = StyleSheet.create({
 
   headerRow: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 6,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  h1: { fontSize: 24, fontWeight: "800" },
+
+  scoreCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  scoreRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
   },
-  h1: { fontSize: 24, fontWeight: "800", flex: 1 },
-
-  previewChip: {
-    marginLeft: 16,
-    marginBottom: 8,
-    alignSelf: "flex-start",
-    backgroundColor: "#FFF1E8",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+  scoreLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
-  previewChipText: { color: "#B45309", fontWeight: "700" },
+  scoreHint: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    marginTop: 2,
+  },
 
-  form: { paddingHorizontal: 16, paddingBottom: 24 },
-  label: { marginTop: 14, marginBottom: 6, fontWeight: "800", color: "#111" },
+  form: { paddingHorizontal: 16, paddingBottom: 32 },
+  label: { 
+    marginTop: 16, 
+    marginBottom: 8, 
+    fontWeight: "700", 
+    color: "#374151",
+    fontSize: 14
+  },
   input: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderRadius: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 12,
+    fontSize: 15,
   },
   textarea: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderRadius: 12,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 12,
-    minHeight: 120,
-    textAlignVertical: "top",
+    minHeight: 140,
+    fontSize: 15,
   },
 
-  helperError: { color: "#ef4444", marginTop: 6 },
+  helperError: { color: "#EF4444", marginTop: 6, fontSize: 13 },
 
   addBtn: {
-    marginTop: 18,
-    backgroundColor: "#1f6cff",
+    marginTop: 24,
+    backgroundColor: "#2563EB",
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 16,
     alignItems: "center",
+    shadowColor: "#2563EB",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
-  addBtnText: { color: "#fff", fontWeight: "800" },
-  formError: { color: "#ef4444", marginTop: 12, fontWeight: "600" },
+  addBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  formError: { color: "#EF4444", marginTop: 12, fontWeight: "600" },
 });

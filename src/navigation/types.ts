@@ -14,9 +14,8 @@ export type RootTabParamList = {
 /** Stack that hosts the Tabs + modals/detail screens */
 export type RootStackParamList = {
   Tabs: undefined;
-  AddContent: undefined;
+  AddContent: { editId?: string } | undefined;
   ReportDetail: { id: string };
-  ScanScreen: undefined; // <- ensure ScanScreen is in the stack types
 };
 
 /** Handy composite nav type if you need both */

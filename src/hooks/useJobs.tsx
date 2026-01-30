@@ -2,12 +2,17 @@ import * as React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { nanoid } from "nanoid/non-secure";
 
+export type Risk = "low" | "medium" | "high";
+
 export type JobInput = {
   title: string;
   company: string;
   url?: string;
   notes?: string;
+  risk?: Risk;
 };
+
+export type JobPatch = Partial<JobInput>;
 
 export type Job = JobInput & {
   id: string;
@@ -82,6 +87,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         company: input.company.trim(),
         url: input.url?.trim(),
         notes: input.notes?.trim(),
+        risk: input.risk ?? "low",
         createdAt: now,
         updatedAt: now,
       };
@@ -101,6 +107,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
               ...("company" in patch ? { company: patch.company?.trim() ?? j.company } : {}),
               ...("url" in patch ? { url: patch.url?.trim() || undefined } : {}),
               ...("notes" in patch ? { notes: (patch.notes ?? "").trim() || undefined } : {}),
+              ...("risk" in patch ? { risk: patch.risk ?? j.risk ?? "low" } : {}),
               updatedAt: now,
             }
           : j

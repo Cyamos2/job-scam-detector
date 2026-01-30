@@ -8,6 +8,9 @@
 
 export type { Job, JobInput, JobPatch } from "../hooks/useJobs";
 
+// Re-export Severity as Risk for compatibility
+export type { Severity as Risk } from "./scoring";
+
 /**
  * Example placeholder API functions.
  * Replace with real API calls if you connect to a backend later.

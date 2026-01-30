@@ -14,7 +14,6 @@ import DatabaseScreen from "../screens/DatabaseScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import AddContentScreen from "../screens/AddContentScreen";
 import ReportDetailScreen from "../screens/ReportDetailScreen";
-import ScanScreen from "../screens/ScanScreen";
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -88,7 +87,6 @@ export default function RootNavigator() {
       <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false }} />
       <Stack.Screen name="AddContent" component={AddContentScreen} options={{ title: "Add Job" }} />
       <Stack.Screen name="ReportDetail" component={ReportDetailScreen} options={{ title: "Report" }} />
-      <Stack.Screen name="ScanScreen" component={ScanScreen} options={{ title: "Pick Screenshot" }} />
     </Stack.Navigator>
   );
 }

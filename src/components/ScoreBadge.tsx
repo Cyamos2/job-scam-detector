@@ -6,13 +6,13 @@ import { visualBucket, scoreJob, type ScoreResult } from "../lib/scoring";
 // Accept a numeric score and color by visual bucket inferred from it
 export default function ScoreBadge({ score }: { score: number }) {
   // synthesize a minimal ScoreResult for coloring
-  const fakeResult: ScoreResult = { score, reasons: [], hasHigh: false, hasMedium: false, hasLow: false };
+  const fakeResult: ScoreResult = { score, reasons: [] };
   const b = visualBucket(fakeResult);
 
   const palette = {
-    low:    { bg: "#E7F8ED", text: "#047857", border: "#A7F3D0" },
-    medium: { bg: "#FFF4E6", text: "#B45309", border: "#FED7AA" },
-    high:   { bg: "#FEE2E2", text: "#B91C1C", border: "#FCA5A5" },
+    low:    { bg: "#ECFDF5", text: "#047857", border: "#A7F3D0" },
+    medium: { bg: "#FEF3C7", text: "#D97706", border: "#FCD34D" },
+    high:   { bg: "#FEE2E2", text: "#DC2626", border: "#FCA5A5" },
   } as const;
 
   const p = palette[b];

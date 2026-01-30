@@ -182,11 +182,12 @@ export default function DatabaseScreen() {
         />
       </View>
 
-      {/* Filters + Sort */}
+      {/* Filters */}
       <View style={styles.toolbar}>
         <View style={styles.chipsRow}>
-          {(["all", "low", "medium", "high"] as const).map((r) => {
+          {(["all", "high", "medium", "low"] as const).map((r) => {
             const active = risk === r;
+            const emoji = r === "all" ? "📋" : r === "high" ? "🚨" : r === "medium" ? "⚠️" : "✅";
             return (
               <Pressable
                 key={r}
@@ -195,7 +196,7 @@ export default function DatabaseScreen() {
                 accessibilityLabel={`Filter ${r.toUpperCase()}`}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {r.toUpperCase()}
+                  {emoji} {r.charAt(0).toUpperCase() + r.slice(1)}
                 </Text>
               </Pressable>
             );
@@ -203,18 +204,19 @@ export default function DatabaseScreen() {
         </View>
 
         <View style={[styles.chipsRow, { marginTop: 10 }]}>
+          <Text style={styles.sortLabel}>Sort:</Text>
           {(["score", "date", "title"] as const).map((key) => {
             const active = sortKey === key;
-            const arrow = active ? (sortDir === "asc" ? "↑" : "↓") : "";
+            const arrow = active ? (sortDir === "asc" ? " ↑" : " ↓") : "";
             return (
               <Pressable
                 key={key}
                 onPress={() => toggleSort(key)}
-                style={styles.sortChip}
+                style={[styles.sortChip, active && styles.sortChipActive]}
                 accessibilityLabel={`Sort by ${key}`}
               >
-                <Text style={styles.sortLabel}>
-                  {key[0].toUpperCase() + key.slice(1)} {arrow}
+                <Text style={[styles.sortChipText, active && styles.sortChipTextActive]}>
+                  {key.charAt(0).toUpperCase() + key.slice(1)}{arrow}
                 </Text>
               </Pressable>
             );
@@ -225,10 +227,20 @@ export default function DatabaseScreen() {
       {/* List / Empty */}
       {empty ? (
         <View style={styles.empty}>
-          <Text style={{ color: "#6B7280", marginBottom: 12 }}>No saved jobs yet.</Text>
-          <Pressable onPress={() => nav.navigate("AddContent")} style={styles.addBtn}>
-            <Text style={styles.addBtnText}>＋ Add a job</Text>
-          </Pressable>
+          <Text style={styles.emptyIcon}>📂</Text>
+          <Text style={styles.emptyTitle}>
+            {query.trim() ? "No matches found" : "Database is empty"}
+          </Text>
+          <Text style={styles.emptyText}>
+            {query.trim() 
+              ? "Try adjusting your search or filters" 
+              : "Start analyzing job posts to build your scam detection history"}
+          </Text>
+          {!query.trim() && (
+            <Pressable onPress={() => nav.navigate("AddContent")} style={styles.addBtn}>
+              <Text style={styles.addBtnText}>✨ Analyze First Job</Text>
+            </Pressable>
+          )}
         </View>
       ) : (
         <SectionList
@@ -240,10 +252,10 @@ export default function DatabaseScreen() {
               style={[
                 styles.sectionHeader,
                 section.key === "high"
-                  ? { backgroundColor: "#FEE2E2" }
+                  ? { backgroundColor: "#FEE2E2", borderColor: "#FCA5A5" }
                   : section.key === "medium"
-                  ? { backgroundColor: "#FEF3C7" }
-                  : { backgroundColor: "#DCFCE7" },
+                  ? { backgroundColor: "#FEF3C7", borderColor: "#FCD34D" }
+                  : { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" },
               ]}
             >
               <Text style={styles.sectionTitle}>{section.title}</Text>
@@ -306,30 +318,33 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
   },
 
-  toolbar: { paddingHorizontal: 16, paddingTop: 10 },
-  chipsRow: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+  toolbar: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  chipsRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", alignItems: "center" },
 
   chip: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: 1.5,
     borderColor: "#E5E7EB",
     backgroundColor: "#fff",
   },
   chipActive: { borderColor: "#2563EB", backgroundColor: "#EFF6FF" },
-  chipText: { fontWeight: "700", color: "#111" },
-  chipTextActive: { color: "#1D4ED8" },
+  chipText: { fontWeight: "700", color: "#6B7280", fontSize: 13 },
+  chipTextActive: { color: "#2563EB" },
 
   sortChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#fff",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: "transparent",
   },
-  sortLabel: { fontWeight: "700", color: "#111" },
+  sortChipActive: {
+    backgroundColor: "#F3F4F6",
+  },
+  sortLabel: { fontWeight: "700", color: "#9CA3AF", fontSize: 13, marginRight: 4 },
+  sortChipText: { fontWeight: "600", color: "#6B7280", fontSize: 13 },
+  sortChipTextActive: { color: "#111827", fontWeight: "700" },
 
   sectionHeader: {
     marginTop: 16,
@@ -337,18 +352,45 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    borderWidth: 1,
   },
-  sectionTitle: { fontWeight: "800", color: "#991B1B" },
+  sectionTitle: { fontWeight: "800", color: "#374151", fontSize: 13, textTransform: "uppercase", letterSpacing: 0.5 },
 
-  empty: { flex: 1, alignItems: "center", justifyContent: "center" },
+  empty: { 
+    flex: 1, 
+    alignItems: "center", 
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    paddingVertical: 48,
+  },
+  emptyIcon: { fontSize: 56, marginBottom: 16 },
+  emptyTitle: { 
+    fontSize: 20, 
+    fontWeight: "700", 
+    color: "#111827",
+    marginBottom: 8,
+    textAlign: "center"
+  },
+  emptyText: { 
+    fontSize: 14, 
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24
+  },
 
   addBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
     backgroundColor: "#2563EB",
+    shadowColor: "#2563EB",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
-  addBtnText: { color: "white", fontWeight: "800" },
+  addBtnText: { color: "white", fontWeight: "800", fontSize: 15 },
 
   fabWrap: { position: "absolute", bottom: 24, right: 24 },
   fab: {

@@ -10,11 +10,18 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": ["**/*"],
-    "ios": { "supportsTablet": true },
-    "android": { "adaptiveIcon": {
-      "foregroundImage": "./assets/scamicide-logo.png",
-      "backgroundColor": "#ffffff"
-    }}
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.job-scam-detector"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/scamicide-logo.png",
+        "backgroundColor": "#ffffff"
+      }
+    }
   }
 }

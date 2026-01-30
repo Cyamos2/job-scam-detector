@@ -34,8 +34,6 @@ export default function HomeScreen() {
   const nav = useNavigation<Nav>();
   const { items } = useJobs();
 
-  const [search, setSearch] = React.useState("");
-
   const recent = React.useMemo(() => {
     return [...items]
       .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -54,7 +52,6 @@ export default function HomeScreen() {
 
   const goDatabase = () => nav.navigate("Database");   // tab
   const goAdd = () => nav.navigate("AddContent");      // stack
-  const goScan = () => nav.navigate("ScanScreen");     // stack
 
   return (
     <Screen>
@@ -65,42 +62,20 @@ export default function HomeScreen() {
           style={styles.logo}
           resizeMode="contain"
         />
-        <Text style={[styles.title, { color: colors.text }]}>Job Scam Detector</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Scamicide</Text>
         <Text style={styles.subtitle}>
-          Scan job posts, verify companies, avoid scams.
+          Analyze job postings and stay safe from scams
         </Text>
-
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search your database…"
-          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
-          onFocus={goDatabase}
-          onSubmitEditing={goDatabase}
-          style={[
-            styles.search,
-            {
-              color: colors.text,
-              backgroundColor: colors.card,
-              borderColor: "#E5E7EB",
-            },
-          ]}
-          returnKeyType="search"
-        />
 
         {/* Quick actions */}
         <View style={styles.actionsRow}>
           <Pressable onPress={goAdd} style={[styles.primaryBtn, styles.btn]}>
-            <Text style={styles.primaryText}>Start</Text>
+            <Text style={styles.primaryText}>✨ Analyze Job Post</Text>
           </Pressable>
-          <Pressable onPress={goScan} style={[styles.secondaryBtn, styles.btn]}>
-            <Text style={styles.secondaryText}>Pick Screenshot</Text>
+          <Pressable onPress={goDatabase} style={[styles.secondaryBtn, styles.btn]}>
+            <Text style={styles.secondaryText}>View Saved Jobs</Text>
           </Pressable>
         </View>
-
-        <Text style={styles.tip}>
-          Tip: You can also paste a job link on the Add screen.
-        </Text>
       </View>
 
       {/* Recent checks */}
@@ -113,7 +88,11 @@ export default function HomeScreen() {
 
       {recent.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={{ color: "#6B7280" }}>No saved jobs yet.</Text>
+          <Text style={styles.emptyIcon}>🔍</Text>
+          <Text style={styles.emptyTitle}>No analyses yet</Text>
+          <Text style={styles.emptyText}>
+            Tap "Analyze Job Post" above to check your first job posting
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -139,36 +118,70 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   hero: { paddingHorizontal: 16, paddingTop: 16, alignItems: "center" },
   logo: { width: 96, height: 96, marginBottom: 12 },
-  title: { fontSize: 24, fontWeight: "800" },
-  subtitle: { color: "#6B7280", marginTop: 2, marginBottom: 16, textAlign: "center" },
-  search: {
-    alignSelf: "stretch",
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 12 : 8,
+  title: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5 },
+  subtitle: { 
+    color: "#6B7280", 
+    marginTop: 4, 
+    marginBottom: 20, 
+    textAlign: "center",
+    fontSize: 15,
+    lineHeight: 20
   },
-  actionsRow: { alignSelf: "stretch", flexDirection: "row", gap: 12, marginTop: 12 },
+  actionsRow: { 
+    alignSelf: "stretch", 
+    flexDirection: "column", 
+    gap: 12, 
+    marginBottom: 16 
+  },
   btn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 16,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  primaryBtn: { backgroundColor: "#EF4444" },
-  primaryText: { color: "white", fontWeight: "800" },
-  secondaryBtn: { backgroundColor: "#E5E7EB" },
-  secondaryText: { color: "#111827", fontWeight: "800" },
-  tip: { marginTop: 8, color: "#6B7280", fontSize: 12, textAlign: "center" },
+  primaryBtn: { 
+    backgroundColor: "#2563EB",
+  },
+  primaryText: { color: "white", fontWeight: "800", fontSize: 16 },
+  secondaryBtn: { 
+    backgroundColor: "white",
+    borderWidth: 2,
+    borderColor: "#E5E7EB",
+  },
+  secondaryText: { color: "#374151", fontWeight: "700", fontSize: 15 },
   sectionHeader: {
-    marginTop: 20,
+    marginTop: 24,
     paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 12,
   },
-  sectionTitle: { fontWeight: "800", color: "#111827" },
-  sectionLink: { color: "#2563EB", fontWeight: "700" },
-  empty: { paddingVertical: 24, alignItems: "center", justifyContent: "center" },
+  sectionTitle: { fontWeight: "800", color: "#111827", fontSize: 16 },
+  sectionLink: { color: "#2563EB", fontWeight: "700", fontSize: 14 },
+  empty: { 
+    flex: 1, 
+    paddingVertical: 48,
+    paddingHorizontal: 32,
+    alignItems: "center", 
+    justifyContent: "center" 
+  },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: { 
+    fontSize: 18, 
+    fontWeight: "700", 
+    color: "#111827",
+    marginBottom: 8
+  },
+  emptyText: { 
+    fontSize: 14, 
+    color: "#6B7280", 
+    textAlign: "center",
+    lineHeight: 20
+  },
 });
