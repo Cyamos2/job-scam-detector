@@ -32,6 +32,29 @@
         "WRITE_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES"
       ]
+    },
+    "plugins": [
+      [
+        "sentry-expo",
+        {
+          "organization": "your-org-slug",
+          "project": "your-project-slug",
+          "authToken": "your-auth-token"
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:3000",
+      "sentryDsn": ""
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/your-project-id",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD"
     }
   }
 }
+

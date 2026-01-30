@@ -9,7 +9,8 @@
     "start:clear": "expo start -c",
     "ios": "expo run:ios",
     "android": "expo run:android",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "sentry-upload": "sentry-expo upload-sourcemaps"
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -17,10 +18,13 @@
     "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
+    "@sentry/react-native": "^5.20.0",
     "expo": "53.0.22",
     "expo-constants": "~17.1.7",
     "expo-image-picker": "~16.1.4",
     "expo-status-bar": "~2.2.3",
+    "expo-application": "~6.1.5",
+    "expo-device": "~7.1.4",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-native": "0.79.5",
@@ -35,6 +39,7 @@
     "@types/react": "~19.0.10",
     "@types/react-native": "^0.72.8",
     "babel-plugin-module-resolver": "^5.0.2",
+    "sentry-expo": "^7.0.0",
     "typescript": "~5.8.3"
   }
 }
