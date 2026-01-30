@@ -98,11 +98,11 @@ export const paginationSchema = z.object({
   page: z
     .string()
     .optional()
-    .transform((val) => Math.max(1, parseInt(val || '1', 10))),
+    .transform((val: string | undefined) => Math.max(1, parseInt(val || '1', 10))),
   limit: z
     .string()
     .optional()
-    .transform((val) => Math.min(100, Math.max(1, parseInt(val || '20', 10)))),
+    .transform((val: string | undefined) => Math.min(100, Math.max(1, parseInt(val || '20', 10)))),
 });
 
 /**
@@ -116,8 +116,8 @@ export const jobFilterSchema = z.object({
     .default('all'),
   search: z
     .string()
-    .optional()
     .trim()
+    .optional()
     .max(200, 'Search term must be less than 200 characters'),
   sortBy: z
     .enum(['score', 'date', 'title', 'company'])
@@ -136,7 +136,7 @@ export const healthCheckSchema = z.object({
   includeDetails: z
     .string()
     .optional()
-    .transform((val) => val === 'true'),
+    .transform((val: string | undefined) => val === 'true'),
 });
 
 /**
@@ -153,10 +153,14 @@ export type JobFilterParams = z.infer<typeof jobFilterSchema>;
 /**
  * Validation helper function
  */
+export type ValidationResult<T> =
+  | { success: true; data: T }
+  | { success: false; errors: z.ZodError };
+
 export function validateInput<T>(
-  schema: z.ZodSchema<T>,
+  schema: z.ZodType<T, any, any>,
   data: unknown
-): { success: true; data: T } | { success: false; errors: z.ZodError } {
+): ValidationResult<T> {
   const result = schema.safeParse(data);
   
   if (result.success) {
@@ -164,7 +168,7 @@ export function validateInput<T>(
   }
   
   return { success: false, errors: result.error };
-}
+} 
 
 /**
  * Sanitize input by removing empty strings and trimming

@@ -1,6 +1,6 @@
 // App.tsx
 import * as React from "react";
-import { StatusBar } from "react-native";
+import { StatusBar, AppState } from "react-native";
 import { Appearance } from "react-native";
 import {
   NavigationContainer,
@@ -49,8 +49,19 @@ function AppContent() {
         await crashReporting.initialize();
         setCrashReportingInitialized(true);
 
-        // Set user context if available
-        const userId = Application.androidId || Application.getIosIdForVendorAsync?.() || "anonymous";
+        // Set user context if available (prefer Android synchronous id, else iOS async)
+        let userId = "anonymous";
+        try {
+          if (typeof (Application as any).getAndroidId === "function") {
+            // getAndroidId is synchronous on Android
+            userId = (Application as any).getAndroidId();
+          } else if (typeof (Application as any).getIosIdForVendorAsync === "function") {
+            const iosId = await (Application as any).getIosIdForVendorAsync();
+            userId = iosId || "anonymous";
+          }
+        } catch (e) {
+          // Ignore any device id retrieval errors
+        }
         crashReporting.setUser(userId);
 
         // Add initial breadcrumbs
@@ -68,6 +79,14 @@ function AppContent() {
           platform: "ios",
           theme: settings.theme,
         });
+
+        // Best-effort cleanup of OCR cache (remove old temp files)
+        try {
+          const { cleanupOcrCache } = await import('./src/lib/ocr');
+          await cleanupOcrCache();
+        } catch (_) {
+          // ignore cleanup errors
+        }
 
         console.log("[App] Services initialized:", {
           analytics: analyticsInitialized,
@@ -87,8 +106,40 @@ function AppContent() {
       });
     });
 
+    // Periodic OCR cache cleanup: hourly + on app resume
+    let cleanupInterval: number | undefined;
+
+    const startCleanupInterval = () => {
+      // Every 1 hour (3600_000 ms)
+      cleanupInterval = setInterval(async () => {
+        try {
+          const { cleanupOcrCache } = await import("./src/lib/ocr");
+          await cleanupOcrCache();
+        } catch (_) {
+          // ignore
+        }
+      }, 60 * 60 * 1000) as unknown as number;
+    };
+
+    startCleanupInterval();
+
+    const handleAppStateChange = async (next: string) => {
+      if (next === "active") {
+        try {
+          const { cleanupOcrCache } = await import("./src/lib/ocr");
+          await cleanupOcrCache();
+        } catch (_) {
+          // ignore
+        }
+      }
+    };
+
+    const appStateSubscription = AppState.addEventListener("change", handleAppStateChange);
+
     return () => {
       subscription.remove();
+      appStateSubscription.remove();
+      if (cleanupInterval) clearInterval(cleanupInterval as unknown as number);
     };
   }, []);
 

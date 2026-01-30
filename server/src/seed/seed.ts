@@ -2,7 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { parse } from "csv-parse/sync";
-import { prisma } from "../prisma";
+import { prisma } from "../prisma.js";
 
 type Risk = "low" | "medium" | "high";
 

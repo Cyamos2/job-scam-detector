@@ -15,7 +15,9 @@ const structuredFormat = winston.format.combine(
 const consoleFormat = winston.format.combine(
   winston.format.colorize({ all: true }),
   winston.format.timestamp({ format: 'HH:mm:ss' }),
-  winston.format.printf(({ level, message, timestamp, stack, ...metadata }) => {
+  winston.format.printf((info: any) => {
+    const { level, timestamp = '', stack, ...metadata } = info;
+    const message = String(info.message);
     let log = `${timestamp} [${level}]: ${message}`;
     if (Object.keys(metadata).length > 0) {
       log += ` ${JSON.stringify(metadata)}`;

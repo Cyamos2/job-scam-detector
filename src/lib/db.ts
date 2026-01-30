@@ -49,6 +49,7 @@ export const api = {
   verifyCompany: (target: string) =>
     request(`/verify?target=${encodeURIComponent(target)}`),
   whois: (domain: string) => request<{ domain: string; createdAt: string | null; ageDays: number | null }>(`/whois?domain=${encodeURIComponent(domain)}`),
+  ocr: (imageBase64: string) => request<{ text: string; confidence: number | null }>(`/ocr`, { method: 'POST', body: JSON.stringify({ imageBase64 }) }),
 
   // back-compat aliases (so old code keeps working)
   list(): Promise<Job[]> { return this.listJobs(); },

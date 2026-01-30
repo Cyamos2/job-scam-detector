@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { prisma } from '../prisma.js';
 import { asyncHandler, OperationalError } from '../middleware/errorHandler.js';
 import { validateInput, jobCreateSchema, jobUpdateSchema, jobIdSchema, jobFilterSchema, sanitizeInput } from '../utils/validation.js';
-import { logger } from '../utils/logger.js';
+import logger, { loggers } from '../utils/logger.js';
+
 
 const router = Router();
 
@@ -18,8 +19,10 @@ router.get('/', asyncHandler(async (req, res) => {
     throw new OperationalError('Invalid query parameters', 400, filterResult.errors.flatten());
   }
   
-  const { page, limit, risk, search, sortBy, sortOrder } = filterResult.data;
-  const skip = (page - 1) * limit;
+  // Narrow the validated data to the known type
+  const validated = filterResult.data as import('../utils/validation.js').JobFilterParams;
+  const { page, limit, risk, search, sortBy, sortOrder } = validated;
+  const skip = (Number(page) - 1) * Number(limit);
   
   // Build where clause
   const where: Record<string, unknown> = {};
@@ -39,19 +42,20 @@ router.get('/', asyncHandler(async (req, res) => {
   // Execute query with timing
   const startTime = Date.now();
   
+  const orderBy = { [String(sortBy)]: sortOrder as any };
   const [jobs, total] = await Promise.all([
     prisma.job.findMany({
       where,
-      orderBy: { [sortBy]: sortOrder },
+      orderBy,
       skip,
-      take: limit,
+      take: Number(limit),
     }),
     prisma.job.count({ where }),
   ]);
   
   const duration = Date.now() - startTime;
   
-  logger.dbOperation('job.findMany', duration, true, {
+  loggers.dbOperation('job.findMany', duration, true, {
     filter: { risk, search },
     count: jobs.length,
     total,
@@ -64,7 +68,7 @@ router.get('/', asyncHandler(async (req, res) => {
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.ceil(total / Number(limit)), 
     },
   });
 }));
@@ -105,7 +109,7 @@ router.post('/', asyncHandler(async (req, res) => {
     throw new OperationalError('Validation failed', 400, bodyResult.errors.flatten());
   }
   
-  const sanitizedData = sanitizeInput(bodyResult.data);
+  const sanitizedData = sanitizeInput(bodyResult.data) as any;
   
   const job = await prisma.job.create({
     data: sanitizedData,
@@ -137,7 +141,7 @@ router.patch('/:id', asyncHandler(async (req, res) => {
     throw new OperationalError('Validation failed', 400, bodyResult.errors.flatten());
   }
   
-  const sanitizedData = sanitizeInput(bodyResult.data);
+  const sanitizedData = sanitizeInput(bodyResult.data) as any;
   
   // Check if job exists
   const existing = await prisma.job.findUnique({

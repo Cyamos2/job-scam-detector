@@ -1,9 +1,14 @@
 // src/lib/crashReporting.ts
 // Sentry crash reporting integration
 
-import * as Sentry from '@sentry/react-native';
 import React from 'react';
 import Constants from 'expo-constants';
+
+// Note: we avoid importing @sentry/react-native at module-load time because
+// missing peer deps (e.g., tslib) can cause Metro to fail resolving the bundle
+// during dev. Instead we dynamically require the package at runtime inside
+// initialize() and provide safe no-op fallbacks if Sentry is not available.
+let SentryLib: typeof import('@sentry/react-native') | null = null;
 
 // Sentry DSN - replace with your actual DSN from Sentry.io
 const SENTRY_DSN = Constants?.expoConfig?.extra?.sentryDsn || process.env.EXPO_PUBLIC_SENTRY_DSN || '';
@@ -23,38 +28,44 @@ class CrashReportingService {
     }
 
     try {
-      Sentry.init({
+      // Attempt to require Sentry dynamically; if tslib or other deps are missing,
+      // this can throw — we catch and disable crash reporting gracefully.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      SentryLib = require('@sentry/react-native');
+
+      (SentryLib as any).init({
         dsn: SENTRY_DSN,
+        // Expo-specific toggles and debug flags (kept permissive in dev)
         enableInExpoDevelopment: process.env.NODE_ENV !== 'production',
         debug: process.env.NODE_ENV !== 'production',
         environment: process.env.NODE_ENV || 'development',
-        
+
         // Performance monitoring
         tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-        
+
         // Session replay (optional - requires additional setup)
         replaysSessionSampleRate: 0.1,
         replaysOnErrorSampleRate: 1.0,
-        
+
         // Filter out common non-actionable errors
-        beforeSend: (event, hint) => {
-          const error = hint.originalException;
-          
+        beforeSend: (event: any, hint: any) => {
+          const error = hint?.originalException;
+
           // Filter out network errors that are expected
           if (error instanceof TypeError) {
-            if (error.message.includes('Network request failed')) {
+            if (error.message?.includes('Network request failed')) {
               return null; // Ignore network errors
             }
           }
-          
+
           // Filter out specific React Native warnings
-          if (event.message?.includes('Warning:')) {
+          if (event?.message?.includes('Warning:')) {
             return null; // Ignore React warnings
           }
-          
+
           return event;
         },
-        
+
         // Add custom tags
         initialScope: {
           tags: {
@@ -65,9 +76,11 @@ class CrashReportingService {
       });
 
       this.isInitialized = true;
-      console.log('[CrashReporting] Initialized successfully');
+      console.info('[CrashReporting] Initialized successfully');
     } catch (error) {
-      console.error('[CrashReporting] Initialization failed:', error);
+      // If Sentry fails to load (e.g., missing peer deps), keep app running.
+      SentryLib = null;
+      console.info('[CrashReporting] Sentry not available or initialization failed:', String(error));
     }
   }
 
@@ -75,9 +88,9 @@ class CrashReportingService {
    * Set user context for crash reports
    */
   setUser(userId: string, email?: string, additionalData?: Record<string, unknown>): void {
-    if (!this.isInitialized) return;
+    if (!this.isInitialized || !SentryLib) return;
 
-    Sentry.setUser({
+    SentryLib.setUser({
       id: userId,
       email,
       ...additionalData,
@@ -88,24 +101,25 @@ class CrashReportingService {
    * Clear user context
    */
   clearUser(): void {
-    if (!this.isInitialized) return;
-    Sentry.setUser(null);
+    if (!this.isInitialized || !SentryLib) return;
+    SentryLib.setUser(null);
   }
 
   /**
    * Add custom context to crash reports
    */
   setContext(name: string, context: Record<string, unknown>): void {
-    if (!this.isInitialized) return;
-    Sentry.setContext(name, context);
+    if (!this.isInitialized || !SentryLib) return;
+    SentryLib.setContext(name, context);
   }
 
   /**
    * Add custom tags to crash reports
    */
   setTag(key: string, value: string): void {
-    if (!this.isInitialized) return;
-    Sentry.setTag(key, value);
+    if (!this.isInitialized || !SentryLib) return;
+    // Use optional chaining in case the function isn't available on the loaded lib
+    (SentryLib as any).setTag?.(key, value);
   }
 
   /**
@@ -117,9 +131,9 @@ class CrashReportingService {
     data?: Record<string, unknown>,
     level: SeverityLevel = 'info'
   ): void {
-    if (!this.isInitialized) return;
+    if (!this.isInitialized || !SentryLib) return;
 
-    Sentry.addBreadcrumb({
+    SentryLib.addBreadcrumb({
       category,
       message,
       data,
@@ -133,47 +147,42 @@ class CrashReportingService {
    * Capture a message with optional severity
    */
   captureMessage(message: string, level: SeverityLevel = 'info'): void {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !SentryLib) {
       console.log(`[CrashReporting] Message (not initialized): ${message}`);
       return;
     }
 
-    Sentry.captureMessage(message, { level });
+    SentryLib.captureMessage(message, { level });
   }
 
   /**
    * Capture an error/exception
    */
   captureError(error: Error, context?: Record<string, unknown>): void {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !SentryLib) {
       console.error(`[CrashReporting] Error (not initialized):`, error);
       return;
     }
 
     if (context) {
-      Sentry.setContext('Error Context', context);
+      SentryLib.setContext('Error Context', context);
     }
-    Sentry.captureException(error);
+    SentryLib.captureException(error);
   }
 
   /**
    * Start a transaction for performance monitoring
    */
-  startTransaction(name: string, op: string): {
-    finish: () => void;
-    setStatus: (status: string) => void;
-    startChild: (options: { op: string; description: string }) => {
-      finish: () => void;
-    };
-  } | null {
-    if (!this.isInitialized) return null;
+  startTransaction(name: string, op: string): any | null {
+    if (!this.isInitialized || !SentryLib) return null;
 
-    // In React Native, we use the startTransaction method from Sentry
-    // This creates a performance monitoring transaction
-    return Sentry.startTransaction({
-      name,
-      op,
-    });
+    // Use startTransaction if available on the loaded Sentry lib
+    try {
+      const fn = (SentryLib as any).startTransaction;
+      return typeof fn === 'function' ? fn({ name, op }) : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   /**
@@ -198,8 +207,8 @@ class CrashReportingService {
   /**
    * Get the current Sentry instance (for advanced usage)
    */
-  getSentry(): typeof Sentry | null {
-    return this.isInitialized ? Sentry : null;
+  getSentry(): any | null {
+    return this.isInitialized && SentryLib ? SentryLib : null;
   }
 }
 
@@ -207,9 +216,17 @@ class CrashReportingService {
 export const crashReporting = new CrashReportingService();
 
 // Export Sentry components for React integration
-export const SentryErrorBoundary = SENTRY_DSN 
-  ? Sentry.ErrorBoundary 
-  : ({ children }: { children: React.ReactNode }) => React.Fragment(children);
+export function SentryErrorBoundary({ children, fallback }: { children: React.ReactNode; fallback?: (props: { error: any; componentStack: any; resetError: () => void }) => React.ReactNode }): React.ReactElement {
+  // If Sentry is configured and the ErrorBoundary component is available, use it.
+  if (SENTRY_DSN && SentryLib && (SentryLib as any).ErrorBoundary) {
+    const ErrorBoundary = (SentryLib as any).ErrorBoundary;
+    // Forward the optional fallback prop to Sentry's ErrorBoundary
+    return React.createElement(ErrorBoundary, { fallback }, children);
+  }
+
+  // Fallback: render children directly (no ErrorBoundary available)
+  return React.createElement(React.Fragment, null, children);
+}
 
 export default crashReporting;
 

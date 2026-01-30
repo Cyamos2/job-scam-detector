@@ -23,6 +23,7 @@ import JobRow from "../components/JobRow";
 import { useJobs } from "../hooks/useJobs";
 import { scoreJob, visualBucket, type Severity } from "../lib/scoring";
 import { extractTextFromImage } from "../lib/ocr";
+import { analytics } from "../lib/analytics";
 import * as ImagePicker from "expo-image-picker";
 import type { RootStackParamList, RootTabParamList } from "../navigation/types";
 
@@ -82,16 +83,32 @@ export default function HomeScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.8,
+        base64: true,
       });
 
+      // Prefer base64 if available from the picker; otherwise fallback to URI
+      const asAny = result as any;
+      const base64 = Array.isArray(asAny.assets) && asAny.assets[0] && typeof asAny.assets[0].base64 === 'string'
+        ? asAny.assets[0].base64
+        : typeof (asAny as any).base64 === 'string' ? (asAny as any).base64 : undefined;
+
       const uri = extractUriFromPickerResult(result);
-      if (!uri) return;
+      if (!uri && !base64) return;
 
       setAnalyzing(true);
-      const text = await extractTextFromImage(uri);
-      setAnalyzing(false);
-
-      nav.navigate("AddContent", { prefill: { notes: text } });
+      try {
+        const res = await extractTextFromImage(base64 ?? uri!);
+        setAnalyzing(false);
+        await analytics.trackScreenshotAnalysis(true, res.text.length);
+        nav.navigate("AddContent", { prefill: { notes: res.text, confidence: res.confidence ?? null } });
+      } catch (err) {
+        setAnalyzing(false);
+        await analytics.trackScreenshotAnalysis(false, undefined, String(err ?? 'unknown'));
+        Alert.alert('Analysis failed', String(err ?? 'Unknown error'));
+      } finally {
+        // Attempt a best-effort cache cleanup after OCR activity
+        try { await (await import('../lib/ocr')).cleanupOcrCache(); } catch (_) { /* ignore */ }
+      }
     } catch (e) {
       setAnalyzing(false);
       Alert.alert("Analysis failed", String(e ?? "Unknown error"));

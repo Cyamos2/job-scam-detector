@@ -11,7 +11,7 @@ The app scans job descriptions, links, and even screenshots to flag risky signal
   Detects red-flag keywords in job postings (e.g., "pay upfront", "wire money")  
 
 - 🖼️ **Screenshot Scanner**  
-  OCR support to read job descriptions from screenshots  
+  OCR support to read job descriptions from screenshots (server-side Tesseract fallback; optionally use on-device ML Kit for better privacy/accuracy — requires prebuild/EAS).  
 
 - 📊 **Risk Assessment Meter**  
   Shows a score from **0–100** with Low / Medium / High risk labels  
@@ -69,4 +69,20 @@ cd scamicide-app
 npm install
 
 # Start Expo
+
+## On-device OCR (ML Kit) — optional
+If you want to use on-device OCR for better privacy and speed, follow these steps:
+
+1. Install dependencies (already added to package.json):
+   - `react-native-mlkit-text-recognition`
+   - `expo-file-system`
+2. Prebuild native projects and install pods (required for ML Kit):
+   - `npx expo prebuild` (or use EAS Build)
+   - `cd ios && pod install` (on macOS)
+3. Build the app with EAS or run via Xcode/Android Studio (ML Kit requires native build).
+
+Notes:
+- On-device OCR improves privacy (no image upload) and usually gives better accuracy. It requires a native build (EAS or bare workflow).
+- If ML Kit is not available at runtime, the app will gracefully fall back to the server-side OCR (Tesseract) or demo text.
+
 npm run start

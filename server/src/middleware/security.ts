@@ -1,12 +1,12 @@
 import helmet from 'helmet';
 import { Request, Response, NextFunction } from 'express';
-import { logger } from '../utils/logger.js';
+import { loggers } from '../utils/logger.js';
 
 /**
  * Security headers middleware using Helmet
  * Configures various HTTP security headers
  */
-export const securityHeaders = helmet({
+export const securityHeaders = (helmet({
   // Content Security Policy
   contentSecurityPolicy: {
     directives: {
@@ -61,8 +61,9 @@ export const securityHeaders = helmet({
       // Deny all others by default
       // Specific policies would be added based on app needs
     ],
-  },
-});
+  }
+}) as any);
+
 
 /**
  * CORS configuration
@@ -83,7 +84,7 @@ export const corsOptions = {
     
     // Log blocked CORS attempts in development
     if (process.env.NODE_ENV !== 'production') {
-      logger.debug('CORS blocked origin', { origin, allowedOrigins });
+      loggers.debug('CORS blocked origin', { origin, allowedOrigins });
     }
     
     // Block by default
@@ -151,7 +152,7 @@ export function securityLogging(req: Request, _res: Response, next: NextFunction
   
   for (const pattern of suspiciousPatterns) {
     if (pattern.test(url)) {
-      logger.securityEvent('Suspicious request pattern detected', {
+      loggers.securityEvent('Suspicious request pattern detected', {
         method,
         url,
         ip: req.ip,

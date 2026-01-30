@@ -1,6 +1,6 @@
 // server/src/index.ts
 import "dotenv/config";
-import express, { Request, Response, NextFunction } from "express";
+import express, { Request, Response } from "express";
 import cors from "cors";
 import morgan from "morgan";
 import * as Sentry from "@sentry/node";
@@ -8,31 +8,32 @@ import { prisma } from "./prisma.js";
 import jobsRouter from "./routes/jobs.js";
 import verifyRouter from "./routes/verify.js";
 import whoisRouter from "./routes/whois.js";
+import ocrRouter from "./routes/ocr.js";
 import { errorHandler, notFoundHandler, setupUnhandledRejectionHandler, setupUncaughtExceptionHandler } from "./middleware/errorHandler.js";
 import { securityHeaders, corsOptions, requestIdMiddleware, securityLogging, validateContentType } from "./middleware/security.js";
 import { apiRateLimiter, whoisRateLimiter } from "./middleware/rateLimiter.js";
-import { logger } from "./utils/logger.js";
+import logger, { loggers } from "./utils/logger.js";
 
 const app = express();
 
 // Initialize Sentry for error tracking
 const sentryDsn = process.env.SENTRY_DSN;
 if (sentryDsn) {
-  Sentry.init({
+  (Sentry as any).init({
     dsn: sentryDsn,
     environment: process.env.NODE_ENV || "development",
     tracesSampleRate: process.env.NODE_ENV === "production" ? 0.2 : 1.0,
     debug: process.env.NODE_ENV !== "production",
     integrations: [
-      // Enable HTTP calls tracing
-      new Sentry.Integrations.Http({ tracing: true }),
+      // Enable HTTP calls tracing (cast to any for compatibility)
+      new (Sentry as any).Integrations.Http({ tracing: true }),
       // Enable Express.js middleware tracing
-      new Sentry.Integrations.Express({ app }),
+      new (Sentry as any).Integrations.Express({ app }),
     ],
   });
 
   // Request handler for Sentry
-  app.use(Sentry.Handlers.requestHandler({
+  app.use((Sentry as any).Handlers.requestHandler({
     request: ["headers", "method", "url", "query"],
   }));
 }
@@ -63,7 +64,7 @@ app.use(morgan("combined", {
   stream: {
     write: (message: string) => {
       const parts = message.trim().split(" ");
-      logger.httpRequest(
+      loggers.httpRequest(
         parts[0] || "UNKNOWN",
         parts[1] || "UNKNOWN",
         parseInt(parts[2]) || 200,
@@ -110,6 +111,7 @@ app.get("/api", (_req: Request, res: Response) => {
       jobs: "/api/v1/jobs",
       verify: "/api/v1/verify",
       whois: "/api/v1/whois",
+      ocr: "/api/v1/ocr",
     },
   });
 });
@@ -122,10 +124,11 @@ app.use("/api/v1/whois", whoisRateLimiter);
 app.use("/api/v1/jobs", jobsRouter);
 app.use("/api/v1/verify", verifyRouter);
 app.use("/api/v1/whois", whoisRouter);
+app.use("/api/v1/ocr", ocrRouter);
 
 // Sentry error handler (must be after routes)
 if (sentryDsn) {
-  app.use(Sentry.Handlers.errorHandler());
+  app.use((Sentry as any).Handlers.errorHandler());
 }
 
 // 404 handler
