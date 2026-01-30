@@ -8,7 +8,24 @@ import Constants from 'expo-constants';
 // missing peer deps (e.g., tslib) can cause Metro to fail resolving the bundle
 // during dev. Instead we dynamically require the package at runtime inside
 // initialize() and provide safe no-op fallbacks if Sentry is not available.
-let SentryLib: typeof import('@sentry/react-native') | null = null;
+
+// Minimal subset of Sentry methods we rely on. We cast the dynamically-imported
+// module to this shape to get better type safety while keeping runtime checks.
+type SentryAPI = {
+  init?: (opts?: any) => void;
+  setUser?: (user: any) => void;
+  setContext?: (name: string, ctx: any) => void;
+  setTag?: (key: string, value: string) => void;
+  addBreadcrumb?: (crumb: any) => void;
+  captureMessage?: (message: string, opts?: any) => void;
+  captureException?: (err: any) => void;
+  withScope?: (fn: (scope: any) => void) => void;
+  startTransaction?: (opts?: any) => any;
+  ErrorBoundary?: any;
+  flush?: (timeout?: number) => Promise<boolean>;
+};
+
+let SentryLib: SentryAPI | null = null;
 
 // Sentry DSN - replace with your actual DSN from Sentry.io
 const SENTRY_DSN = Constants?.expoConfig?.extra?.sentryDsn || process.env.EXPO_PUBLIC_SENTRY_DSN || '';
@@ -28,23 +45,27 @@ class CrashReportingService {
     }
 
     try {
-      // Attempt to require Sentry dynamically; if tslib or other deps are missing,
-      // this can throw — we catch and disable crash reporting gracefully.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      SentryLib = require('@sentry/react-native');
+      // Attempt to require Sentry dynamically if a Sentry implementation hasn't
+      // already been provided (tests may inject a mock). If tslib or other deps are
+      // missing, this can throw — we catch and disable crash reporting gracefully.
+      if (!SentryLib) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const sentryModule = require('@sentry/react-native');
+        SentryLib = (sentryModule && (sentryModule as any).default) ? (sentryModule as any).default : sentryModule;
+      }
 
-      (SentryLib as any).init({
+      (SentryLib as any).init?.({
         dsn: SENTRY_DSN,
-        // Expo-specific toggles and debug flags (kept permissive in dev)
+        // Expo-specific toggles and debug flags
         enableInExpoDevelopment: process.env.NODE_ENV !== 'production',
         debug: process.env.NODE_ENV !== 'production',
         environment: process.env.NODE_ENV || 'development',
 
-        // Performance monitoring
-        tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+        // Performance monitoring (stricter in production)
+        tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 0.0,
 
-        // Session replay (optional - requires additional setup)
-        replaysSessionSampleRate: 0.1,
+        // Session replay (stricter by default)
+        replaysSessionSampleRate: process.env.NODE_ENV === 'production' ? 0.05 : 0.0,
         replaysOnErrorSampleRate: 1.0,
 
         // Filter out common non-actionable errors
@@ -65,15 +86,11 @@ class CrashReportingService {
 
           return event;
         },
-
-        // Add custom tags
-        initialScope: {
-          tags: {
-            app_version: Constants.expoConfig?.version || 'unknown',
-            platform: Constants.platform?.ios ? 'ios' : 'android',
-          },
-        },
       });
+
+      // Add custom tags after init to avoid differences in init options across SDK versions
+      (SentryLib as any).setTag?.('app_version', Constants.expoConfig?.version || 'unknown');
+      (SentryLib as any).setTag?.('platform', Constants.platform?.ios ? 'ios' : 'android');
 
       this.isInitialized = true;
       console.info('[CrashReporting] Initialized successfully');
@@ -90,11 +107,15 @@ class CrashReportingService {
   setUser(userId: string, email?: string, additionalData?: Record<string, unknown>): void {
     if (!this.isInitialized || !SentryLib) return;
 
-    SentryLib.setUser({
+    (SentryLib as any).setUser?.({
       id: userId,
       email,
-      ...additionalData,
     });
+
+    if (additionalData) {
+      // Put extra user-related metadata into a context field to avoid leaking PII into the user object
+      (SentryLib as any).setContext?.('user_meta', additionalData);
+    }
   }
 
   /**
@@ -102,7 +123,7 @@ class CrashReportingService {
    */
   clearUser(): void {
     if (!this.isInitialized || !SentryLib) return;
-    SentryLib.setUser(null);
+    (SentryLib as any).setUser?.(null);
   }
 
   /**
@@ -110,7 +131,7 @@ class CrashReportingService {
    */
   setContext(name: string, context: Record<string, unknown>): void {
     if (!this.isInitialized || !SentryLib) return;
-    SentryLib.setContext(name, context);
+    (SentryLib as any).setContext?.(name, context);
   }
 
   /**
@@ -133,13 +154,13 @@ class CrashReportingService {
   ): void {
     if (!this.isInitialized || !SentryLib) return;
 
-    SentryLib.addBreadcrumb({
+    (SentryLib as any).addBreadcrumb?.({
       category,
       message,
       data,
       level,
       type: 'default',
-      timestamp: Date.now() / 1000,
+      timestamp: Math.floor(Date.now() / 1000),
     });
   }
 
@@ -152,7 +173,18 @@ class CrashReportingService {
       return;
     }
 
-    SentryLib.captureMessage(message, { level });
+    // Stricter grading: only send messages at or above configured minimum level.
+    const priority: Record<SeverityLevel, number> = { debug: 0, info: 1, warning: 2, error: 3, fatal: 4 };
+
+    const minLevelStr = (process.env.EXPO_PUBLIC_SENTRY_MIN_LEVEL as SeverityLevel) || (process.env.NODE_ENV === 'production' ? 'warning' : 'info');
+    const minLevel = minLevelStr as SeverityLevel;
+
+    if (priority[level] < priority[minLevel]) {
+      console.log(`[CrashReporting] Message below minimum level (${minLevel}), skipping send: ${message}`);
+      return;
+    }
+
+    (SentryLib as any).captureMessage?.(message, { level });
   }
 
   /**
@@ -164,10 +196,16 @@ class CrashReportingService {
       return;
     }
 
-    if (context) {
-      SentryLib.setContext('Error Context', context);
+    // Use a temporary scope so per-error context does not leak to other events
+    if ((SentryLib as any).withScope) {
+      (SentryLib as any).withScope((scope: any) => {
+        if (context) scope.setContext?.('error_context', context);
+        (SentryLib as any).captureException?.(error);
+      });
+    } else {
+      if (context) (SentryLib as any).setContext?.('Error Context', context);
+      (SentryLib as any).captureException?.(error);
     }
-    SentryLib.captureException(error);
   }
 
   /**
@@ -188,20 +226,29 @@ class CrashReportingService {
   /**
    * Manually trigger a crash (for testing only)
    */
-  testCrash(): void {
-    if (!this.isInitialized) {
+  async testCrash(): Promise<void> {
+    if (!this.isInitialized || !SentryLib) {
       console.warn('[CrashReporting] Cannot test crash - not initialized');
       return;
     }
 
-    throw new Error('Test crash - this should be caught by Sentry');
+    const err = new Error('Test crash - manual capture');
+    (SentryLib as any).captureException?.(err);
+
+    // Attempt to flush events to Sentry (best-effort for tests)
+    try {
+      await (SentryLib as any).flush?.(2000);
+      console.info('[CrashReporting] Test crash captured and flushed');
+    } catch (e) {
+      console.warn('[CrashReporting] Test crash captured (flush failed):', String(e));
+    }
   }
 
   /**
    * Check if crash reporting is enabled
    */
   isEnabled(): boolean {
-    return this.isInitialized && !!SENTRY_DSN;
+    return !!SENTRY_DSN && this.isInitialized && !!SentryLib;
   }
 
   /**
@@ -226,6 +273,12 @@ export function SentryErrorBoundary({ children, fallback }: { children: React.Re
 
   // Fallback: render children directly (no ErrorBoundary available)
   return React.createElement(React.Fragment, null, children);
+}
+
+// Helper for tests: allow injection of a mock Sentry implementation so tests don't
+// need to load the native @sentry/react-native package.
+export function __setSentryForTest(sentry: SentryAPI | null) {
+  SentryLib = sentry;
 }
 
 export default crashReporting;
