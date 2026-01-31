@@ -38,6 +38,11 @@
 - [x] Added android:build, android:release, android:bundle scripts
 - [x] Added build:android:debug, build:android:release scripts
 
+### 6. Gradle Wrapper Scripts ✅
+- [x] Created gradlew (shell script for Unix/Linux/macOS)
+- [x] Created gradlew.bat (batch script for Windows)
+- [x] Made gradlew executable with proper permissions
+
 ## 🚀 Next Steps to Run on Android
 
 ### Prerequisites
