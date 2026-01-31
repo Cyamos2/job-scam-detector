@@ -185,6 +185,24 @@ export default function SettingsScreen() {
           <Pressable onPress={onClear} style={[styles.chip, styles.destructive]}>
             <Text style={[styles.chipText, { color: "#B91C1C" }]}>Clear All</Text>
           </Pressable>
+
+          {/* Dev-only: trigger a Sentry test capture */}
+          {__DEV__ && (
+            <Pressable
+              onPress={async () => {
+                try {
+                  const crashReporting = (await import("../lib/crashReporting")).crashReporting;
+                  await crashReporting.testCrash();
+                  Alert.alert("Sentry", "Test event captured and flushed (if configured).");
+                } catch (e) {
+                  Alert.alert("Sentry", "Test capture failed: " + String(e));
+                }
+              }}
+              style={[styles.chip, { backgroundColor: "#F3F4F6" }]}
+            >
+              <Text style={[styles.chipText, { color: colors.text }]}>Trigger Sentry Test</Text>
+            </Pressable>
+          )}
         </View>
         <Text style={[styles.note, { color: colors.text }]}>
           Export shares a snapshot as JSON. Import merges with what you have.

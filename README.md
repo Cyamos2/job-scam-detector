@@ -11,7 +11,7 @@ The app scans job descriptions, links, and even screenshots to flag risky signal
   Detects red-flag keywords in job postings (e.g., "pay upfront", "wire money")  
 
 - 🖼️ **Screenshot Scanner**  
-  OCR support to read job descriptions from screenshots  
+  OCR support to read job descriptions from screenshots (server-side Tesseract fallback; optionally use on-device ML Kit for better privacy/accuracy — requires prebuild/EAS).  
 
 - 📊 **Risk Assessment Meter**  
   Shows a score from **0–100** with Low / Medium / High risk labels  
@@ -69,4 +69,28 @@ cd scamicide-app
 npm install
 
 # Start Expo
+
+## On-device OCR (ML Kit) — optional
+If you want to use on-device OCR for better privacy and speed, follow these steps:
+
+1. Install dependencies (already added to package.json):
+   - `react-native-mlkit-text-recognition`
+   - `expo-file-system`
+2. Prebuild native projects and install pods (required for ML Kit):
+   - `npx expo prebuild` (or use EAS Build)
+   - `cd ios && pod install` (on macOS)
+3. Build the app with EAS or run via Xcode/Android Studio (ML Kit requires native build).
+
+Notes:
+- On-device OCR improves privacy (no image upload) and usually gives better accuracy. It requires a native build (EAS or bare workflow).
+- If ML Kit is not available at runtime, the app will gracefully fall back to the server-side OCR (Tesseract) or demo text.
+
+Sentry configuration:
+- Use `EXPO_PUBLIC_SENTRY_DSN` to set your Sentry DSN at build/runtime.
+- You can control which message levels are sent to Sentry with `EXPO_PUBLIC_SENTRY_MIN_LEVEL` (one of `debug|info|warning|error|fatal`). In production the default is `warning` (to reduce noise); in development it defaults to `info`.
+
+Testing:
+- `crashReporting.testCrash()` now returns a `Promise` and attempts to flush captured events before resolving. Call `await crashReporting.testCrash()` when running a smoke test.
+- In development, you can also trigger the test from the app: open **Settings** and tap **Trigger Sentry Test** (dev-only button).
+
 npm run start

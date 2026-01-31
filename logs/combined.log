@@ -1,0 +1,8 @@
+{"environment":"test","host":"0.0.0.0","level":"info","message":"Server started","pid":28958,"port":3000,"service":"scamicide-api","timestamp":"2026-01-30 14:23:18.103"}
+{"environment":"test","level":"info","message":"Tesseract worker initialized","service":"scamicide-api","timestamp":"2026-01-30 14:23:18.117"}
+{"environment":"test","level":"info","message":"Starting OCR recognition","service":"scamicide-api","timestamp":"2026-01-30 14:23:18.117"}
+{"confidence":90,"environment":"test","length":11,"level":"info","message":"OCR completed","service":"scamicide-api","timestamp":"2026-01-30 14:23:18.118"}
+{"duration":"0ms","environment":"test","level":"info","message":"HTTP Request","method":"::ffff:127.0.0.1","service":"scamicide-api","statusCode":200,"timestamp":"2026-01-30 14:23:18.119","url":"-"}
+{"environment":"test","level":"warn","message":"Client error Missing image payload","method":"POST","requestId":"ml19thwq-l4fydirbu","service":"scamicide-api","statusCode":400,"timestamp":"2026-01-30 14:23:18.122","url":"/api/v1/ocr"}
+{"duration":"0ms","environment":"test","level":"info","message":"HTTP Request","method":"::ffff:127.0.0.1","service":"scamicide-api","statusCode":200,"timestamp":"2026-01-30 14:23:18.122","url":"-"}
+{"environment":"test","level":"info","message":"SIGTERM received, starting graceful shutdown...","service":"scamicide-api","timestamp":"2026-01-30 14:23:18.124"}

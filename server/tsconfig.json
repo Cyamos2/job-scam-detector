@@ -1,16 +1,25 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "lib": ["ES2020"],
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "outDir": "dist",
+    "rootDir": "src",
     "types": ["node"],
     "resolveJsonModule": true,
-    "baseUrl": "./src"
+    "baseUrl": "./src",
+    "declaration": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "sourceMap": true,
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

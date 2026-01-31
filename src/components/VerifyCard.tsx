@@ -42,7 +42,7 @@ export default function VerifyCard({ company, url, baseUrl }: Props) {
         const qs = new URLSearchParams();
         if (company) qs.set("company", company);
         if (url) qs.set("url", url);
-        const resp = await fetch(`${baseUrl}/api/verify?${qs.toString()}`);
+        const resp = await fetch(`${baseUrl}/api/v1/verify?${qs.toString()}`);
         const json = (await resp.json()) as VerifyResult;
         if (!cancelled) setData(json);
       } catch (e: unknown) {

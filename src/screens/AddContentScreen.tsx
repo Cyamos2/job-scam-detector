@@ -11,8 +11,13 @@ import {
   ToastAndroid,
   Animated,
   Easing,
+  Modal,
+  ScrollView,
+  Button,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useTheme } from "@react-navigation/native";
+import { analytics } from "../lib/analytics";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RouteProp } from "@react-navigation/native";
 
@@ -49,6 +54,11 @@ export default function AddContentScreen() {
   const lastSubmitted = React.useRef<string | null>(null);
 
   // Prefill when editing or from route prefill (e.g., screenshot OCR)
+  const [ocrPreviewText, setOcrPreviewText] = React.useState<string | null>(null);
+  const [ocrPreviewConfidence, setOcrPreviewConfidence] = React.useState<number | null>(null);
+  const [ocrPending, setOcrPending] = React.useState(false);
+  const [showOcrModal, setShowOcrModal] = React.useState(false);
+
   React.useEffect(() => {
     if (isEdit && editId) {
       const existing =
@@ -67,8 +77,14 @@ export default function AddContentScreen() {
       if (prefill.title) setTitle(prefill.title);
       if (prefill.company) setCompany(prefill.company);
       if (prefill.url) setUrl(prefill.url ?? "");
-      if (prefill.notes) setNotes(prefill.notes ?? "");
-      if (prefill.notes) showSnack(`Imported text (${String(prefill.notes).length} chars)`);
+      if (prefill.notes) {
+        // Defer applying OCR text to Notes until user accepts — keep as a pending preview
+        setOcrPreviewText(prefill.notes ?? null);
+        setOcrPreviewConfidence((prefill as any)?.confidence ?? null);
+        setOcrPending(true);
+        // Show a subtle prompt
+        showSnack(`Imported text ready from screenshot (${String(prefill.notes).length} chars)`);
+      }
     }
   }, [isEdit, editId, getById, items, route.params?.prefill]);
 
@@ -119,6 +135,7 @@ export default function AddContentScreen() {
   // iOS snackbar (Android uses Toast)
   const snackY = React.useRef(new Animated.Value(-60)).current;
   const [snackText, setSnackText] = React.useState("");
+
   const showSnack = (msg: string) => {
     if (Platform.OS === "android") {
       ToastAndroid.show(msg, ToastAndroid.SHORT);
@@ -240,9 +257,25 @@ export default function AddContentScreen() {
         </Text>
       </View>
 
-      {route.params?.prefill?.notes && !isEdit && (
+      {ocrPending && !isEdit && ocrPreviewText && (
         <View style={styles.importedBanner}>
           <Text style={styles.importedBannerText}>Imported text from screenshot</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'center' }}>
+            {typeof ocrPreviewConfidence === 'number' && (
+              <View style={{ paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, backgroundColor: (ocrPreviewConfidence >= 80 ? '#10B981' : (ocrPreviewConfidence >= 60 ? '#F59E0B' : '#EF4444')) }}>
+                <Text style={{ color: 'white', fontWeight: '800', fontSize: 12 }}>{Math.round(ocrPreviewConfidence)}%</Text>
+              </View>
+            )}
+            <Pressable onPress={() => setShowOcrModal(true)} style={{ marginLeft: 8, marginRight: 8 }}>
+              <Text style={{ color: '#2563EB', fontWeight: '700' }}>Preview</Text>
+            </Pressable>
+            <Pressable onPress={async () => { setNotes(ocrPreviewText ?? ''); setOcrPending(false); await analytics.trackScreenshotAnalysis(true, (ocrPreviewText ?? '').length); if ((ocrPreviewConfidence ?? 100) < 60) showSnack('Applied (low confidence)'); else showSnack('OCR text applied'); }}>
+              <Text style={{ color: '#10B981', fontWeight: '700' }}>Use text</Text>
+            </Pressable>
+            <Pressable onPress={async () => { setOcrPreviewText(null); setOcrPending(false); await analytics.trackScreenshotAnalysis(false, undefined, 'user_discarded'); showSnack('OCR text discarded'); }}>
+              <Text style={{ color: '#EF4444', fontWeight: '700' }}>Discard</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -265,6 +298,30 @@ export default function AddContentScreen() {
           </View>
         </View>
       )}
+
+      {/* OCR Preview Modal */}
+      <Modal visible={showOcrModal} animationType="slide" onRequestClose={() => setShowOcrModal(false)}>
+        <SafeAreaView style={{ flex: 1 }}>
+          <ScrollView contentContainerStyle={{ padding: 16 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', marginBottom: 12 }}>Preview OCR Text</Text>
+            {typeof ocrPreviewConfidence === 'number' && (
+              <Text style={{ color: (ocrPreviewConfidence >= 80 ? '#10B981' : (ocrPreviewConfidence >= 60 ? '#F59E0B' : '#EF4444')), marginBottom: 8 }}>Confidence: {Math.round(ocrPreviewConfidence)}%</Text>
+            )}
+            <Text style={{ marginBottom: 8, color: '#374151' }}>Edit the OCR result below and tap "Use text" to apply it to Notes.</Text>
+            <TextInput
+              value={ocrPreviewText ?? ''}
+              onChangeText={(t) => setOcrPreviewText(t)}
+              multiline
+              textAlignVertical="top"
+              style={[styles.textarea, { minHeight: 220, marginBottom: 12 }]}
+            />
+            <View style={{ flexDirection: 'row', gap: 12, justifyContent: 'flex-end' }}>
+              <Button title="Discard" color="#EF4444" onPress={async () => { setShowOcrModal(false); setOcrPreviewText(null); setOcrPending(false); await analytics.trackScreenshotAnalysis(false, undefined, 'user_discarded'); showSnack('OCR text discarded'); }} />
+              <Button title="Use text" onPress={async () => { setNotes(ocrPreviewText ?? ''); setShowOcrModal(false); setOcrPending(false); await analytics.trackScreenshotAnalysis(true, (ocrPreviewText ?? '').length); showSnack('OCR text applied'); }} />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
       {/* Form */}
       <View style={styles.form}>

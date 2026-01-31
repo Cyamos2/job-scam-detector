@@ -1,25 +1,54 @@
 import { Router } from 'express';
 import fetch from 'node-fetch';
+import { asyncHandler, OperationalError } from '../middleware/errorHandler.js';
+import { validateInput, whoisQuerySchema } from '../utils/validation.js';
+import { logger } from '../utils/logger.js';
+
 const router = Router();
 
-// GET /whois?domain=example.com
-router.get('/', async (req, res) => {
-  const domain = (req.query.domain as string | undefined)?.trim().toLowerCase();
-  if (!domain) return res.status(400).json({ error: 'missing domain' });
-
+/**
+ * GET /api/v1/whois?domain=example.com
+ * Get WHOIS information for a domain
+ */
+router.get('/', asyncHandler(async (req, res) => {
+  const queryResult = validateInput(whoisQuerySchema, req.query);
+  
+  if (!queryResult.success) {
+    throw new OperationalError('Invalid query parameters', 400, queryResult.errors.flatten());
+  }
+  
+  const domain = queryResult.data.domain;
+  
+  // Use RDAP service to get registration data
+  const rdapUrl = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
+  
+  logger.info('WHOIS lookup started', { domain });
+  
+  let rdapResponse: unknown;
+  let createdAt: string | null = null;
+  let ageDays: number | null = null;
+  
   try {
-    // Use public RDAP service to get registration data
-    const rdapUrl = `https://rdap.org/domain/${encodeURIComponent(domain)}`;
-    const resp = await fetch(rdapUrl, { method: 'GET' });
+    const resp = await fetch(rdapUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
+    
     if (!resp.ok) {
-      return res.status(502).json({ error: 'rdap_unavailable', status: resp.status });
+      logger.warn('RDAP request failed', { domain, status: resp.status });
+      throw new OperationalError('WHOIS service unavailable', 502);
     }
-    const json = await resp.json();
-
+    
+    rdapResponse = await resp.json();
+    
+    // Parse RDAP response
+    const json = rdapResponse as Record<string, unknown>;
+    
     // Try to locate a registration/creation date
-    let createdAt: string | null = null;
     if (Array.isArray(json.events)) {
-      for (const ev of json.events) {
+      for (const ev of json.events as Array<{ eventAction?: string; eventDate?: string }>) {
         const action = String(ev.eventAction ?? '')?.toLowerCase();
         if ((/create|registration|registration-date|registered/).test(action) && ev.eventDate) {
           createdAt = ev.eventDate;
@@ -27,18 +56,55 @@ router.get('/', async (req, res) => {
         }
       }
     }
-
+    
     // Some RDAP variants include 'registrar' or 'created' fields
     if (!createdAt && json.created) {
-      createdAt = json.created;
+      createdAt = String(json.created);
     }
-
-    const ageDays = createdAt ? Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24)) : null;
-
-    res.json({ domain, createdAt, ageDays, rdap: { summarised: { handle: json.handle ?? null, names: json.name ?? json.ldhName ?? null } } });
-  } catch (err: unknown) {
-    res.status(500).json({ error: 'whois_error', detail: err instanceof Error ? err.message : String(err) });
+    
+    if (createdAt) {
+      const createdDate = new Date(createdAt);
+      if (!isNaN(createdDate.getTime())) {
+        ageDays = Math.floor((Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+      }
+    }
+    
+  } catch (error) {
+    logger.error('WHOIS lookup error', { domain, error: String(error) });
+    
+    // Return a fallback response instead of throwing
+    res.json({
+      success: true,
+      data: {
+        domain,
+        createdAt: null,
+        ageDays: null,
+        error: error instanceof Error ? error.message : 'WHOIS lookup failed',
+        source: 'rdap',
+      },
+    });
+    return;
   }
-});
+  
+  logger.info('WHOIS lookup completed', {
+    domain,
+    createdAt,
+    ageDays,
+  });
+  
+  res.json({
+    success: true,
+    data: {
+      domain,
+      createdAt,
+      ageDays,
+      source: 'rdap',
+      metadata: {
+        checkedAt: new Date().toISOString(),
+        service: 'rdap.org',
+      },
+    },
+  });
+}));
 
 export default router;

@@ -15,7 +15,7 @@ export type RootTabParamList = {
 /** Stack that hosts the Tabs + modals/detail screens */
 export type RootStackParamList = {
   Tabs: undefined;
-  AddContent: { editId?: string; prefill?: Partial<JobInput> } | undefined;
+  AddContent: { editId?: string; prefill?: Partial<JobInput> & { confidence?: number | null } } | undefined;
   ReportDetail: { id: string };
 };
 

@@ -1,24 +1,24 @@
 {
   "expo": {
-    "name": "Job Scam Detector",
-    "slug": "job-scam-detector",
+    "name": "Scamicide",
+    "slug": "scamicide",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/scamicide-logo.png",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "assets/scamicide-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.job-scam-detector",
+      "bundleIdentifier": "com.anonymous.scamicide",
       "infoPlist": {
         "NSCameraUsageDescription": "Allow taking photos to analyze screenshots.",
-        "NSPhotoLibraryUsageDescription": "Allow selecting screenshots from your photo library to analyze."
+        "NSPhotoLibraryUsageDescription": "Allow selecting screenshots from your photo library to analyze.",
+        "NSPhotoLibraryAddUsageDescription": "Save analyzed screenshots to your photo library."
       }
     },
     "android": {
@@ -31,7 +31,36 @@
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES"
+      ],
+      "package": "com.anonymous.scamicide",
+      "versionCode": 1
+    },
+    "plugins": [
+      [
+        "sentry-expo",
+        {
+          "organization": "your-org-slug",
+          "project": "your-project-slug",
+          "authToken": "your-auth-token"
+        }
       ]
-    }
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:3000",
+      "eas": {
+        "projectId": "your-expo-project-id"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/your-expo-project-id",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "jsEngine": "hermes"
   }
 }
+
