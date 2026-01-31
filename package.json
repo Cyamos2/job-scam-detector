@@ -53,7 +53,10 @@
     "react-native-screens": "~4.11.1",
     "expo-clipboard": "~7.1.5",
     "expo-file-system": "~15.3.0",
-    "expo-splash-screen": "~0.30.7"
+    "expo-splash-screen": "~0.30.7",
+    "fs-extra": "^11.2.0",
+    "expo-dev-client": "~5.2.4",
+    "react-native-mlkit-text-recognition": "^0.2.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
