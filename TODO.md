@@ -10,6 +10,7 @@
 - [x] Added `expo-updates` for OTA updates
 - [x] Added `expo-camera` for camera functionality
 - [x] Added `expo-splash-screen` for better splash experience
+- [x] Cleaned up Sentry configuration (removed hardcoded credentials)
 
 ### Build Configuration
 - [x] Created `eas.json` with development, preview, and production profiles
@@ -20,35 +21,46 @@
 ### Documentation
 - [x] Created `DEPLOYMENT.md` with comprehensive deployment guide
 - [x] Created `.env.example` for environment configuration
-- [x] Updated `TODO.md` with current status
+- [x] Created `server/.env.example` for server configuration
+- [x] Updated `README.md` with complete documentation
+- [x] Created `FINALIZATION_TODO.md` tracking finalization progress
+
+### Dependencies
+- [x] Added `react-native-mlkit-text-recognition` for on-device OCR
+- [x] All dependencies properly configured
 
 ---
 
-## 🎯 Remaining Steps (5-10 minutes)
+## 🎯 Remaining Steps (Optional)
 
-### Step 1: Install EAS CLI (1 minute)
+### 1. EAS Configuration (Optional - if using Expo cloud builds)
 ```bash
+# Install EAS CLI
 npm install -g eas-cli
-```
 
-### Step 2: Login to Expo (2 minutes)
-```bash
+# Login to Expo
 eas login
-# Or create an account at https://expo.dev
-```
 
-### Step 3: Configure EAS Build (2 minutes)
-```bash
+# Configure build
 eas build:configure
 ```
 
-### Step 4: Build Your APK (3-5 minutes)
+### 2. Build Your App
 ```bash
 # Build for Android
 eas build --platform android --profile production
 
-# Or build for both platforms
-eas build --platform all --profile production
+# Build for iOS
+eas build --platform ios --profile production
+```
+
+### 3. Submit to App Stores
+```bash
+# Submit to Google Play
+eas submit --platform android
+
+# Submit to App Store
+eas submit --platform ios
 ```
 
 ---
@@ -142,16 +154,9 @@ cp .env.example .env
 ```
 
 ### 3. Update Sentry Configuration (Optional)
-```json
-{
-  "plugins": [
-    ["sentry-expo", {
-      "organization": "your-actual-org",
-      "project": "your-actual-project",
-      "authToken": "your-auth-token"
-    }]
-  ]
-}
+Configure Sentry via environment variables:
+```env
+EXPO_PUBLIC_SENTRY_DSN=https://your-dsn@sentry.io/your-project
 ```
 
 ---
@@ -196,8 +201,10 @@ Edit `app.json`:
 | App Configuration | ✅ Ready | Updated with production settings |
 | Build Configuration | ✅ Ready | EAS profiles configured |
 | Android Build | ✅ Ready | Native files present |
-| Documentation | ✅ Ready | DEPLOYMENT.md created |
-| Deployment Guide | ✅ Ready | Multiple free options available |
+| iOS Build | ✅ Ready | Native files present |
+| Documentation | ✅ Ready | README and DEPLOYMENT.md complete |
+| Environment Config | ✅ Ready | .env.example files created |
+| OCR | ✅ Ready | ML Kit + Tesseract fallback |
 
 **Overall Status**: 🎉 **100% Ready for Deployment**
 

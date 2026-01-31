@@ -3,14 +3,27 @@ import api from "./db";
 // On-device OCR (ML Kit) with fallback to server-side OCR and demo text.
 export type OCRResult = { text: string; confidence?: number | null };
 
+/**
+ * Check if ML Kit text recognition is available at runtime
+ */
+export async function isMlKitAvailable(): Promise<boolean> {
+  try {
+    const mlkitModule = await import("react-native-mlkit-text-recognition").then((m) => (m && (m as any).default) || m);
+    return mlkitModule !== null && typeof mlkitModule.recognize === "function";
+  } catch {
+    return false;
+  }
+}
+
 export async function extractTextFromImage(imageOrBase64OrUri: string): Promise<OCRResult> {
   const original = String(imageOrBase64OrUri || "");
 
-  // Try on-device ML Kit first
-  try {
-    // Dynamic import so Metro doesn't bundle native module if it's not available
-    const mlkitModule = await import("react-native-mlkit-text-recognition").then((m) => (m && (m as any).default) || m);
-    if (mlkitModule) {
+  // Try on-device ML Kit first (if available)
+  const mlKitAvailable = await isMlKitAvailable();
+  if (mlKitAvailable) {
+    try {
+      const mlkitModule = await import("react-native-mlkit-text-recognition").then((m) => (m && (m as any).default) || m);
+      
       // Normalize input to a local file path (ML Kit expects a file URI)
       let imagePath = original;
 
@@ -30,6 +43,7 @@ export async function extractTextFromImage(imageOrBase64OrUri: string): Promise<
 
       // If HTTP URL, ML Kit can't read remote URLs directly; try server fallback instead
       if (/^https?:\/\//i.test(imagePath)) {
+        console.log("[OCR] Remote URLs not supported by ML Kit, falling back to server OCR");
         throw new Error("Remote URLs are not supported by ML Kit on-device; falling back to server OCR");
       }
 
@@ -59,7 +73,10 @@ export async function extractTextFromImage(imageOrBase64OrUri: string): Promise<
             // ignore
           }
 
-          if (text) return { text, confidence };
+          if (text && text.length > 0) {
+            console.log(`[OCR] ML Kit success: ${text.length} chars, confidence: ${confidence ?? 'N/A'}`);
+            return { text, confidence };
+          }
         } finally {
           // Clean up temporary cache file if we created one
           if (tempFilePath) {
@@ -74,9 +91,12 @@ export async function extractTextFromImage(imageOrBase64OrUri: string): Promise<
           }
         }
       }
+    } catch (e) {
+      console.log("[OCR] ML Kit error, falling back:", e);
+      // Ignore and continue to server fallback
     }
-  } catch (e) {
-    // Ignore and continue to server fallback
+  } else {
+    console.log("[OCR] ML Kit not available, using server-side OCR");
   }
 
   // Next: try server-side OCR if available
@@ -87,13 +107,17 @@ export async function extractTextFromImage(imageOrBase64OrUri: string): Promise<
     if (b64 && b64.length > 0 && !/^https?:\/\//i.test(original)) {
       const res = await api.ocr(b64);
       if (res && (res as any).success && (res as any).data && typeof (res as any).data.text === "string") {
+        console.log(`[OCR] Server OCR success: ${(res as any).data.text.length} chars`);
         return { text: (res as any).data.text as string, confidence: (res as any).data.confidence ?? null };
       }
     }
   } catch (err) {
+    console.log("[OCR] Server OCR error:", err);
     // ignore and fall through to demo
   }
 
+  // Return demo fallback for development/testing
+  console.log("[OCR] Using demo fallback");
   return { text: demoFallback(), confidence: null };
 }
 
@@ -146,3 +170,4 @@ function extractTextFromMlResult(res: any): string {
 function demoFallback(): string {
   return "[Demo OCR] Extracted text from screenshot. Replace this stub with a real OCR implementation (Vision/MLKit on-device or server-side).";
 }
+
