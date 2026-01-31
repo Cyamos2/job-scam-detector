@@ -3,15 +3,21 @@
   "version": "1.0.0",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
-  "scripts": {
+"scripts": {
     "start": "expo start",
     "start:lan": "expo start --lan",
     "start:clear": "expo start -c",
     "ios": "expo run:ios",
     "android": "expo run:android",
+    "build:android:debug": "expo export --platform android",
+    "build:android:release": "eas build --platform android --profile release",
+    "build:android:apk": "cd android && ./gradlew assembleRelease",
     "web": "expo start --web",
     "sentry-upload": "sentry-expo upload-sourcemaps",
-    "test": "vitest"
+    "test": "vitest",
+    "android:build": "cd android && ./gradlew assembleDebug",
+    "android:release": "cd android && ./gradlew assembleRelease",
+    "android:bundle": "cd android && ./gradlew bundleReleaseJsAndAssets"
   },
   "vitest": {
     "exclude": ["server/**"]

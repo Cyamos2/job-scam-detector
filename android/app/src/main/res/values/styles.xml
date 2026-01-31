@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Base application theme -->
+  <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+    <item name="android:windowBackground">@color/splashscreen_background</item>
+    <item name="android:statusBarColor">@color/primary</item>
+    <item name="android:navigationBarColor">@color/primary_dark</item>
+  </style>
+
+  <!-- Splash screen theme -->
+  <style name="SplashTheme" parent="Theme.AppCompat.Light.NoActionBar">
+    <item name="android:windowBackground">@color/splashscreen_background</item>
+  </style>
+</resources>
+
