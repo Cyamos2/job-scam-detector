@@ -1,1 +1,3 @@
 {"environment":"development","host":"0.0.0.0","level":"info","message":"Server started","pid":88448,"port":3000,"service":"scamicide-api","timestamp":"2026-02-07 14:53:51.985"}
+{"environment":"development","level":"warn","message":"Client error Route GET /whois?domain=brightwavedigital.example not found","method":"GET","requestId":"mlcqzspw-z2dojg6mg","service":"scamicide-api","statusCode":404,"timestamp":"2026-02-07 15:09:33.477","url":"/whois?domain=brightwavedigital.example"}
+{"duration":"0ms","environment":"development","level":"info","message":"HTTP Request","method":"127.0.0.1","service":"scamicide-api","statusCode":200,"timestamp":"2026-02-07 15:09:33.485","url":"-"}
