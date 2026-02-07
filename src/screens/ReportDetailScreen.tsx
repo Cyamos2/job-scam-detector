@@ -53,6 +53,7 @@ export default function ReportDetailScreen() {
       scoreJob({
         title: job.title,
         company: job.company,
+        location: job.location,
         url: job.url,
         notes: job.notes,
       }),
@@ -71,7 +72,7 @@ export default function ReportDetailScreen() {
     setEnriching(true);
     (async () => {
       try {
-        const r = await scoreJobEnriched({ title: job.title, company: job.company, url: job.url, notes: job.notes });
+        const r = await scoreJobEnriched({ title: job.title, company: job.company, location: job.location, url: job.url, notes: job.notes });
         if (!mounted) return;
         setEnriched(r);
       } catch {
@@ -139,6 +140,7 @@ export default function ReportDetailScreen() {
             <Text style={styles.title}>{job.title}</Text>
             <Text style={styles.sub}>
               {job.company}
+              {job.location ? ` · ${job.location}` : ""}
               {job.url ? "  ·  " + job.url : ""}
             </Text>
             {enriching && <Text style={{ color: "#9CA3AF", marginTop: 6 }}>Checking domain info…</Text>}

@@ -13,6 +13,7 @@ export type Reason = {
 export type ScoreInput = {
   title: string;
   company: string;
+  location?: string | null;
   url?: string | null;
   notes?: string | null;
 };
@@ -42,7 +43,7 @@ function norm(s?: string | null) {
 
 function blob(input: ScoreInput): string {
   // one big searchable text
-  return [input.title, input.company, input.url, input.notes]
+  return [input.title, input.company, input.location, input.url, input.notes]
     .map((x) => norm(x))
     .join("\n");
 }

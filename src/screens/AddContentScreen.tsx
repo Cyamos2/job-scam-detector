@@ -46,6 +46,7 @@ export default function AddContentScreen() {
   // Local form state
   const [title, setTitle] = React.useState("");
   const [company, setCompany] = React.useState("");
+  const [location, setLocation] = React.useState("");
   const [url, setUrl] = React.useState("");
   const [notes, setNotes] = React.useState("");
 
@@ -67,6 +68,7 @@ export default function AddContentScreen() {
       if (!existing) return;
       setTitle(existing.title);
       setCompany(existing.company);
+      setLocation(existing.location ?? "");
       setUrl(existing.url ?? "");
       setNotes(existing.notes ?? "");
       return;
@@ -76,6 +78,7 @@ export default function AddContentScreen() {
     if (prefill) {
       if (prefill.title) setTitle(prefill.title);
       if (prefill.company) setCompany(prefill.company);
+      if ((prefill as any).location) setLocation((prefill as any).location ?? "");
       if (prefill.url) setUrl(prefill.url ?? "");
       if (prefill.notes) {
         // Defer applying OCR text to Notes until user accepts — keep as a pending preview
@@ -93,6 +96,7 @@ export default function AddContentScreen() {
     const input = {
       title,
       company,
+      location: location.trim() ? location.trim() : undefined,
       url: url.trim() ? url.trim() : undefined,
       notes: notes.trim() ? notes.trim() : undefined,
     };
@@ -116,7 +120,7 @@ export default function AddContentScreen() {
     const t = setTimeout(async () => {
       try {
         setEnriching(true);
-        const res = await scoreJobEnriched({ title, company, url: url.trim(), notes });
+        const res = await scoreJobEnriched({ title, company, location: location.trim() || undefined, url: url.trim(), notes });
         if (!mounted) return;
         setEnriched(res);
       } catch (e) {
@@ -171,6 +175,7 @@ export default function AddContentScreen() {
       const payload = {
         title: title.trim(),
         company: company.trim(),
+        location: location.trim() ? location.trim() : undefined,
         url: url.trim() ? url.trim() : undefined,
         notes: notes.trim() ? notes.trim() : undefined,
       };
@@ -197,6 +202,7 @@ export default function AddContentScreen() {
       const changes = {
         title: title.trim(),
         company: company.trim(),
+        location: location.trim() ? location.trim() : undefined,
         url: url.trim() ? url.trim() : undefined,
         notes: notes.trim() ? notes.trim() : undefined,
       };
@@ -352,6 +358,23 @@ export default function AddContentScreen() {
             styles.input,
             {
               borderColor: errorCompany ? "#EF4444" : "#E5E7EB",
+              color: colors.text,
+              backgroundColor: colors.card,
+            },
+          ]}
+          returnKeyType="next"
+        />
+
+        <Text style={styles.label}>Location (optional)</Text>
+        <TextInput
+          value={location}
+          onChangeText={setLocation}
+          placeholder="e.g., Remote, New York, NY, or Worldwide"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.input,
+            {
+              borderColor: "#E5E7EB",
               color: colors.text,
               backgroundColor: colors.card,
             },

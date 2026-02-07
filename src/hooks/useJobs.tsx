@@ -7,6 +7,7 @@ export type Risk = "low" | "medium" | "high";
 export type JobInput = {
   title: string;
   company: string;
+  location?: string;
   url?: string;
   notes?: string;
   risk?: Risk;
@@ -85,6 +86,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         id: nanoid(),
         title: input.title.trim(),
         company: input.company.trim(),
+        location: input.location?.trim(),
         url: input.url?.trim(),
         notes: input.notes?.trim(),
         risk: input.risk ?? "low",
