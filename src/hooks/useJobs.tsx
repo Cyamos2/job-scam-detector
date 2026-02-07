@@ -47,7 +47,7 @@ type Ctx = {
 
 const JobsContext = React.createContext<Ctx | undefined>(undefined);
 
-const STORAGE_KEY = "jobs.v1";
+const STORAGE_KEY = "jobs.v2";
 
 export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<Job[]>([]);
@@ -59,8 +59,13 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
       if (!raw) return;
       const parsed: Job[] = JSON.parse(raw);
       if (Array.isArray(parsed)) {
+        // Migrate old data: ensure location field exists
+        const migrated = parsed.map((j) => ({
+          ...j,
+          location: j.location ?? undefined,
+        }));
         setItems(
-          parsed
+          migrated
             .filter((j) => j && j.id && j.title && j.company)
             .sort((a, b) => b.createdAt - a.createdAt)
         );
@@ -107,6 +112,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
               ...j,
               ...("title" in patch ? { title: patch.title?.trim() ?? j.title } : {}),
               ...("company" in patch ? { company: patch.company?.trim() ?? j.company } : {}),
+              ...("location" in patch ? { location: patch.location?.trim() || undefined } : {}),
               ...("url" in patch ? { url: patch.url?.trim() || undefined } : {}),
               ...("notes" in patch ? { notes: (patch.notes ?? "").trim() || undefined } : {}),
               ...("risk" in patch ? { risk: patch.risk ?? j.risk ?? "low" } : {}),
