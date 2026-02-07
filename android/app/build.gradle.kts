@@ -1,8 +1,9 @@
 plugins {
   id("com.android.application")
   id("org.jetbrains.kotlin.android")
-  id("com.facebook.react")
 }
+
+apply(plugin = "com.facebook.react")
 
 android {
   namespace = "com.anonymous.jobsdamdetector"
@@ -44,7 +45,6 @@ android {
 
   buildFeatures {
     buildConfig = true
-    fabric = true
   }
 
   packaging {

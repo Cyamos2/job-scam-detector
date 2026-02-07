@@ -9,7 +9,7 @@ vi.mock('expo-constants', () => ({
 }));
 vi.mock('react-native', () => ({
   Platform: { OS: 'ios' },
-}), { virtual: true });
+}));
 
 // Helper to create a fresh environment for each test (reset modules and env)
 function setupEnv(minLevel?: string) {

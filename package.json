@@ -26,7 +26,9 @@
     "android:bundle": "cd android && ./gradlew bundleReleaseJsAndAssets"
   },
   "vitest": {
-    "exclude": ["server/**"]
+    "exclude": [
+      "server/**"
+    ]
   },
   "dependencies": {
     "@expo/vector-icons": "^14.1.0",
@@ -34,36 +36,37 @@
     "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
-    "@sentry/react-native": "^5.20.0",
-    "expo": "^53.0.0",
-    "tslib": "^2.6.3",
-    "expo-constants": "~17.1.7",
-    "expo-image-picker": "~16.1.4",
-    "expo-status-bar": "~2.2.3",
+    "@sentry/react-native": "~6.14.0",
+    "expo": "~53.0.26",
     "expo-application": "~6.1.5",
-    "expo-device": "~7.1.4",
     "expo-camera": "~16.1.6",
-    "expo-updates": "~0.27.4",
+    "expo-clipboard": "~7.1.5",
+    "expo-constants": "~17.1.7",
+    "expo-device": "~7.1.4",
+    "expo-file-system": "~18.1.11",
+    "expo-font": "~13.3.2",
+    "expo-image-picker": "~16.1.4",
+    "expo-splash-screen": "~0.30.7",
+    "expo-status-bar": "~2.2.3",
+    "expo-updates": "~0.28.18",
+    "fs-extra": "^11.2.0",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "react-native": "0.79.5",
+    "react-native": "0.79.6",
     "react-native-gesture-handler": "~2.24.0",
     "react-native-reanimated": "~3.17.4",
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
-    "expo-clipboard": "~7.1.5",
-    "expo-file-system": "~15.3.0",
-    "expo-splash-screen": "~0.30.7",
-    "fs-extra": "^11.2.0"
+    "tslib": "^2.6.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
+    "@react-native-community/cli": "latest",
+    "@react-native-community/cli-platform-ios": "latest",
     "@types/react": "~19.0.10",
-    "@types/react-native": "^0.72.8",
     "babel-plugin-module-resolver": "^5.0.2",
-    "sentry-expo": "^7.0.0",
+    "sentry-expo": "~7.0.0",
     "typescript": "~5.8.3",
     "vitest": "^1.6.1"
   }
 }
-

@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.scamicide",
+      "bundleIdentifier": "com.anonymous.jobsdamdetector",
       "infoPlist": {
         "NSCameraUsageDescription": "Allow taking photos to analyze screenshots.",
         "NSPhotoLibraryUsageDescription": "Allow selecting screenshots from your photo library to analyze.",
@@ -34,11 +34,13 @@
         "WRITE_EXTERNAL_STORAGE",
         "READ_MEDIA_IMAGES"
       ],
-      "package": "com.anonymous.scamicide",
+      "package": "com.anonymous.jobsdamdetector",
       "versionCode": 1
     },
     "plugins": [
-      "sentry-expo"
+      "sentry-expo",
+      "expo-font",
+      "@sentry/react-native"
     ],
     "extra": {
       "eas": {
@@ -55,4 +57,3 @@
     "jsEngine": "hermes"
   }
 }
-

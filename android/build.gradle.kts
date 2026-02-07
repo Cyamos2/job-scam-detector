@@ -1,7 +1,16 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.facebook.react:react-native-gradle-plugin:0.73.2")
+    }
+}
+
 plugins {
     id("com.android.application") version "8.2.2" apply false
     id("org.jetbrains.kotlin.android") version "1.9.22" apply false
-    id("com.facebook.react") version "0.73.2" apply false
 }
 
 tasks.register("clean", Delete::class) {
