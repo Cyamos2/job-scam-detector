@@ -9,6 +9,7 @@ import jobsRouter from "./routes/jobs.js";
 import verifyRouter from "./routes/verify.js";
 import whoisRouter from "./routes/whois.js";
 import ocrRouter from "./routes/ocr.js";
+import patternsRouter from "./routes/patterns.js";
 import { errorHandler, notFoundHandler, setupUnhandledRejectionHandler, setupUncaughtExceptionHandler } from "./middleware/errorHandler.js";
 import { securityHeaders, corsOptions, requestIdMiddleware, securityLogging, validateContentType } from "./middleware/security.js";
 import { apiRateLimiter, whoisRateLimiter } from "./middleware/rateLimiter.js";
@@ -112,6 +113,7 @@ app.get("/api", (_req: Request, res: Response) => {
       verify: "/api/v1/verify",
       whois: "/api/v1/whois",
       ocr: "/api/v1/ocr",
+      patterns: "/api/v1/patterns",
     },
   });
 });
@@ -125,6 +127,7 @@ app.use("/api/v1/jobs", jobsRouter);
 app.use("/api/v1/verify", verifyRouter);
 app.use("/api/v1/whois", whoisRouter);
 app.use("/api/v1/ocr", ocrRouter);
+app.use("/api/v1/patterns", patternsRouter);
 
 // Sentry error handler (must be after routes)
 if (sentryDsn) {

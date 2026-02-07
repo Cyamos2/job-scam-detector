@@ -17,6 +17,8 @@ model Job {
   id        String   @id @default(cuid())
   title     String
   company   String
+  location  String?
+  recruiterEmail String?
   url       String?
   risk      Risk
   notes     String?

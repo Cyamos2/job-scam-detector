@@ -35,6 +35,7 @@ router.get('/', asyncHandler(async (req, res) => {
     where.OR = [
       { title: { contains: search } },
       { company: { contains: search } },
+      { recruiterEmail: { contains: search } },
       { url: { contains: search } },
     ];
   }

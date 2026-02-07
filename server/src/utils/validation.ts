@@ -70,13 +70,16 @@ export const jobIdSchema = z.object({
 /**
  * Verification validation schemas
  */
-export const verifyQuerySchema = z.object({
-  target: z
-    .string()
-    .min(1, 'Target is required')
-    .max(500, 'Target must be less than 500 characters')
-    .trim(),
-});
+export const verifyQuerySchema = z
+  .object({
+    company: z.string().max(200, 'Company name must be less than 200 characters').trim().optional(),
+    url: z.string().url('Invalid URL format').max(2000, 'URL must be less than 2000 characters').optional(),
+    target: z.string().max(500, 'Target must be less than 500 characters').trim().optional(),
+  })
+  .refine((val) => !!(val.company || val.url || val.target), {
+    message: 'At least one of company, url, or target is required',
+    path: ['target'],
+  });
 
 export const whoisQuerySchema = z.object({
   domain: z
@@ -90,6 +93,17 @@ export const whoisQuerySchema = z.object({
     .trim()
     .toLowerCase(),
 });
+
+export const patternsQuerySchema = z
+  .object({
+    company: z.string().max(200, 'Company name must be less than 200 characters').trim().optional(),
+    url: z.string().url('Invalid URL format').max(2000, 'URL must be less than 2000 characters').optional(),
+    recruiterEmail: z.string().email('Invalid email format').max(320, 'Email must be less than 320 characters').optional(),
+  })
+  .refine((val) => !!(val.company || val.url || val.recruiterEmail), {
+    message: 'At least one of company, url, or recruiterEmail is required',
+    path: ['company'],
+  });
 
 /**
  * Pagination schemas
@@ -147,6 +161,7 @@ export type JobUpdateInput = z.infer<typeof jobUpdateSchema>;
 export type JobIdParams = z.infer<typeof jobIdSchema>;
 export type VerifyQuery = z.infer<typeof verifyQuerySchema>;
 export type WhoisQuery = z.infer<typeof whoisQuerySchema>;
+export type PatternsQuery = z.infer<typeof patternsQuerySchema>;
 export type PaginationParams = z.infer<typeof paginationSchema>;
 export type JobFilterParams = z.infer<typeof jobFilterSchema>;
 
