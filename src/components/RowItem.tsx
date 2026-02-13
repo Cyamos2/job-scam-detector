@@ -17,6 +17,8 @@ export default function RowItem({
   const s = scoreJob({
     title: job.title,
     company: job.company,
+    location: job.location,
+    recruiterEmail: job.recruiterEmail,
     url: job.url ?? undefined,
     notes: job.notes ?? undefined,
   });

@@ -14,6 +14,7 @@ export type ScoreInput = {
   title: string;
   company: string;
   location?: string | null;
+  recruiterEmail?: string | null;
   url?: string | null;
   notes?: string | null;
 };
@@ -43,9 +44,30 @@ function norm(s?: string | null) {
 
 function blob(input: ScoreInput): string {
   // one big searchable text
-  return [input.title, input.company, input.location, input.url, input.notes]
+  return [input.title, input.company, input.location, input.recruiterEmail, input.url, input.notes]
     .map((x) => norm(x))
     .join("\n");
+}
+
+const EMAIL_DOMAIN_RE = /[a-z0-9._%+-]+@([a-z0-9.-]+\.[a-z]{2,})/i;
+
+function extractEmailDomain(input: ScoreInput): string | null {
+  const direct = norm(input.recruiterEmail);
+  if (direct) {
+    const m = direct.match(EMAIL_DOMAIN_RE);
+    return m?.[1] ?? null;
+  }
+  const fromNotes = norm(input.notes);
+  if (!fromNotes) return null;
+  const m = fromNotes.match(EMAIL_DOMAIN_RE);
+  return m?.[1] ?? null;
+}
+
+function domainsMatch(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return true;
+  const aa = a.toLowerCase();
+  const bb = b.toLowerCase();
+  return aa === bb || aa.endsWith(`.${bb}`) || bb.endsWith(`.${aa}`);
 }
 
 function hostOf(url?: string | null): string | null {
@@ -96,6 +118,8 @@ const IMPOSSIBLE_REMOTE_ROLES =
 
 // “remote” vocabulary (order matters a bit)
 const REMOTE_WORDS = "(remote|work[ -]?from[ -]?home|wfh|anywhere)";
+const CONTACT_WORDS = "(text|sms|call|phone|telegram|whats ?app|signal|wechat|discord|skype|google chat|hangouts|dm me)";
+const PHONE_PATTERN = "(?:\\+?\\d{1,3}[-.\\s]?)?(?:\\(?\\d{2,4}\\)?[-.\\s]?)\\d{3}[-.\\s]?\\d{4}";
 
 type Rule = {
   key: string;
@@ -142,6 +166,18 @@ const HIGH: Rule[] = [
     explain: "Role requires physical presence (e.g., warehouse, retail, driver, bedside healthcare).",
     re: rx(`\\b(?:${REMOTE_WORDS})\\b[\\s\\S]{0,80}\\b(?:${IMPOSSIBLE_REMOTE_ROLES})\\b|\\b(?:${IMPOSSIBLE_REMOTE_ROLES})\\b[\\s\\S]{0,80}\\b(?:${REMOTE_WORDS})\\b`),
   },
+  {
+    key: "extreme-hourly-pay",
+    label: "Extreme hourly pay",
+    explain: "Hourly pay is unusually high for most roles.",
+    re: rx("\\$\\s?(1\\d\\d|[2-9]\\d\\d)\\s?\\/?\\s?(hr|hour)\\b"),
+  },
+  {
+    key: "extreme-period-pay",
+    label: "Extreme weekly/monthly pay",
+    explain: "Weekly or monthly pay is unusually high.",
+    re: rx("\\$\\s?([5-9]\\d{3}|\\d{5,})\\s?\\/?\\s?(week|wk|month|mo)\\b"),
+  },
 ];
 
 const MED: Rule[] = [
@@ -167,7 +203,13 @@ const MED: Rule[] = [
     key: "off-platform",
     label: "Move off-platform",
     explain: "Push to chat on Telegram/WhatsApp/Signal/email.",
-    re: rx("\\b(telegram|whats ?app|signal)\\b"),
+    re: rx(`\\b(${CONTACT_WORDS})\\b`),
+  },
+  {
+    key: "phone-contact",
+    label: "Phone contact request",
+    explain: "Asks you to text/call directly or lists a phone number.",
+    re: rx(`\\b(${CONTACT_WORDS})\\b[\\s\\S]{0,40}\\b${PHONE_PATTERN}\\b|\\b${PHONE_PATTERN}\\b[\\s\\S]{0,40}\\b(${CONTACT_WORDS})\\b`),
   },
   {
     key: "short-link",
@@ -234,6 +276,16 @@ export function scoreJob(input: ScoreInput): ScoreResult {
 
   // ---- URL-based heuristics
   const host = hostOf(input.url);
+
+  const emailDomain = extractEmailDomain(input);
+  if (host && emailDomain && !domainsMatch(host, emailDomain)) {
+    reasons.push({
+      key: "email-domain-mismatch",
+      label: "Email domain mismatch",
+      severity: "medium",
+      explain: "Recruiter email domain does not match the company website.",
+    });
+  }
 
   if (input.url && !looksHttps(input.url)) {
     reasons.push({

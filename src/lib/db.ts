@@ -7,6 +7,8 @@ export type Job = {
   id: string;
   title: string;
   company: string;
+  location?: string | null;
+  recruiterEmail?: string | null;
   url?: string | null;
   risk: Risk;
   notes?: string | null;
@@ -17,6 +19,8 @@ export type Job = {
 export type JobInput = {
   title: string;
   company: string;
+  location?: string;
+  recruiterEmail?: string;
   url?: string;
   risk?: Risk;
   notes?: string;
@@ -48,6 +52,15 @@ export const api = {
     request<{ ok: true }>(`/jobs/${id}`, { method: "DELETE" }),
   verifyCompany: (target: string) =>
     request(`/verify?target=${encodeURIComponent(target)}`),
+  patterns: (params: { company?: string; url?: string; recruiterEmail?: string }) => {
+    const qs = new URLSearchParams();
+    if (params.company) qs.set("company", params.company);
+    if (params.url) qs.set("url", params.url);
+    if (params.recruiterEmail) qs.set("recruiterEmail", params.recruiterEmail);
+    return request<{ success: true; data: { companyCount: number; emailCount: number; hostCount: number; host: string | null } }>(
+      `/patterns?${qs.toString()}`
+    );
+  },
   whois: (domain: string) => request<{ domain: string; createdAt: string | null; ageDays: number | null }>(`/whois?domain=${encodeURIComponent(domain)}`),
   ocr: (imageBase64: string) => request<{ text: string; confidence: number | null }>(`/ocr`, { method: 'POST', body: JSON.stringify({ imageBase64 }) }),
 

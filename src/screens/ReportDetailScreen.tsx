@@ -21,6 +21,7 @@ import { useJobs } from "../hooks/useJobs";
 import { scoreJob, scoreJobEnriched, visualBucket, type ScoreResultExtended, type Reason, type Severity } from "../lib/scoring";
 import type { RootStackParamList } from "../navigation/types";
 import VerifyCard from "../components/VerifyCard";
+import api from "../lib/db";
 
 type Nav = NativeStackNavigationProp<RootStackParamList, "ReportDetail">;
 type Route = RouteProp<RootStackParamList, "ReportDetail">;
@@ -54,6 +55,7 @@ export default function ReportDetailScreen() {
         title: job.title,
         company: job.company,
         location: job.location,
+        recruiterEmail: job.recruiterEmail,
         url: job.url,
         notes: job.notes,
       }),
@@ -61,6 +63,12 @@ export default function ReportDetailScreen() {
   );
   const bucket = visualBucket(result);
   const baseUrl = process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:4000";
+
+  const [patterns, setPatterns] = React.useState<
+    | { companyCount: number; emailCount: number; hostCount: number; host: string | null }
+    | null
+  >(null);
+  const [patternsLoading, setPatternsLoading] = React.useState(false);
 
   // Enriched async score (WHOIS + evidence)
   const [enriched, setEnriched] = React.useState<ScoreResultExtended | null>(null);
@@ -72,7 +80,14 @@ export default function ReportDetailScreen() {
     setEnriching(true);
     (async () => {
       try {
-        const r = await scoreJobEnriched({ title: job.title, company: job.company, location: job.location, url: job.url, notes: job.notes });
+        const r = await scoreJobEnriched({
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          recruiterEmail: job.recruiterEmail,
+          url: job.url,
+          notes: job.notes,
+        });
         if (!mounted) return;
         setEnriched(r);
       } catch {
@@ -83,6 +98,28 @@ export default function ReportDetailScreen() {
     })();
     return () => { mounted = false; };
   }, [job.url]);
+
+  React.useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        setPatternsLoading(true);
+        const resp = await api.patterns({
+          company: job.company,
+          url: job.url ?? undefined,
+          recruiterEmail: job.recruiterEmail ?? undefined,
+        });
+        if (!mounted) return;
+        setPatterns(resp.data);
+      } catch {
+        if (mounted) setPatterns(null);
+      } finally {
+        if (mounted) setPatternsLoading(false);
+      }
+    };
+    run();
+    return () => { mounted = false; };
+  }, [job.company, job.url, job.recruiterEmail]);
 
   const handleOpen = async () => {
     if (!job.url) return;
@@ -143,6 +180,9 @@ export default function ReportDetailScreen() {
               {job.location ? ` · ${job.location}` : ""}
               {job.url ? "  ·  " + job.url : ""}
             </Text>
+            {!!job.recruiterEmail && (
+              <Text style={[styles.sub, { marginTop: 4 }]}>{job.recruiterEmail}</Text>
+            )}
             {enriching && <Text style={{ color: "#9CA3AF", marginTop: 6 }}>Checking domain info…</Text>}
             {enriched?.evidence?.domainAgeDays != null && (
               <Text style={{ color: "#9CA3AF", marginTop: 6 }}>Domain age: {enriched.evidence.domainAgeDays} days{enriched.evidence.domainAgeDays < 90 ? " (young)" : ""}</Text>
@@ -167,6 +207,22 @@ export default function ReportDetailScreen() {
 
         {/* Company verification */}
         <VerifyCard company={job.company} url={job.url} baseUrl={baseUrl} />
+
+        {/* Repeat pattern detection */}
+        <View style={styles.section}>
+          <Text style={styles.h2}>Repeat pattern check</Text>
+          {patternsLoading && <Text style={{ color: "#9CA3AF", marginTop: 6 }}>Checking patterns…</Text>}
+          {!patternsLoading && patterns && (
+            <View style={{ marginTop: 6 }}>
+              <Text style={styles.notes}>Same company seen: {patterns.companyCount}</Text>
+              <Text style={styles.notes}>Same domain seen: {patterns.hostCount}</Text>
+              <Text style={styles.notes}>Same recruiter email: {patterns.emailCount}</Text>
+            </View>
+          )}
+          {!patternsLoading && !patterns && (
+            <Text style={{ color: "#9CA3AF", marginTop: 6 }}>No pattern data available.</Text>
+          )}
+        </View>
 
         {/* Notes */}
         {!!job.notes && (

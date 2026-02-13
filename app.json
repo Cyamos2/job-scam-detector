@@ -3,6 +3,7 @@
     "name": "Scamicide",
     "slug": "scamicide",
     "version": "1.0.0",
+    "entryPoint": "./index.ts",
     "orientation": "portrait",
     "icon": "./assets/scamicide-logo.png",
     "userInterfaceStyle": "automatic",

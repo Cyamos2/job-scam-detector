@@ -77,6 +77,11 @@ export default function VerifyCard({ company, url, baseUrl }: Props) {
 
       {data && (
         <>
+          <Row
+            label="Status"
+            value={data.ok ? "Verified" : "Needs review"}
+            valueColor={data.ok ? "#059669" : "#D97706"}
+          />
           <Row label="LinkedIn page" value={data.linkedIn.found ? "Found" : "Not found"} />
           {data.linkedIn.companyUrl && (
             <Pressable onPress={openLinkedIn}>
@@ -108,11 +113,11 @@ export default function VerifyCard({ company, url, baseUrl }: Props) {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+      <Text style={[styles.value, valueColor ? { color: valueColor } : null]}>{value}</Text>
     </View>
   );
 }

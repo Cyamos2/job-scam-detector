@@ -8,6 +8,7 @@ export type JobInput = {
   title: string;
   company: string;
   location?: string;
+  recruiterEmail?: string;
   url?: string;
   notes?: string;
   risk?: Risk;
@@ -59,10 +60,11 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
       if (!raw) return;
       const parsed: Job[] = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Migrate old data: ensure location field exists
+        // Migrate old data: ensure new optional fields exist
         const migrated = parsed.map((j) => ({
           ...j,
           location: j.location ?? undefined,
+          recruiterEmail: j.recruiterEmail ?? undefined,
         }));
         setItems(
           migrated
@@ -92,6 +94,7 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
         title: input.title.trim(),
         company: input.company.trim(),
         location: input.location?.trim(),
+        recruiterEmail: input.recruiterEmail?.trim(),
         url: input.url?.trim(),
         notes: input.notes?.trim(),
         risk: input.risk ?? "low",
@@ -113,6 +116,9 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
               ...("title" in patch ? { title: patch.title?.trim() ?? j.title } : {}),
               ...("company" in patch ? { company: patch.company?.trim() ?? j.company } : {}),
               ...("location" in patch ? { location: patch.location?.trim() || undefined } : {}),
+              ...("recruiterEmail" in patch
+                ? { recruiterEmail: patch.recruiterEmail?.trim() || undefined }
+                : {}),
               ...("url" in patch ? { url: patch.url?.trim() || undefined } : {}),
               ...("notes" in patch ? { notes: (patch.notes ?? "").trim() || undefined } : {}),
               ...("risk" in patch ? { risk: patch.risk ?? j.risk ?? "low" } : {}),

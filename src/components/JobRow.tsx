@@ -32,6 +32,7 @@ export default function JobRow({
         <Text style={styles.meta} numberOfLines={1}>
           {job.company}
           {job.location ? ` · ${job.location}` : ""}
+          {job.recruiterEmail ? ` · ${job.recruiterEmail}` : ""}
           {job.url ? `  ·  ${job.url}` : ""}
         </Text>
         {!!preview && (

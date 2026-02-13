@@ -72,6 +72,8 @@ export default function DatabaseScreen() {
       const result = scoreJob({
         title: job.title,
         company: job.company,
+        location: job.location,
+        recruiterEmail: job.recruiterEmail,
         url: job.url,
         notes: job.notes,
       });

@@ -14,6 +14,7 @@ import {
   Modal,
   ScrollView,
   Button,
+  KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, useTheme } from "@react-navigation/native";
@@ -31,6 +32,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList, "AddContent">;
 type Rt = RouteProp<RootStackParamList, "AddContent">;
 
 const URL_RE = /^https?:\/\/[^\s]+$/i;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 export default function AddContentScreen() {
   const nav = useNavigation<Nav>();
@@ -47,6 +49,7 @@ export default function AddContentScreen() {
   const [title, setTitle] = React.useState("");
   const [company, setCompany] = React.useState("");
   const [location, setLocation] = React.useState("");
+  const [recruiterEmail, setRecruiterEmail] = React.useState("");
   const [url, setUrl] = React.useState("");
   const [notes, setNotes] = React.useState("");
 
@@ -69,6 +72,7 @@ export default function AddContentScreen() {
       setTitle(existing.title);
       setCompany(existing.company);
       setLocation(existing.location ?? "");
+      setRecruiterEmail(existing.recruiterEmail ?? "");
       setUrl(existing.url ?? "");
       setNotes(existing.notes ?? "");
       return;
@@ -79,6 +83,7 @@ export default function AddContentScreen() {
       if (prefill.title) setTitle(prefill.title);
       if (prefill.company) setCompany(prefill.company);
       if ((prefill as any).location) setLocation((prefill as any).location ?? "");
+      if ((prefill as any).recruiterEmail) setRecruiterEmail((prefill as any).recruiterEmail ?? "");
       if (prefill.url) setUrl(prefill.url ?? "");
       if (prefill.notes) {
         // Defer applying OCR text to Notes until user accepts — keep as a pending preview
@@ -97,11 +102,12 @@ export default function AddContentScreen() {
       title,
       company,
       location: location.trim() ? location.trim() : undefined,
+      recruiterEmail: recruiterEmail.trim() ? recruiterEmail.trim() : undefined,
       url: url.trim() ? url.trim() : undefined,
       notes: notes.trim() ? notes.trim() : undefined,
     };
     return scoreJob(input);
-  }, [title, company, url, notes]);
+  }, [title, company, location, recruiterEmail, url, notes]);
 
   // Enriched scoring (WHOIS) — debounced async call when there's a URL
   const [enriched, setEnriched] = React.useState<ScoreResultExtended | null>(null);
@@ -120,7 +126,14 @@ export default function AddContentScreen() {
     const t = setTimeout(async () => {
       try {
         setEnriching(true);
-        const res = await scoreJobEnriched({ title, company, location: location.trim() || undefined, url: url.trim(), notes });
+        const res = await scoreJobEnriched({
+          title,
+          company,
+          location: location.trim() || undefined,
+          recruiterEmail: recruiterEmail.trim() || undefined,
+          url: url.trim(),
+          notes,
+        });
         if (!mounted) return;
         setEnriched(res);
       } catch (e) {
@@ -134,7 +147,7 @@ export default function AddContentScreen() {
       mounted = false;
       clearTimeout(t);
     };
-  }, [title, company, url, notes]);
+  }, [title, company, location, recruiterEmail, url, notes]);
 
   // iOS snackbar (Android uses Toast)
   const snackY = React.useRef(new Animated.Value(-60)).current;
@@ -166,6 +179,7 @@ export default function AddContentScreen() {
   // Validation
   const errorTitle = showErrors && !title.trim();
   const errorCompany = showErrors && !company.trim();
+  const errorEmail = showErrors && !!recruiterEmail.trim() && !EMAIL_RE.test(recruiterEmail.trim());
   const errorUrl = showErrors && !!url.trim() && !URL_RE.test(url.trim());
 
   // Create
@@ -176,6 +190,7 @@ export default function AddContentScreen() {
         title: title.trim(),
         company: company.trim(),
         location: location.trim() ? location.trim() : undefined,
+        recruiterEmail: recruiterEmail.trim() ? recruiterEmail.trim() : undefined,
         url: url.trim() ? url.trim() : undefined,
         notes: notes.trim() ? notes.trim() : undefined,
       };
@@ -203,6 +218,7 @@ export default function AddContentScreen() {
         title: title.trim(),
         company: company.trim(),
         location: location.trim() ? location.trim() : undefined,
+        recruiterEmail: recruiterEmail.trim() ? recruiterEmail.trim() : undefined,
         url: url.trim() ? url.trim() : undefined,
         notes: notes.trim() ? notes.trim() : undefined,
       };
@@ -226,6 +242,7 @@ export default function AddContentScreen() {
     if (
       !title.trim() ||
       !company.trim() ||
+      (recruiterEmail.trim() && !EMAIL_RE.test(recruiterEmail.trim())) ||
       (url.trim() && !URL_RE.test(url.trim()))
     ) {
       setShowErrors(true);
@@ -246,7 +263,16 @@ export default function AddContentScreen() {
   };
 
   return (
-    <Screen>
+    <Screen insetBottom>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 32 }}
+          keyboardShouldPersistTaps="handled"
+        >
       {/* iOS snackbar */}
       {Platform.OS === "ios" && (
         <Animated.View
@@ -382,6 +408,28 @@ export default function AddContentScreen() {
           returnKeyType="next"
         />
 
+        <Text style={styles.label}>Recruiter Email (optional)</Text>
+        <TextInput
+          value={recruiterEmail}
+          onChangeText={setRecruiterEmail}
+          placeholder="e.g., jane@company.com"
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholderTextColor={dark ? "#94a3b8" : "#9aa0a6"}
+          style={[
+            styles.input,
+            {
+              borderColor: errorEmail ? "#EF4444" : "#E5E7EB",
+              color: colors.text,
+              backgroundColor: colors.card,
+            },
+          ]}
+          returnKeyType="next"
+        />
+        {errorEmail && (
+          <Text style={styles.helperError}>⚠️ Please enter a valid email address</Text>
+        )}
+
         <Text style={styles.label}>Job Posting URL (optional)</Text>
         <TextInput
           value={url}
@@ -432,12 +480,14 @@ export default function AddContentScreen() {
           </Text>
         </Pressable>
 
-        {showErrors && (errorTitle || errorCompany || errorUrl) ? (
+        {showErrors && (errorTitle || errorCompany || errorEmail || errorUrl) ? (
           <Text style={styles.formError}>
-            Please complete required fields and fix the URL format.
+            Please complete required fields and fix the email/URL format.
           </Text>
         ) : null}
       </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }

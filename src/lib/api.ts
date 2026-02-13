@@ -20,7 +20,15 @@ import api from "./db";
 export async function syncUp(jobs: ReadonlyArray<import("../hooks/useJobs").Job>): Promise<void> {
   for (const j of jobs) {
     try {
-      await api.create({ title: j.title, company: j.company, url: j.url, risk: j.risk ?? "low", notes: j.notes });
+      await api.create({
+        title: j.title,
+        company: j.company,
+        location: j.location,
+        recruiterEmail: j.recruiterEmail,
+        url: j.url,
+        risk: j.risk ?? "low",
+        notes: j.notes,
+      });
     } catch {
       // best-effort: ignore individual failures for now
     }
@@ -37,6 +45,8 @@ export async function syncDown(): Promise<ReadonlyArray<import("../hooks/useJobs
       id: r.id,
       title: r.title,
       company: r.company,
+      location: (r as any).location ?? undefined,
+      recruiterEmail: (r as any).recruiterEmail ?? undefined,
       url: r.url ?? undefined,
       notes: r.notes ?? undefined,
       createdAt: new Date(r.createdAt).getTime(),
