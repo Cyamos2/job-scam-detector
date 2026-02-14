@@ -334,11 +334,12 @@ export function scoreJob(input: ScoreInput): ScoreResult {
   let adj = raw;
   if ((hasFee2 && hasPay2) || (hasCheck2 && hasPay2)) adj = Math.max(adj, 120);
 
-  // Normalize to 0..100 (assume max useful raw ~140)
-  let score = Math.max(0, Math.min(100, Math.round((adj / 140) * 100)));
 
-  // Failsafe: presence of a critical red flag → minimum 90
-  if (reasons.some(r => FAILSAFE_KEYS.has(r.key))) score = Math.max(score, 90);
+  // Tougher normalization: increase divisor to 180 (was 140)
+  let score = Math.max(0, Math.min(100, Math.round((adj / 180) * 100)));
+
+  // Tougher failsafe: presence of a critical red flag → minimum 95 (was 90)
+  if (reasons.some(r => FAILSAFE_KEYS.has(r.key))) score = Math.max(score, 95);
 
   return { score, reasons };
 }
@@ -383,8 +384,9 @@ export async function scoreJobEnriched(input: ScoreInput): Promise<ScoreResultEx
 
       let raw = detailed.reduce((s, r) => s + r.weight, 0);
       if (detailed.some(r => r.key === "upfront-fee") && detailed.some(r => r.key === "payment-schemes")) raw = Math.max(raw, 120);
-      let score = Math.max(0, Math.min(100, Math.round((raw / 140) * 100)));
-      if (res.reasons.some(r => FAILSAFE_KEYS.has(r.key))) score = Math.max(score, 90);
+      // Tougher normalization and failsafe in enriched scoring
+      let score = Math.max(0, Math.min(100, Math.round((raw / 180) * 100)));
+      if (res.reasons.some(r => FAILSAFE_KEYS.has(r.key))) score = Math.max(score, 95);
       res.score = score;
 
       // Confidence: simple heuristic (more weight → higher confidence)
@@ -399,10 +401,10 @@ export async function scoreJobEnriched(input: ScoreInput): Promise<ScoreResultEx
 
 /* --------- buckets (visual) --------- */
 
-// Thresholds: HIGH ≥ 60, MED ≥ 40
+// Tougher thresholds: HIGH ≥ 75, MED ≥ 55
 export function numericBucket(score: number): Severity {
-  if (score >= 60) return "high";
-  if (score >= 40) return "medium";
+  if (score >= 75) return "high";
+  if (score >= 55) return "medium";
   return "low";
 }
 
