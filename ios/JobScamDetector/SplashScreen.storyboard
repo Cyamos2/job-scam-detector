@@ -17,12 +17,20 @@
                         <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
                         <subviews>
                             <imageView id="EXPO-SplashScreen" userLabel="SplashScreenLogo" image="SplashScreenLogo" contentMode="scaleAspectFit" clipsSubviews="true" userInteractionEnabled="false" translatesAutoresizingMaskIntoConstraints="false">
-                                <rect key="frame" x="0" y="0" width="414" height="736"/>
+                                <rect key="frame" x="0" y="0" width="414" height="692"/>
                             </imageView>
+                            <label id="MGGP-Label" userLabel="MGGPLabel" text="Brought to you by Machine Gun Guinea Pig" textAlignment="center" fontDescription="system" textColor="darkGrayColor" translatesAutoresizingMaskIntoConstraints="false">
+                                <rect key="frame" x="0" y="692" width="414" height="44"/>
+                            </label>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="Rmq-lb-GrQ"/>
                         <constraints>
-                            <constraint firstItem="EXPO-SplashScreen" firstAttribute="top" secondItem="EXPO-ContainerView" secondAttribute="top" id="83fcb9b545b870ba44c24f0feeb116490c499c52"/>
+                            <constraint firstItem="EXPO-SplashScreen" firstAttribute="top" secondItem="EXPO-ContainerView" secondAttribute="top" id="logo-top"/>
+                            <constraint firstItem="EXPO-SplashScreen" firstAttribute="leading" secondItem="EXPO-ContainerView" secondAttribute="leading" id="logo-leading"/>
+                            <constraint firstItem="EXPO-SplashScreen" firstAttribute="trailing" secondItem="EXPO-ContainerView" secondAttribute="trailing" id="logo-trailing"/>
+                            <constraint firstItem="MGGP-Label" firstAttribute="top" secondItem="EXPO-SplashScreen" secondAttribute="bottom" id="mggp-label-below-logo"/>
+                            <constraint firstItem="MGGP-Label" firstAttribute="leading" secondItem="EXPO-ContainerView" secondAttribute="leading" id="mggp-label-leading"/>
+                            <constraint firstItem="MGGP-Label" firstAttribute="trailing" secondItem="EXPO-ContainerView" secondAttribute="trailing" id="mggp-label-trailing"/>
                             <constraint firstItem="EXPO-SplashScreen" firstAttribute="leading" secondItem="EXPO-ContainerView" secondAttribute="leading" id="61d16215e44b98e39d0a2c74fdbfaaa22601b12c"/>
                             <constraint firstItem="EXPO-SplashScreen" firstAttribute="trailing" secondItem="EXPO-ContainerView" secondAttribute="trailing" id="f934da460e9ab5acae3ad9987d5b676a108796c1"/>
                             <constraint firstItem="EXPO-SplashScreen" firstAttribute="bottom" secondItem="EXPO-ContainerView" secondAttribute="bottom" id="d6a0be88096b36fb132659aa90203d39139deda9"/>

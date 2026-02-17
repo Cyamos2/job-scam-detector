@@ -37,34 +37,35 @@ export default function HomeScreen() {
   const { colors, dark } = useTheme();
   const nav = useNavigation<Nav>();
   const { items } = useJobs();
-
-  const recent = React.useMemo(() => {
-    return [...items]
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 3)
-      .map((job) => {
-        const result = scoreJob({
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          recruiterEmail: job.recruiterEmail,
-          url: job.url,
-          notes: job.notes,
-        });
-        const bucket = visualBucket(result);
-        return { job, result, bucket };
-      });
-  }, [items]);
-
-  const goDatabase = () => nav.navigate("Database");   // tab
-  const goAdd = () => nav.navigate("AddContent");      // stack
-
-  const [analyzing, setAnalyzing] = React.useState(false);
-
-  function extractUriFromPickerResult(result: unknown): string | undefined {
-    // Newer API returns { assets: [{ uri }] } and older returns { uri }
+  return (
+    <Screen>
+      {/* Hero */}
+      <View style={styles.hero}>
+        <Image
+          source={require("../../assets/scamicide-logo.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <Text style={styles.mggpLabel}>Brought to you by Machine Gun Guinea Pig</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Scamicide</Text>
+        <Text style={styles.subtitle}>
+          Analyze job postings and stay safe from scams
+        </Text>
+        {/* Quick actions */}
+        <View style={styles.actionsRow}>
+          <Pressable onPress={goAdd} style={[styles.primaryBtn, styles.btn]}>
+            <Text style={styles.primaryText}>✨ Analyze Job Post</Text>
+          </Pressable>
+          <Pressable onPress={analyzeScreenshot} style={[styles.tertiaryBtn, styles.btn]}>
+            <Text style={styles.tertiaryText}>{analyzing ? "Analyzing…" : "📸 Analyze Screenshot"}</Text>
+          </Pressable>
+          <Pressable onPress={goDatabase} style={[styles.secondaryBtn, styles.btn]}>
+            <Text style={styles.secondaryText}>View Saved Jobs</Text>
+          </Pressable>
+        </View>
+      </View>
     if (typeof result !== "object" || result === null) return undefined;
-    const r = result as { assets?: unknown; uri?: unknown };
+    const r = result;
 
     if (Array.isArray(r.assets) && r.assets.length > 0) {
       const a = r.assets[0] as { uri?: unknown };
@@ -184,6 +185,15 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   hero: { paddingHorizontal: 16, paddingTop: 16, alignItems: "center" },
+  mggpLabel: {
+    fontSize: 14,
+    color: "#374151",
+    marginBottom: 8,
+    marginTop: -4,
+    textAlign: "center",
+    fontWeight: "600",
+    letterSpacing: 0.2,
+  },
   logo: { width: 96, height: 96, marginBottom: 12 },
   title: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5 },
   subtitle: { 
