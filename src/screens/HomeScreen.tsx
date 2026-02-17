@@ -34,9 +34,27 @@ type Nav = CompositeNavigationProp<
 >;
 
 export default function HomeScreen() {
+    const [analyzing, setAnalyzing] = React.useState(false);
+    const recent = React.useMemo(() => {
+      return [...items]
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .slice(0, 3)
+        .map((job) => {
+          const result = scoreJob({
+            title: job.title,
+            company: job.company,
+            location: job.location,
+            recruiterEmail: job.recruiterEmail,
+            url: job.url,
+            notes: job.notes,
+          });
+          const bucket = visualBucket(result);
+          return { job, result, bucket };
+        });
+    }, [items]);
   const { colors, dark } = useTheme();
   const nav = useNavigation<Nav>();
-  const { items } = useJobs();
+  const { items = [] } = useJobs();
   function extractUriFromPickerResult(result) {
     if (!result || typeof result !== "object") return undefined;
     var assets = result.assets;
@@ -91,6 +109,7 @@ export default function HomeScreen() {
   };
 
   // ...existing code...
+  return (
     <Screen>
       {/* Hero */}
       <View style={styles.hero}>
