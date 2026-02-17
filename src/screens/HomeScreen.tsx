@@ -37,42 +37,14 @@ export default function HomeScreen() {
   const { colors, dark } = useTheme();
   const nav = useNavigation<Nav>();
   const { items } = useJobs();
-  return (
-    <Screen>
-      {/* Hero */}
-      <View style={styles.hero}>
-        <Image
-          source={require("../../assets/scamicide-logo.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.mggpLabel}>Brought to you by Machine Gun Guinea Pig</Text>
-        <Text style={[styles.title, { color: colors.text }]}>Scamicide</Text>
-        <Text style={styles.subtitle}>
-          Analyze job postings and stay safe from scams
-        </Text>
-        {/* Quick actions */}
-        <View style={styles.actionsRow}>
-          <Pressable onPress={goAdd} style={[styles.primaryBtn, styles.btn]}>
-            <Text style={styles.primaryText}>✨ Analyze Job Post</Text>
-          </Pressable>
-          <Pressable onPress={analyzeScreenshot} style={[styles.tertiaryBtn, styles.btn]}>
-            <Text style={styles.tertiaryText}>{analyzing ? "Analyzing…" : "📸 Analyze Screenshot"}</Text>
-          </Pressable>
-          <Pressable onPress={goDatabase} style={[styles.secondaryBtn, styles.btn]}>
-            <Text style={styles.secondaryText}>View Saved Jobs</Text>
-          </Pressable>
-        </View>
-      </View>
-    if (typeof result !== "object" || result === null) return undefined;
-    const r = result;
-
-    if (Array.isArray(r.assets) && r.assets.length > 0) {
-      const a = r.assets[0] as { uri?: unknown };
-      if (a && typeof a.uri === "string") return a.uri;
+  function extractUriFromPickerResult(result) {
+    if (!result || typeof result !== "object") return undefined;
+    var assets = result.assets;
+    if (Array.isArray(assets) && assets.length > 0) {
+      var asset = assets[0];
+      if (asset && typeof asset.uri === "string") return asset.uri;
     }
-
-    if (typeof r.uri === "string") return r.uri;
+    if (typeof result.uri === "string") return result.uri;
     return undefined;
   }
 
@@ -90,17 +62,17 @@ export default function HomeScreen() {
       });
 
       // Prefer base64 if available from the picker; otherwise fallback to URI
-      const asAny = result as any;
+      const asAny = result;
       const base64 = Array.isArray(asAny.assets) && asAny.assets[0] && typeof asAny.assets[0].base64 === 'string'
         ? asAny.assets[0].base64
-        : typeof (asAny as any).base64 === 'string' ? (asAny as any).base64 : undefined;
+        : typeof asAny.base64 === 'string' ? asAny.base64 : undefined;
 
       const uri = extractUriFromPickerResult(result);
       if (!uri && !base64) return;
 
       setAnalyzing(true);
       try {
-        const res = await extractTextFromImage(base64 ?? uri!);
+        const res = await extractTextFromImage(base64 ?? uri);
         setAnalyzing(false);
         await analytics.trackScreenshotAnalysis(true, res.text.length);
         nav.navigate("AddContent", { prefill: { notes: res.text, confidence: res.confidence ?? null } });
@@ -118,7 +90,7 @@ export default function HomeScreen() {
     }
   };
 
-  return (
+  // ...existing code...
     <Screen>
       {/* Hero */}
       <View style={styles.hero}>
