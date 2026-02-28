@@ -7,97 +7,21 @@ export type OCRResult = { text: string; confidence?: number | null };
  * Check if ML Kit text recognition is available at runtime
  */
 export async function isMlKitAvailable(): Promise<boolean> {
-  try {
-    const mlkitModule = await import("react-native-mlkit-text-recognition").then((m) => (m && (m as any).default) || m);
-    return mlkitModule !== null && typeof mlkitModule.recognize === "function";
-  } catch {
-    return false;
-  }
+  // Expo Go and managed Expo do not support native MLKit
+  return false;
 }
 
 export async function extractTextFromImage(imageOrBase64OrUri: string): Promise<OCRResult> {
   const original = String(imageOrBase64OrUri || "");
 
-  // Try on-device ML Kit first (if available)
-  const mlKitAvailable = await isMlKitAvailable();
-  if (mlKitAvailable) {
-    try {
-      const mlkitModule = await import("react-native-mlkit-text-recognition").then((m) => (m && (m as any).default) || m);
-      
-      // Normalize input to a local file path (ML Kit expects a file URI)
-      let imagePath = original;
 
-      // If base64/data URI, write to cache using expo-file-system
-      if (/^data:.*;base64,/.test(original) || /^[A-Za-z0-9+/=\s]+$/.test(original)) {
-        try {
-          const FileSystem = await import("expo-file-system").then((m) => (m && (m as any).default) || m);
-          const base64 = original.replace(/^data:.*;base64,/, "");
-          const dest = FileSystem.cacheDirectory + `ocr-${Date.now()}.jpg`;
-          await FileSystem.writeAsStringAsync(dest, base64, { encoding: FileSystem.EncodingType.Base64 });
-          imagePath = dest;
-        } catch (e) {
-          // If we can't write a file, fall back to next method
-          imagePath = original;
-        }
-      }
 
-      // If HTTP URL, ML Kit can't read remote URLs directly; try server fallback instead
-      if (/^https?:\/\//i.test(imagePath)) {
-        console.log("[OCR] Remote URLs not supported by ML Kit, falling back to server OCR");
-        throw new Error("Remote URLs are not supported by ML Kit on-device; falling back to server OCR");
-      }
 
-      // Try several common function names that variants of the package might expose
-      const recognizeFn = (mlkitModule as any).recognize || (mlkitModule as any).recognizeText || (mlkitModule as any).default?.recognize;
-      if (typeof recognizeFn === "function") {
-        let tempFilePath: string | null = null;
-        try {
-          // If we wrote a cache file above, remember it so we can clean it up
-          if (/^data:.*;base64,/.test(original) || /^[A-Za-z0-9+\/=\s]+$/.test(original)) {
-            tempFilePath = imagePath;
-          }
 
-          const res = await recognizeFn(String(imagePath));
 
-          const text = extractTextFromMlResult(res);
 
-          // Try to compute average confidence when available
-          let confidence: number | null = null;
-          try {
-            const words = Array.isArray(res?.words) ? res.words : Array.isArray(res?.lines) ? res.lines.flatMap((l: any) => l.words ?? []) : [];
-            if (words.length > 0) {
-              const sum = words.reduce((s: number, w: any) => s + (Number(w.confidence) || 0), 0);
-              confidence = Math.round((sum / words.length) * 100) / 100;
-            }
-          } catch (err) {
-            // ignore
-          }
 
-          if (text && text.length > 0) {
-            console.log(`[OCR] ML Kit success: ${text.length} chars, confidence: ${confidence ?? 'N/A'}`);
-            return { text, confidence };
-          }
-        } finally {
-          // Clean up temporary cache file if we created one
-          if (tempFilePath) {
-            try {
-              const FileSystem = await import("expo-file-system").then((m) => (m && (m as any).default) || m);
-              if (FileSystem?.deleteAsync) {
-                await FileSystem.deleteAsync(tempFilePath, { idempotent: true }).catch(() => {});
-              }
-            } catch (_) {
-              // ignore cleanup errors
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.log("[OCR] ML Kit error, falling back:", e);
-      // Ignore and continue to server fallback
-    }
-  } else {
-    console.log("[OCR] ML Kit not available, using server-side OCR");
-  }
+    // MLKit is not available in Expo, always use server-side OCR
 
   // Next: try server-side OCR if available
   try {

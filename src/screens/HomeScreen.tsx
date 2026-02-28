@@ -34,51 +34,25 @@ type Nav = CompositeNavigationProp<
 >;
 
 export default function HomeScreen() {
-  import * as React from "react";
-  import {
-    View,
-    Text,
-    StyleSheet,
-    TextInput,
-    Pressable,
-    Image,
-    Platform,
-    FlatList,
-    Alert,
-  } from "react-native";
-  import {
-    useTheme,
-    useNavigation,
-    type CompositeNavigationProp,
-  } from "@react-navigation/native";
-  import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-  import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+  const [analyzing, setAnalyzing] = React.useState(false);
 
-  import Screen from "../components/Screen";
-  import JobRow from "../components/JobRow";
-  import { useJobs } from "../hooks/useJobs";
-  import { scoreJob, visualBucket, type Severity } from "../lib/scoring";
-  import { extractTextFromImage } from "../lib/ocr";
-  import { analytics } from "../lib/analytics";
-  import * as ImagePicker from "expo-image-picker";
-  import type { RootStackParamList, RootTabParamList } from "../navigation/types";
-
-  // Composite: tabs + stack
-  type Nav = CompositeNavigationProp<
-    BottomTabNavigationProp<RootTabParamList, "Home">,
-    NativeStackNavigationProp<RootStackParamList>
-  >;
+  // Add goDatabase handler (assuming navigation to Database screen)
+  const goDatabase = React.useCallback(() => {
+    nav.navigate("Database");
+  }, [nav]);
 
   const { colors, dark } = useTheme();
   const nav = useNavigation<Nav>();
   const { items = [] } = useJobs();
+  // Defensive: ensure items is always an array
+  const safeItems = Array.isArray(items)
     ? items
-    const goAdd = React.useCallback(() => {
-      nav.navigate("AddContent");
-    }, [nav]);
     : items
       ? [items]
       : [];
+  const goAdd = React.useCallback(() => {
+    nav.navigate("AddContent");
+  }, [nav]);
   const recent = React.useMemo(() => {
     return [...safeItems]
       .sort((a, b) => b.updatedAt - a.updatedAt)
