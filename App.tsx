@@ -151,9 +151,7 @@ export default function App() {
     <SentryErrorBoundary fallback={({ error, componentStack, resetError }) => (
       <SafeAreaProvider>
         <StatusBar barStyle="dark-content" />
-        <NavigationContainer>
-          <ThemedNav />
-        </NavigationContainer>
+        <ThemedNav />
       </SafeAreaProvider>
     )}>
       <SettingsProvider>

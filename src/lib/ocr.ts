@@ -106,9 +106,11 @@ export async function extractTextFromImage(imageOrBase64OrUri: string): Promise<
     // If it's a URI (file:// or content:// or http), prefer client-side upload path (not implemented), so fall back to server only for base64
     if (b64 && b64.length > 0 && !/^https?:\/\//i.test(original)) {
       const res = await api.ocr(b64);
-      if (res && (res as any).success && (res as any).data && typeof (res as any).data.text === "string") {
-        console.log(`[OCR] Server OCR success: ${(res as any).data.text.length} chars`);
-        return { text: (res as any).data.text as string, confidence: (res as any).data.confidence ?? null };
+      // Handle the wrapped response format: { success: true, data: { text, confidence, ... } }
+      const ocrData = (res as any).success && (res as any).data ? (res as any).data : res;
+      if (ocrData && typeof ocrData.text === "string") {
+        console.log(`[OCR] Server OCR success: ${ocrData.text.length} chars`);
+        return { text: ocrData.text as string, confidence: ocrData.confidence ?? null };
       }
     }
   } catch (err) {

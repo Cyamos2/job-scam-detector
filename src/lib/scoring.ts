@@ -357,19 +357,21 @@ export async function scoreJobEnriched(input: ScoreInput): Promise<ScoreResultEx
 
   try {
     const who = await api.whois(host);
-    if (who) {
+    // Handle both old format (direct) and new format (wrapped in data)
+    const whoData = (who as any).data ? (who as any).data : who;
+    if (whoData) {
       res.evidence = res.evidence ?? {};
-      res.evidence.domain = who.domain;
-      res.evidence.domainCreatedAt = who.createdAt ?? null;
-      res.evidence.domainAgeDays = who.ageDays ?? null;
+      res.evidence.domain = whoData.domain;
+      res.evidence.domainCreatedAt = whoData.createdAt ?? null;
+      res.evidence.domainAgeDays = whoData.ageDays ?? null;
 
       // If domain age is known and < 90 days, add a strong reason
-      if (who.ageDays != null && who.ageDays < 90) {
+      if (whoData.ageDays != null && whoData.ageDays < 90) {
         const r: Reason = {
           key: "young-domain",
           label: "Young domain",
           severity: "high",
-          explain: `Domain was registered ${who.ageDays} days ago.`,
+          explain: `Domain was registered ${whoData.ageDays} days ago.`,
         };
         // avoid duplicate
         if (!res.reasons.some(x => x.key === r.key)) res.reasons.push(r);

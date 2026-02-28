@@ -34,27 +34,68 @@ type Nav = CompositeNavigationProp<
 >;
 
 export default function HomeScreen() {
-    const [analyzing, setAnalyzing] = React.useState(false);
-    const recent = React.useMemo(() => {
-      return [...items]
-        .sort((a, b) => b.updatedAt - a.updatedAt)
-        .slice(0, 3)
-        .map((job) => {
-          const result = scoreJob({
-            title: job.title,
-            company: job.company,
-            location: job.location,
-            recruiterEmail: job.recruiterEmail,
-            url: job.url,
-            notes: job.notes,
-          });
-          const bucket = visualBucket(result);
-          return { job, result, bucket };
-        });
-    }, [items]);
+  import * as React from "react";
+  import {
+    View,
+    Text,
+    StyleSheet,
+    TextInput,
+    Pressable,
+    Image,
+    Platform,
+    FlatList,
+    Alert,
+  } from "react-native";
+  import {
+    useTheme,
+    useNavigation,
+    type CompositeNavigationProp,
+  } from "@react-navigation/native";
+  import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+  import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
+
+  import Screen from "../components/Screen";
+  import JobRow from "../components/JobRow";
+  import { useJobs } from "../hooks/useJobs";
+  import { scoreJob, visualBucket, type Severity } from "../lib/scoring";
+  import { extractTextFromImage } from "../lib/ocr";
+  import { analytics } from "../lib/analytics";
+  import * as ImagePicker from "expo-image-picker";
+  import type { RootStackParamList, RootTabParamList } from "../navigation/types";
+
+  // Composite: tabs + stack
+  type Nav = CompositeNavigationProp<
+    BottomTabNavigationProp<RootTabParamList, "Home">,
+    NativeStackNavigationProp<RootStackParamList>
+  >;
+
   const { colors, dark } = useTheme();
   const nav = useNavigation<Nav>();
   const { items = [] } = useJobs();
+    ? items
+    const goAdd = React.useCallback(() => {
+      nav.navigate("AddContent");
+    }, [nav]);
+    : items
+      ? [items]
+      : [];
+  const recent = React.useMemo(() => {
+    return [...safeItems]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 3)
+      .map((job) => {
+        const result = scoreJob({
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          recruiterEmail: job.recruiterEmail,
+          url: job.url,
+          notes: job.notes,
+        });
+        const bucket = visualBucket(result);
+        return { job, result, bucket };
+      });
+  }, [items]);
   function extractUriFromPickerResult(result) {
     if (!result || typeof result !== "object") return undefined;
     var assets = result.assets;

@@ -14,6 +14,19 @@ export const jobCreateSchema = z.object({
     .min(1, 'Company name is required')
     .max(200, 'Company name must be less than 200 characters')
     .trim(),
+  location: z
+    .string()
+    .max(200, 'Location must be less than 200 characters')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+  recruiterEmail: z
+    .string()
+    .email('Invalid email format')
+    .max(320, 'Email must be less than 320 characters')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
   url: z
     .string()
     .url('Invalid URL format')
@@ -45,6 +58,19 @@ export const jobUpdateSchema = z.object({
     .max(200, 'Company name must be less than 200 characters')
     .trim()
     .optional(),
+  location: z
+    .string()
+    .max(200, 'Location must be less than 200 characters')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
+  recruiterEmail: z
+    .string()
+    .email('Invalid email format')
+    .max(320, 'Email must be less than 320 characters')
+    .optional()
+    .nullable()
+    .or(z.literal('')),
   url: z
     .string()
     .url('Invalid URL format')

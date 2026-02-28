@@ -1,4 +1,4 @@
-// src/lib/api.ts
+// src/lib/db.ts
 import Constants from "expo-constants";
 
 export type Risk = "low" | "medium" | "high";
@@ -26,11 +26,21 @@ export type JobInput = {
   notes?: string;
 };
 
-const extra = (Constants?.expoConfig?.extra ?? {}) as Record<string, unknown>;
-const BASE_URL = String(extra.API_URL ?? process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:3000");
+// Base URL for API - can be configured via environment or extra in app.json
+function getBaseUrl(): string {
+  const extra = (Constants?.expoConfig?.extra ?? {}) as Record<string, unknown>;
+  if (extra.API_URL) return String(extra.API_URL);
+  if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL;
+  
+  // Default for local development
+  return "http://127.0.0.1:3000";
+}
+
+const BASE_URL = getBaseUrl();
+const API_PREFIX = "/api/v1";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${BASE_URL}${API_PREFIX}${path}`, {
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
   });
@@ -61,8 +71,8 @@ export const api = {
       `/patterns?${qs.toString()}`
     );
   },
-  whois: (domain: string) => request<{ domain: string; createdAt: string | null; ageDays: number | null }>(`/whois?domain=${encodeURIComponent(domain)}`),
-  ocr: (imageBase64: string) => request<{ text: string; confidence: number | null }>(`/ocr`, { method: 'POST', body: JSON.stringify({ imageBase64 }) }),
+  whois: (domain: string) => request<{ success: true; data: { domain: string; createdAt: string | null; ageDays: number | null; source: string } }>(`/whois?domain=${encodeURIComponent(domain)}`),
+  ocr: (imageBase64: string) => request<{ success: true; data: { text: string; confidence: number | null; cached?: boolean } }>(`/ocr`, { method: 'POST', body: JSON.stringify({ imageBase64 }) }),
 
   // back-compat aliases (so old code keeps working)
   list(): Promise<Job[]> { return this.listJobs(); },
@@ -72,3 +82,4 @@ export const api = {
 };
 
 export default api;
+
