@@ -36,13 +36,14 @@ type Nav = CompositeNavigationProp<
 export default function HomeScreen() {
   const [analyzing, setAnalyzing] = React.useState(false);
 
+  const { colors, dark } = useTheme();
+  const nav = useNavigation<Nav>();
+
   // Add goDatabase handler (assuming navigation to Database screen)
   const goDatabase = React.useCallback(() => {
     nav.navigate("Database");
   }, [nav]);
 
-  const { colors, dark } = useTheme();
-  const nav = useNavigation<Nav>();
   const { items = [] } = useJobs();
   // Defensive: ensure items is always an array
   const safeItems = Array.isArray(items)
@@ -70,14 +71,15 @@ export default function HomeScreen() {
         return { job, result, bucket };
       });
   }, [items]);
-  function extractUriFromPickerResult(result) {
+  function extractUriFromPickerResult(result: ImagePicker.ImagePickerResult | null | undefined): string | undefined {
     if (!result || typeof result !== "object") return undefined;
-    var assets = result.assets;
+    const resultAny = result as any;
+    const assets = resultAny.assets;
     if (Array.isArray(assets) && assets.length > 0) {
-      var asset = assets[0];
+      const asset = assets[0];
       if (asset && typeof asset.uri === "string") return asset.uri;
     }
-    if (typeof result.uri === "string") return result.uri;
+    if (typeof resultAny.uri === "string") return resultAny.uri;
     return undefined;
   }
 
@@ -95,10 +97,10 @@ export default function HomeScreen() {
       });
 
       // Prefer base64 if available from the picker; otherwise fallback to URI
-      const asAny = result;
-      const base64 = Array.isArray(asAny.assets) && asAny.assets[0] && typeof asAny.assets[0].base64 === 'string'
-        ? asAny.assets[0].base64
-        : typeof asAny.base64 === 'string' ? asAny.base64 : undefined;
+      const resultAny = result as any;
+      const base64 = Array.isArray(resultAny.assets) && resultAny.assets[0] && typeof resultAny.assets[0].base64 === 'string'
+        ? resultAny.assets[0].base64
+        : typeof resultAny.base64 === 'string' ? resultAny.base64 : undefined;
 
       const uri = extractUriFromPickerResult(result);
       if (!uri && !base64) return;

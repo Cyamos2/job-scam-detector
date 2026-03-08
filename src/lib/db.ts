@@ -1,5 +1,6 @@
 // src/lib/db.ts
 import Constants from "expo-constants";
+import type { ScamContextResponse } from "./scamContext";
 
 export type Risk = "low" | "medium" | "high";
 
@@ -73,6 +74,35 @@ export const api = {
   },
   whois: (domain: string) => request<{ success: true; data: { domain: string; createdAt: string | null; ageDays: number | null; source: string } }>(`/whois?domain=${encodeURIComponent(domain)}`),
   ocr: (imageBase64: string) => request<{ success: true; data: { text: string; confidence: number | null; cached?: boolean } }>(`/ocr`, { method: 'POST', body: JSON.stringify({ imageBase64 }) }),
+  scamContext: (type: string, value?: string, year?: string) => {
+    const qs = new URLSearchParams();
+    qs.set('type', type);
+    if (value) qs.set('value', value);
+    if (year) qs.set('year', year);
+    return request<{ success: true; data: ScamContextResponse }>(`/scam-context?${qs.toString()}`);
+  },
+  aiVerify: (data: { company: string; url?: string; recruiterEmail?: string; jobTitle?: string; notes?: string }) => 
+    request<{
+      success: true;
+      data: {
+        verdict: 'legit' | 'suspicious' | 'scam';
+        confidence: number;
+        reasoning: string;
+        checks: {
+          companyExists: boolean | null;
+          validDomain: boolean | null;
+          legitimateCareerPage: boolean | null;
+          matchWithKnownScams: boolean | null;
+          properContactMethods: boolean | null;
+          realisticCompensation: boolean | null;
+        };
+        redFlags: string[];
+        positiveSigns: string[];
+        sourcesChecked: string[];
+        company: string;
+        analyzedAt: string;
+      };
+    }>(`/ai-verify`, { method: 'POST', body: JSON.stringify(data) }),
 
   // back-compat aliases (so old code keeps working)
   list(): Promise<Job[]> { return this.listJobs(); },

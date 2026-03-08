@@ -35,10 +35,7 @@ export default function ReportDetailScreen() {
   const { items, deleteJob } = useJobs();
   const job = React.useMemo(() => items.find((j) => j.id === id), [items, id]);
 
-  React.useLayoutEffect(() => {
-    nav.setOptions({ title: "Report" });
-  }, [nav]);
-
+  // Early return MUST be before any other hooks after useJobs
   if (!job) {
     return (
       <Screen>
@@ -48,6 +45,10 @@ export default function ReportDetailScreen() {
       </Screen>
     );
   }
+
+  React.useLayoutEffect(() => {
+    nav.setOptions({ title: "Report" });
+  }, [nav]);
 
   const result = React.useMemo(
     () =>

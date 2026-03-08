@@ -1,34 +1,14 @@
 # Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.kts.
+# By default, the flags in this file are appended to flags specified
+# in /usr/local/Cellar/android-sdk/24.3.3/tools/proguard/proguard-android.txt
+# You can edit the include path and order by changing the proguardFiles
+# directive in build.gradle.
 #
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
-# Keep line numbers and file names for better crash reports
--keepattributes SourceFile,LineNumberTable
+# react-native-reanimated
+-keep class com.swmansion.reanimated.** { *; }
+-keep class com.facebook.react.turbomodule.** { *; }
 
-# Hide the original source file name
--renamesourcefileattribute SourceFile
-
-# Keep React Native
--keep class com.facebook.** { *; }
--keep class com.facebook.react.** { *; }
-
-# Keep Hermes
--keep class com.facebook.hermes.** { *; }
-
-# Keep Expo
--keep class expo.modules.** { *; }
-
-# Keep Kotlin
--keep class kotlin.** { *; }
--keep class kotlin.Metadata { *; }
--dontwarn kotlin.**
--dontwarn kotlinx.**
-
-# Keep R8 full mode compatible
--keepclassmembers,allowobfuscation class * {
-  @com.google.gson.annotations.SerializedName <fields>;
-}
-
+# Add any project specific keep options here:

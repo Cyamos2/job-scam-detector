@@ -160,9 +160,9 @@ export const jobFilterSchema = z.object({
     .max(200, 'Search term must be less than 200 characters')
     .optional(),
   sortBy: z
-    .enum(['score', 'date', 'title', 'company'])
+    .enum(['createdAt', 'title', 'company', 'risk'])
     .optional()
-    .default('date'),
+    .default('createdAt'),
   sortOrder: z
     .enum(['asc', 'desc'])
     .optional()

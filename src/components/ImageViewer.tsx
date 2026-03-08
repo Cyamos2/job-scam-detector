@@ -21,11 +21,12 @@ type Props = {
 const { width, height } = Dimensions.get("window");
 
 export default function ImageViewer({ uri, visible, onClose }: Props) {
-  if (!visible) return null;
-
+  // Hooks MUST be called before early return to maintain consistent hook count
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const scale = useSharedValue(1);
+
+  if (!visible) return null;
 
   const pan = Gesture.Pan()
     .onChange((e) => {

@@ -21,6 +21,7 @@ export default function UndoBar({
   const y = React.useRef(new Animated.Value(80)).current; // offscreen
   const timer = React.useRef<NodeJS.Timeout | null>(null);
 
+  // Hooks MUST be called before early return
   const hide = React.useCallback(() => {
     Animated.timing(y, {
       toValue: 80,
