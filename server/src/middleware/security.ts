@@ -54,14 +54,6 @@ export const securityHeaders = (helmet({
     policy: 'strict-origin-when-cross-origin',
   },
   
-  // Permissions policy (limit browser features)
-  permissionsPolicy: {
-    permissions: [
-      // Allow camera, microphone, geolocation only with user consent
-      // Deny all others by default
-      // Specific policies would be added based on app needs
-    ],
-  }
 }) as any);
 
 

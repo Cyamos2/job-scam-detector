@@ -10,6 +10,8 @@ import verifyRouter from "./routes/verify.js";
 import whoisRouter from "./routes/whois.js";
 import ocrRouter from "./routes/ocr.js";
 import patternsRouter from "./routes/patterns.js";
+import scamContextRouter from "./routes/scamContext.js";
+import aiVerifyRouter from "./routes/aiVerify.js";
 import { errorHandler, notFoundHandler, setupUnhandledRejectionHandler, setupUncaughtExceptionHandler } from "./middleware/errorHandler.js";
 import { securityHeaders, corsOptions, requestIdMiddleware, securityLogging, validateContentType } from "./middleware/security.js";
 import { apiRateLimiter, whoisRateLimiter } from "./middleware/rateLimiter.js";
@@ -128,6 +130,8 @@ app.use("/api/v1/verify", verifyRouter);
 app.use("/api/v1/whois", whoisRouter);
 app.use("/api/v1/ocr", ocrRouter);
 app.use("/api/v1/patterns", patternsRouter);
+app.use("/api/v1/scam-context", scamContextRouter);
+app.use("/api/v1/ai-verify", aiVerifyRouter);
 
 // Sentry error handler (must be after routes)
 if (sentryDsn) {
