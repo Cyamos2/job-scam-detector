@@ -22,21 +22,10 @@ export type Job = JobInput & {
   updatedAt: number;
 };
 
-type LastDeleted = { id: string; snapshot: Job } | null;
-
 type Ctx = {
   items: Job[];
   create: (input: JobInput) => Promise<void>;
   update: (id: string, patch: Partial<JobInput>) => Promise<void>;
-  deleteJob: (id: string) => Promise<Job | undefined>;
-
-  // Undo (context-managed so the UI can show a snackbar)
-  lastDeleted: LastDeleted;
-  restoreLastDeleted: () => Promise<void>;
-  clearUndoFlag: () => void;
-
-  // Back-compat shortcut (calls restoreLastDeleted)
-  undoDelete: () => Promise<void>;
 
   getById: (id: string) => Job | undefined;
 
@@ -52,7 +41,6 @@ const STORAGE_KEY = "jobs.v2";
 
 export function JobsProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = React.useState<Job[]>([]);
-  const [lastDeleted, setLastDeleted] = React.useState<LastDeleted>(null);
 
   const load = React.useCallback(async () => {
     try {
@@ -131,34 +119,6 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
     [items, persist]
   );
 
-  const deleteJob = React.useCallback(
-    async (id: string) => {
-      const j = items.find((x) => x.id === id);
-      if (!j) return undefined;
-      setLastDeleted({ id, snapshot: j });
-      await persist(items.filter((x) => x.id !== id));
-      return j;
-    },
-    [items, persist]
-  );
-
-  const restoreLastDeleted = React.useCallback(async () => {
-    setLastDeleted((ld) => {
-      if (!ld) return ld;
-      const next = [ld.snapshot, ...items].sort((a, b) => b.createdAt - a.createdAt);
-      // persist with the restored item
-      persist(next);
-      return null;
-    });
-  }, [items, persist]);
-
-  const clearUndoFlag = React.useCallback(() => setLastDeleted(null), []);
-
-  // Back-compat helper
-  const undoDelete = React.useCallback(async () => {
-    await restoreLastDeleted();
-  }, [restoreLastDeleted]);
-
   const getById = React.useCallback(
     (id: string) => items.find((x) => x.id === id),
     [items]
@@ -196,7 +156,6 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const nukeStorage = React.useCallback(async () => {
-    setLastDeleted(null);
     await persist([]);
   }, [persist]);
 
@@ -208,11 +167,6 @@ export function JobsProvider({ children }: { children: React.ReactNode }) {
     items,
     create,
     update,
-    deleteJob,
-    lastDeleted,
-    restoreLastDeleted,
-    clearUndoFlag,
-    undoDelete,
     getById,
     exportJson,
     importJson,

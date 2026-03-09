@@ -23,7 +23,6 @@ export const AnalyticsEvents = {
   
   // User actions
   JOB_SAVED: 'job_saved',
-  JOB_DELETED: 'job_deleted',
   JOB_UPDATED: 'job_updated',
   
   // Settings events
@@ -163,13 +162,6 @@ class AnalyticsService {
     await this.trackEvent(AnalyticsEvents.JOB_SAVED, {
       job_id: jobId,
       risk_level: risk,
-      platform: Platform.OS,
-    });
-  }
-
-  async trackJobDeleted(jobId: string): Promise<void> {
-    await this.trackEvent(AnalyticsEvents.JOB_DELETED, {
-      job_id: jobId,
       platform: Platform.OS,
     });
   }

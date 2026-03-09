@@ -6,17 +6,12 @@ import {
   StyleSheet,
   SectionList,
   Pressable,
-  Platform,
-  ActionSheetIOS,
-  Alert,
 } from "react-native";
 import { useTheme, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Screen from "../components/Screen";
 import JobRow from "../components/JobRow";
-import UndoBar from "../components/UndoBar";
 import { useJobs } from "../hooks/useJobs";
 import type { Job } from "../hooks/useJobs";
 import {
@@ -38,26 +33,14 @@ type Row = { job: Job; result: ScoreResult; bucket: Severity };
 export default function DatabaseScreen() {
   const { colors, dark } = useTheme();
   const nav = useNavigation<Nav>();
-  const insets = useSafeAreaInsets();
 
-  const { items, deleteJob, undoDelete } = useJobs();
+  const { items } = useJobs();
 
   // UI state
   const [query, setQuery] = React.useState("");
   const [risk, setRisk] = React.useState<RiskFilter>("all");
   const [sortKey, setSortKey] = React.useState<SortKey>("score");
   const [sortDir, setSortDir] = React.useState<SortDir>("desc");
-
-  // Undo (visible for 60s)
-  const [showUndo, setShowUndo] = React.useState(false);
-  const undoTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const UNDO_DURATION_MS = 60_000;
-
-  React.useEffect(() => {
-    return () => {
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    };
-  }, []);
 
   // Remove header "+ Add" (we use empty-state CTA + conditional FAB)
   React.useLayoutEffect(() => {
@@ -115,47 +98,6 @@ export default function DatabaseScreen() {
 
   const empty = sections.length === 0;
   const showFab = !empty; // only show FAB when there are items
-
-  // Delete + Undo
-  const onDelete = async (id: string) => {
-    await deleteJob(id);
-    setShowUndo(true);
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    undoTimerRef.current = setTimeout(() => setShowUndo(false), UNDO_DURATION_MS);
-  };
-
-  const onUndo = async () => {
-    await undoDelete();
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    setShowUndo(false);
-  };
-
-  const confirmDelete = (id: string) => {
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ["Cancel", "Delete"],
-          destructiveButtonIndex: 1,
-          cancelButtonIndex: 0,
-          title: "Delete this job?",
-          message: "You can Undo for up to 1 minute after deleting.",
-        },
-        (idx) => {
-          if (idx === 1) onDelete(id);
-        }
-      );
-    } else {
-      Alert.alert(
-        "Delete this job?",
-        "You can Undo for up to 1 minute after deleting.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: () => onDelete(id) },
-        ],
-        { cancelable: true }
-      );
-    }
-  };
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -270,7 +212,6 @@ export default function DatabaseScreen() {
               reasons={item.result.reasons as Reason[]}
               bucket={item.bucket}
               onPress={() => nav.navigate("ReportDetail", { id: item.job.id })}
-              onLongPress={() => confirmDelete(item.job.id)}
             />
           )}
           contentContainerStyle={{ paddingBottom: showFab ? 120 : 24 }}
@@ -292,21 +233,6 @@ export default function DatabaseScreen() {
           </Pressable>
         </View>
       )}
-
-      {/* Undo Snackbar (safe-area aware, above tab bar) */}
-      <View
-        pointerEvents="box-none"
-        style={[styles.snackbarWrap, { bottom: Math.max(insets.bottom + 70, 86) }]}
-      >
-        <UndoBar
-          visible={showUndo}
-          message="Item deleted"
-          actionLabel="Undo"
-          onAction={onUndo}
-          onHide={() => setShowUndo(false)}
-          duration={UNDO_DURATION_MS}
-        />
-      </View>
     </Screen>
   );
 }
@@ -317,7 +243,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 12 : 8,
+    paddingVertical: 12,
   },
 
   toolbar: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },

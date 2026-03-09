@@ -40,10 +40,13 @@ router.get('/', asyncHandler(async (req, res) => {
     ];
   }
   
+  // Map 'date' to 'createdAt' for Prisma compatibility
+  const effectiveSortBy = sortBy === 'date' ? 'createdAt' : sortBy;
+  
   // Execute query with timing
   const startTime = Date.now();
   
-  const orderBy = { [String(sortBy)]: sortOrder as any };
+  const orderBy = { [String(effectiveSortBy)]: sortOrder as any };
   const [jobs, total] = await Promise.all([
     prisma.job.findMany({
       where,
@@ -163,38 +166,6 @@ router.patch('/:id', asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: job,
-  });
-}));
-
-/**
- * DELETE /api/v1/jobs/:id
- * Delete a job
- */
-router.delete('/:id', asyncHandler(async (req, res) => {
-  const idResult = validateInput(jobIdSchema, req.params);
-  
-  if (!idResult.success) {
-    throw new OperationalError('Invalid job ID', 400, idResult.errors.flatten());
-  }
-  
-  // Check if job exists
-  const existing = await prisma.job.findUnique({
-    where: { id: idResult.data.id },
-  });
-  
-  if (!existing) {
-    throw new OperationalError('Job not found', 404);
-  }
-  
-  await prisma.job.delete({
-    where: { id: idResult.data.id },
-  });
-  
-  logger.info('Job deleted', { jobId: idResult.data.id, company: existing.company });
-  
-  res.json({
-    success: true,
-    message: 'Job deleted successfully',
   });
 }));
 

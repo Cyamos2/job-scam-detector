@@ -7,9 +7,7 @@ import {
   ScrollView,
   Pressable,
   Alert,
-  ActionSheetIOS,
   Linking,
-  Platform,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useTheme, useNavigation, useRoute } from "@react-navigation/native";
@@ -31,7 +29,7 @@ export default function ReportDetailScreen() {
   const nav = useNavigation<Nav>();
   const route = useRoute<Route>();
   const id: string = route.params?.id ?? "";
-  const { items, deleteJob } = useJobs();
+  const { items } = useJobs();
   
   // useMemo is ALWAYS called - returns undefined if no id or job not found
   const job = React.useMemo(() => {
@@ -159,38 +157,6 @@ export default function ReportDetailScreen() {
     Alert.alert("Copied", "Job link copied to clipboard.");
   };
 
-  const confirmDelete = () => {
-    const doDelete = async () => {
-      await deleteJob(currentJob.id);
-      nav.goBack();
-    };
-
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ["Cancel", "Delete"],
-          destructiveButtonIndex: 1,
-          cancelButtonIndex: 0,
-          title: "Delete this job?",
-          message: "You can Undo for up to 1 minute on the list screen.",
-        },
-        (idx) => {
-          if (idx === 1) doDelete();
-        }
-      );
-    } else {
-      Alert.alert(
-        "Delete this job?",
-        "You can Undo for up to 1 minute on the list screen.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: () => doDelete() },
-        ],
-        { cancelable: true }
-      );
-    }
-  };
-
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
@@ -259,7 +225,6 @@ export default function ReportDetailScreen() {
         <View style={styles.actionsRow}>
           <ActionButton label="Open link" onPress={handleOpen} disabled={!currentJob.url} />
           <ActionButton label="Copy link" onPress={handleCopy} disabled={!currentJob.url} />
-          <ActionButton label="Delete" danger onPress={confirmDelete} />
         </View>
       </ScrollView>
     </Screen>

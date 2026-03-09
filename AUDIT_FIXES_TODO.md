@@ -7,12 +7,15 @@
 - [x] 4. Fix OCR response handling in src/lib/ocr.ts
 - [x] 5. Fix environment configuration for mobile devices in src/lib/db.ts (added Platform detection)
 - [x] 6. Fix WHOIS response handling in src/lib/scoring.ts
+- [x] 7. Fix server jobs route - add 'date' to sortBy enum and map to 'createdAt'
+- [x] 8. Fix client DatabaseScreen - uses 'date' but server expects 'createdAt' - handled in server
 
 ## Fixed Issues
 - API path mismatch: Added `/api/v1` prefix to all client API calls
 - Missing validation fields: Added `location` and `recruiterEmail` to server schemas
 - OCR/WHOIS response handling: Fixed to handle wrapped response format
 - Mobile platform detection: Added dynamic Platform detection for Android/iOS
+- Server Prisma error: Added 'date' to sortBy options and mapped it to 'createdAt' for Prisma compatibility
 
 ## About the Navigation Error
 The "Property 'nav' doesn't exist" error is **NOT related** to the API fixes. It's a separate issue caused by:

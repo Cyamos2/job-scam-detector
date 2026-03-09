@@ -39,3 +39,5 @@
 {"duration":"0ms","environment":"development","level":"info","message":"HTTP Request","method":"127.0.0.1","service":"scamicide-api","statusCode":200,"timestamp":"2026-03-08 15:04:39.949","url":"-"}
 {"environment":"development","level":"warn","message":"Client error Route GET /favicon.ico not found","method":"GET","requestId":"mmi4g1tb-fhkqeastz","service":"scamicide-api","statusCode":404,"timestamp":"2026-03-08 15:04:39.983","url":"/favicon.ico"}
 {"duration":"0ms","environment":"development","level":"info","message":"HTTP Request","method":"127.0.0.1","service":"scamicide-api","statusCode":200,"timestamp":"2026-03-08 15:04:39.985","url":"-"}
+{"environment":"development","host":"0.0.0.0","level":"info","message":"Server started","pid":7577,"port":3000,"service":"scamicide-api","timestamp":"2026-03-09 10:11:03.984"}
+{"environment":"development","host":"0.0.0.0","level":"info","message":"Server started","pid":16468,"port":3000,"service":"scamicide-api","timestamp":"2026-03-09 10:40:02.330"}

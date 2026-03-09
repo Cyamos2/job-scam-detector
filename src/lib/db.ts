@@ -59,8 +59,6 @@ export const api = {
     request<Job>("/jobs", { method: "POST", body: JSON.stringify(input) }),
   updateJob: (id: string, patch: Partial<JobInput>): Promise<Job> =>
     request<Job>(`/jobs/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
-  deleteJob: (id: string): Promise<{ ok: true }> =>
-    request<{ ok: true }>(`/jobs/${id}`, { method: "DELETE" }),
   verifyCompany: (target: string) =>
     request(`/verify?target=${encodeURIComponent(target)}`),
   patterns: (params: { company?: string; url?: string; recruiterEmail?: string }) => {
@@ -108,7 +106,6 @@ export const api = {
   list(): Promise<Job[]> { return this.listJobs(); },
   create(input: JobInput): Promise<Job> { return this.createJob(input); },
   update(id: string, patch: Partial<JobInput>): Promise<Job> { return this.updateJob(id, patch); },
-  remove(id: string): Promise<{ ok: true }> { return this.deleteJob(id); },
 };
 
 export default api;
