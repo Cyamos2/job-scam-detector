@@ -27,15 +27,38 @@ type Nav = NativeStackNavigationProp<RootStackParamList, "ReportDetail">;
 type Route = RouteProp<RootStackParamList, "ReportDetail">;
 
 export default function ReportDetailScreen() {
-  const { colors } = useTheme();
+  // ALL hooks are called unconditionally in the same order every render
   const nav = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { id } = route.params;
-
+  const id: string = route.params?.id ?? "";
   const { items, deleteJob } = useJobs();
-  const job = React.useMemo(() => items.find((j) => j.id === id), [items, id]);
+  
+  // useMemo is ALWAYS called - returns undefined if no id or job not found
+  const job = React.useMemo(() => {
+    if (!id) return undefined;
+    return items.find((j) => j.id === id);
+  }, [items, id]);
+  
+  const { colors } = useTheme();
+  
+  React.useLayoutEffect(() => {
+    nav.setOptions({ title: "Report" });
+  }, [nav]);
 
-  // Early return MUST be before any other hooks after useJobs
+  // ALL hooks above this line - now we can conditionally return
+  
+  // If no valid id, show error
+  if (!id) {
+    return (
+      <Screen>
+        <View style={styles.center}>
+          <Text style={{ color: "#6B7280" }}>Invalid job reference.</Text>
+        </View>
+      </Screen>
+    );
+  }
+  
+  // If job not found in items, show error
   if (!job) {
     return (
       <Screen>
@@ -46,21 +69,20 @@ export default function ReportDetailScreen() {
     );
   }
 
-  React.useLayoutEffect(() => {
-    nav.setOptions({ title: "Report" });
-  }, [nav]);
+  // At this point, job IS guaranteed to exist (id is truthy and job was found)
+  const currentJob = job;
 
   const result = React.useMemo(
     () =>
       scoreJob({
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        recruiterEmail: job.recruiterEmail,
-        url: job.url,
-        notes: job.notes,
+        title: currentJob.title,
+        company: currentJob.company,
+        location: currentJob.location,
+        recruiterEmail: currentJob.recruiterEmail,
+        url: currentJob.url,
+        notes: currentJob.notes,
       }),
-    [job]
+    [currentJob]
   );
   const bucket = visualBucket(result);
   const baseUrl = process.env.EXPO_PUBLIC_API_BASE ?? "http://localhost:4000";
@@ -76,18 +98,18 @@ export default function ReportDetailScreen() {
   const [enriching, setEnriching] = React.useState(false);
 
   React.useEffect(() => {
-    if (!job.url) return;
+    if (!currentJob.url) return;
     let mounted = true;
     setEnriching(true);
     (async () => {
       try {
         const r = await scoreJobEnriched({
-          title: job.title,
-          company: job.company,
-          location: job.location,
-          recruiterEmail: job.recruiterEmail,
-          url: job.url,
-          notes: job.notes,
+          title: currentJob.title,
+          company: currentJob.company,
+          location: currentJob.location,
+          recruiterEmail: currentJob.recruiterEmail,
+          url: currentJob.url,
+          notes: currentJob.notes,
         });
         if (!mounted) return;
         setEnriched(r);
@@ -98,7 +120,7 @@ export default function ReportDetailScreen() {
       }
     })();
     return () => { mounted = false; };
-  }, [job.url]);
+  }, [currentJob.url]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -106,9 +128,9 @@ export default function ReportDetailScreen() {
       try {
         setPatternsLoading(true);
         const resp = await api.patterns({
-          company: job.company,
-          url: job.url ?? undefined,
-          recruiterEmail: job.recruiterEmail ?? undefined,
+          company: currentJob.company,
+          url: currentJob.url ?? undefined,
+          recruiterEmail: currentJob.recruiterEmail ?? undefined,
         });
         if (!mounted) return;
         setPatterns(resp.data);
@@ -120,26 +142,26 @@ export default function ReportDetailScreen() {
     };
     run();
     return () => { mounted = false; };
-  }, [job.company, job.url, job.recruiterEmail]);
+  }, [currentJob.company, currentJob.url, currentJob.recruiterEmail]);
 
   const handleOpen = async () => {
-    if (!job.url) return;
+    if (!currentJob.url) return;
     try {
-      await Linking.openURL(job.url);
+      await Linking.openURL(currentJob.url);
     } catch {
-      Alert.alert("Could not open", job.url);
+      Alert.alert("Could not open", currentJob.url);
     }
   };
 
   const handleCopy = async () => {
-    if (!job.url) return;
-    await Clipboard.setStringAsync(job.url);
+    if (!currentJob.url) return;
+    await Clipboard.setStringAsync(currentJob.url);
     Alert.alert("Copied", "Job link copied to clipboard.");
   };
 
   const confirmDelete = () => {
     const doDelete = async () => {
-      await deleteJob(job.id);
+      await deleteJob(currentJob.id);
       nav.goBack();
     };
 
@@ -175,14 +197,14 @@ export default function ReportDetailScreen() {
         {/* Header card */}
         <View style={[styles.card, { borderColor: "#E5E7EB", backgroundColor: colors.card }]}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>{job.title}</Text>
+            <Text style={styles.title}>{currentJob.title}</Text>
             <Text style={styles.sub}>
-              {job.company}
-              {job.location ? ` · ${job.location}` : ""}
-              {job.url ? "  ·  " + job.url : ""}
+              {currentJob.company}
+              {currentJob.location ? ` · ${currentJob.location}` : ""}
+              {currentJob.url ? "  ·  " + currentJob.url : ""}
             </Text>
-            {!!job.recruiterEmail && (
-              <Text style={[styles.sub, { marginTop: 4 }]}>{job.recruiterEmail}</Text>
+            {!!currentJob.recruiterEmail && (
+              <Text style={[styles.sub, { marginTop: 4 }]}>{currentJob.recruiterEmail}</Text>
             )}
             {enriching && <Text style={{ color: "#9CA3AF", marginTop: 6 }}>Checking domain info…</Text>}
             {enriched?.evidence?.domainAgeDays != null && (
@@ -207,7 +229,7 @@ export default function ReportDetailScreen() {
         </View>
 
         {/* Company verification */}
-        <VerifyCard company={job.company} url={job.url} baseUrl={baseUrl} />
+        <VerifyCard company={currentJob.company} url={currentJob.url} baseUrl={baseUrl} />
 
         {/* Repeat pattern detection */}
         <View style={styles.section}>
@@ -226,17 +248,17 @@ export default function ReportDetailScreen() {
         </View>
 
         {/* Notes */}
-        {!!job.notes && (
+        {!!currentJob.notes && (
           <View style={styles.section}>
             <Text style={styles.h2}>Notes</Text>
-            <Text style={styles.notes}>{job.notes}</Text>
+            <Text style={styles.notes}>{currentJob.notes}</Text>
           </View>
         )}
 
         {/* Actions */}
         <View style={styles.actionsRow}>
-          <ActionButton label="Open link" onPress={handleOpen} disabled={!job.url} />
-          <ActionButton label="Copy link" onPress={handleCopy} disabled={!job.url} />
+          <ActionButton label="Open link" onPress={handleOpen} disabled={!currentJob.url} />
+          <ActionButton label="Copy link" onPress={handleCopy} disabled={!currentJob.url} />
           <ActionButton label="Delete" danger onPress={confirmDelete} />
         </View>
       </ScrollView>
@@ -352,3 +374,4 @@ const styles = StyleSheet.create({
   },
   actionTxt: { fontWeight: "800", color: "#111827" },
 });
+
